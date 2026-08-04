@@ -28,18 +28,19 @@
 
 ```
 ✅ DONE      Discovery · database analysis · 19 decisions · plan + tracker written
+✅ DONE      Phase 0 safety net — git repo live on GitHub, schema backed up, SheetJS off the CDN
 🔄 NOW       Nothing running — awaiting go-ahead
-⬜ NEXT      Day 1 Morning → fix the 5 broken functions
+⬜ NEXT      Day 1 Midday/Afternoon → build the new HRMS schema (fixes for the 5 broken functions baked in from the start)
 ```
 
 | | Tasks |
 |---|---:|
-| ✅ Completed | **12** |
-| ⬜ Day 1 | 43 |
+| ✅ Completed | **18** |
+| ⬜ Day 1 | 37 |
 | ⬜ Day 2 | 22 |
 | ⬜ Day 3 | 24 |
 | ⏭️ Deferred past Day 3 | 10 |
-| 🚫 Open questions | 15 |
+| 🚫 Open questions | 14 |
 
 **🆕 Fresh build** — old app untouched; only employees + holidays cross over (`plan.md` header).
 **Scale target: ~300 staff** — schema shaped for it from the start (§8B).
@@ -78,6 +79,12 @@ Still needed later:
 | D-9 | Leave policy read and encoded |
 | D-10 | **19 decisions agreed** |
 | D-11 | `plan.md` + `PROGRESS.md` + `supabase/schema.sql` saved |
+| P0-1 | Git repo initialized, first commit, pushed to `github.com/pankaj-ecoste/att_leave_system` (SSH) |
+| P0-2 | Schema saved as `supabase/migrations/0001_baseline_schema.sql` |
+| P0-4 | Stray `vite.config.js.timestamp-*.mjs` deleted |
+| P0-5 | SheetJS moved off the CDN to the patched `xlsx` npm package (fixes 2 high-severity advisories) |
+| P0-6 | `README.md` added |
+| Q-15 | Resolved — skip old-app interim patch, fold the 5 fixes into the new HRMS schema |
 
 ---
 
@@ -88,20 +95,22 @@ Still needed later:
 
 ## Morning — Safety net + the 5 fixes
 
+> **Q-15 resolved:** skip the old app entirely — no interim relief patch. The 5 function fixes go straight into the new HRMS schema (`P1-2`) instead of a separate old-project patch. `P0B-1..5` below are superseded by that; `P0B-6` becomes `P1-8` (fresh balance generation, not a re-run import).
+
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P0-1 | `git init`, first commit, `.gitignore` | ⬜ | DEV |
-| P0-2 | Schema into `supabase/migrations/0001_baseline_schema.sql` | ⬜ | DEV |
-| P0-3 | Create `.env.local` | ⬜ | DEV |
-| P0-4 | Delete stray `vite.config.js.timestamp-*.mjs` | ⬜ | DEV |
-| P0-5 | SheetJS CDN → npm dependency | ⬜ | DEV |
-| P0-6 | README | ⬜ | DEV |
-| **P0B-1** | Fix `admin_create_employee` | ⬜ | DEV |
-| **P0B-2** | Fix `admin_update_employee` | ⬜ | DEV |
-| **P0B-3** | Fix `fetch_directory` | ⬜ | DEV |
-| **P0B-4** | Fix `manager_decide_leave` → **unblocks 281 requests** | ⬜ | DEV |
-| **P0B-5** | Fix `admin_reset_leave_balances` | ⬜ | DEV |
-| **P0B-6** | Re-run leave balance import → **131 staff currently have none** | ⬜ | DEV |
+| P0-1 | `git init`, first commit, `.gitignore` — pushed to `github.com/pankaj-ecoste/att_leave_system` | ✅ | DEV |
+| P0-2 | Schema into `supabase/migrations/0001_baseline_schema.sql` | ✅ | DEV |
+| P0-3 | Create `.env.local` — **deferred**, points at HRMS once its schema is applied (`P1-2`), not the old project | ⬜ | DEV |
+| P0-4 | Delete stray `vite.config.js.timestamp-*.mjs` | ✅ | DEV |
+| P0-5 | SheetJS CDN → npm dependency (patched `cdn.sheetjs.com` build, not the vulnerable npm-registry one) | ✅ | DEV |
+| P0-6 | README | ✅ | DEV |
+| ~~P0B-1~~ | ~~Fix `admin_create_employee`~~ → folds into `P1-2` | ⏭️ | DEV |
+| ~~P0B-2~~ | ~~Fix `admin_update_employee`~~ → folds into `P1-2` | ⏭️ | DEV |
+| ~~P0B-3~~ | ~~Fix `fetch_directory`~~ → folds into `P1-2` | ⏭️ | DEV |
+| ~~P0B-4~~ | ~~Fix `manager_decide_leave`~~ → folds into `P1-2` | ⏭️ | DEV |
+| ~~P0B-5~~ | ~~Fix `admin_reset_leave_balances`~~ → folds into `P1-2` | ⏭️ | DEV |
+| ~~P0B-6~~ | ~~Re-run leave balance import~~ → superseded by `P1-8` (fresh generation from policy) | ⏭️ | DEV |
 
 ## Midday — Structure + the anti-bug guardrails
 
@@ -312,7 +321,7 @@ Real, but not needed for a working system.
 | Q-8 | Keep or drop "Partial Leave – 1 Hour / 2 Hours"? | YOU | P4B-2 | Day 3 AM |
 | Q-9 | Existing 131 staff default to **Confirmed**? | YOU | P2-4 | Day 1 PM |
 | Q-10 | ~~What to do with the 281 stuck requests?~~ ✅ **Resolved — stay in the old app, not migrated** | — | — | ✅ |
-| **Q-15** | Still fix the 5 broken functions in the **old** app for interim relief, or skip since the new app lands in 3 days? | YOU | P0B | **Day 1 AM** |
+| Q-15 | ~~Still fix the 5 broken functions in the old app for interim relief, or skip?~~ ✅ **Resolved — skip. Fixes go straight into the new HRMS schema, not a patch on the old app** | — | — | ✅ |
 | **Q-16** | After launch, does the old app stay reachable for historical records? | YOU | — | Day 3 |
 | Q-11 | ~~HRMS project created, Mumbai region?~~ ✅ **Yes — created, Mumbai** | — | — | ✅ answered |
 | **Q-12** | Is **300** the total headcount, or 300 *at the same moment*? Changes compute sizing | YOU | S-7 | **Day 1 PM** |
