@@ -11,7 +11,7 @@ import { todayIST } from '../../lib/datetime'
 export function EmployeeDashboard({
   currentUser, empTab, setEmpTab, onLogout,
   attendance, todayRecord, stdHours, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
-  holidays, sites, regularizations, submitRegularization,
+  holidays, sites, directory, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
   team,
 }) {
@@ -69,7 +69,7 @@ export function EmployeeDashboard({
           <AttendanceHistory currentUser={currentUser} attendance={attendance} stdHours={stdHours} regularizations={regularizations} submitRegularization={submitRegularization} />
         )}
         {empTab === 'leaves' && (
-          <LeaveApply currentUser={currentUser} leaves={leaves} balances={leaveBalances[currentUser.id] || {}} availableLeaveTypes={availableLeaveTypes} applyLeave={applyLeave} onOdApplied={onOdApplied} />
+          <LeaveApply currentUser={currentUser} leaves={leaves} balances={leaveBalances[currentUser.id] || {}} availableLeaveTypes={availableLeaveTypes} applyLeave={applyLeave} onOdApplied={onOdApplied} directory={directory} />
         )}
         {empTab === 'summary' && (
           <MonthlySummary currentUser={currentUser} attendance={attendance} stdHours={stdHours} holidays={holidays} />

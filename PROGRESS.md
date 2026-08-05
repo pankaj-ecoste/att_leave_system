@@ -35,8 +35,9 @@
 ✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
-🔄 NOW       Day 2 morning through afternoon (P3-1..P3-15) — server-side logic verified live via script (20 checks, 0 failures, disposable test employee, cleaned up); a handful of pure UI-rendering items remain unwatched since the Chrome extension isn't reachable this session, see Day 2 section below
-⬜ NEXT      Day 2 evening — P4-1..P4-9 (two-stage leave approval + email)
+✅ DONE      Day 2 morning through afternoon — Phase 3 (P3-1..P3-15) complete, you confirmed 2026-08-06
+🔄 NOW       Day 2 evening — real two-stage leave approval built and verified live (P4-1, P4-2, P4-4, P4-8, P4-9 ✅; P4-3/P4-5 UI not screen-watched). P4-6 (email) blocked on Q-2/Q-3; P4-7 moot (Q-10 already resolved). Day 2 fully code-complete
+⬜ NEXT      Day 3 — P4B-1..P4B-15 (half-day + accrual + year-end leave policy engine), hardening, testing
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -216,7 +217,7 @@ Still needed later:
 |---|---|:--:|:--:|
 | P3-1 | `sites` table + admin screen, per-site radius | ✅ verified live (script + your screenshots) | DEV |
 | P3-2 | Store real lat/lon/accuracy — **server decides, not the phone** | ✅ verified live | DEV |
-| P3-3 | Punch screen — office tiles (one per active site) with live distance | 🔄 code complete — tile rendering confirmed by screenshot, live-distance display not independently watched | DEV |
+| P3-3 | Punch screen — office tiles (one per active site) with live distance | ✅ **you confirmed complete** 2026-08-06 | DEV |
 | P3-4 | Reject punch outside radius (office tiles only) | ✅ verified live | DEV |
 
 **What's in `0007_geofence_and_wfh.sql`:** `employees.work_mode` gains a 4th value,
@@ -293,7 +294,7 @@ re-run-safe by applying twice in a row.
 |---|---|:--:|:--:|
 | P3-5 | Work mode per employee — Office / Field / Both / WFH | ✅ verified live (screenshot + script) | DEV |
 | P3-6 | Structured note required for field staff | ✅ verified live (screenshot) | DEV |
-| P3-7 | High accuracy · reject poor readings · retry | 🔄 code complete — client-side retry loop, no server call to script-verify | DEV |
+| P3-7 | High accuracy · reject poor readings · retry | ✅ **you confirmed complete** 2026-08-06 | DEV |
 | P3-8 | Ignore duplicate taps | ✅ verified live | DEV |
 | P3-9 | Reverse geocoding server-side, cached, off Nominatim | ✅ verified live (0005) | DEV |
 
@@ -313,9 +314,9 @@ they now share one rewritten `employee_punch`, so it's one verification pass, no
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
 | P3-10 | **Separate app and biometric punches** — schema change | ✅ verified live (script) | DEV |
-| P3-11 | Side-by-side comparison + mismatch report | 🔄 code complete — columns proven correct, table rendering not screen-watched | DEV |
-| P3-12 | Admin switch for which source is official | 🔄 code complete — same, the underlying upsert is proven, the button click isn't | DEV |
-| P3-13 | Adoption dashboard — app vs machine | 🔄 code complete — pure client-side aggregation off already-verified data, low risk | DEV |
+| P3-11 | Side-by-side comparison + mismatch report | ✅ **you confirmed complete** 2026-08-06 | DEV |
+| P3-12 | Admin switch for which source is official | ✅ **you confirmed complete** 2026-08-06 | DEV |
+| P3-13 | Adoption dashboard — app vs machine | ✅ **you confirmed complete** 2026-08-06 | DEV |
 | P3-15 *(pulled forward from Day 3)* | Manager view of own team's location log | ✅ verified live (script, scoped to direct reports only) | DEV |
 | P3-14 | Silent 2-hourly capture + 90-day retention | ✅ retention cron confirmed active on live HRMS (`cleanup-old-location-logs`, 03:30 IST daily) | DEV |
 
@@ -357,15 +358,70 @@ the column level above — the risk left is display-only, not data-integrity.
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P4-1 | Extend leave status + record who decided and when | ⬜ | DEV |
-| P4-2 | Routing rule for the 19 staff with no manager | ⬜ | DEV |
-| P4-3 | Rebuild manager panel around the new flow | ⬜ | DEV |
-| P4-4 | Admin sees manager's decision before final approval | ⬜ | DEV |
-| P4-5 | Staff panel — manager name + email · attendance · leaves · pending | ⬜ | DEV |
-| P4-6 | Email sending — Edge Function + Resend + DNS | 🚫 | DEV |
-| P4-7 | Handle the **281 existing pending requests** | 🚫 | DEV |
-| P4-8 | **Deduct balance on final approval** — never happens today | ⬜ | DEV |
-| P4-9 | Block insufficient balance · server-side caps | ⬜ | DEV |
+| P4-1 | Extend leave status + record who decided and when | ✅ verified live (script) | DEV |
+| P4-2 | Routing rule for staff with no manager | ✅ verified live (script) | DEV |
+| P4-3 | Rebuild manager panel around the new flow | 🔄 code complete — logic proven server-side, screen not watched | DEV |
+| P4-4 | Admin sees manager's decision before final approval | ✅ verified live (script) | DEV |
+| P4-5 | Staff panel — manager name + email · leaves · pending | 🔄 code complete — same, UI not screen-watched | DEV |
+| P4-6 | Email sending — Edge Function + Resend + DNS | 🚫 blocked on `Q-2`/`Q-3` (hosting URL, DNS access) | DEV |
+| P4-7 | Handle the **281 existing pending requests** | ✅ **moot — resolved by `Q-10`**, they stay in the old app, never migrated into HRMS | — |
+| P4-8 | **Deduct balance on final approval** — never happened before today | ✅ verified live (script) | DEV |
+| P4-9 | Block insufficient balance · server-side caps | ✅ verified live (script) | DEV |
+
+**What was actually happening before today:** `manager_decide_leave` and
+`admin_decide_leave` were two independent, unlinked functions writing straight to the
+same `leave_applications.status` column — either could finalize any request the other
+hadn't touched, there was no "manager decided, awaiting admin" state, no record of who
+decided what, and no leave balance was ever deducted anywhere (confirmed by reading
+every function body — `consumed`/`balance` were only ever written by the manual/import
+admin tools, never by a decision). `leave_applications` is empty in this fresh HRMS
+build (deliberately not migrated — `Q-10`), so `0012_two_stage_leave_approval.sql` could
+add a real `status` CHECK constraint (`Pending` → `Manager Approved` → `Approved`/
+`Rejected`) with zero risk of legacy data violating it.
+
+**New rule (P4-2):** `admin_decide_leave` requires `manager_decision = 'Approved'`
+first — unless the employee has no manager at all, in which case it routes straight to
+admin. A manager's rejection is final (admin never re-reviews it); a manager's approval
+only moves the request to `'Manager Approved'`, waiting on admin.
+
+**Balance (P4-8/P4-9):** only the three quota-tracked types (Casual/Earned/Sick —
+`lib/constants.js` `LEAVE_POLICY`) participate; the rest aren't capped yet (`Q-5`/`Q-6`/
+`Q-7` still open) or aren't balance-tracked at all (WFH, On Duty, the two hourly Partial
+types). `employee_apply_leave` blocks a new application when balance is already 0;
+`admin_decide_leave` deducts 1 unit on final `Approved`, never before.
+
+**A real bug found and fixed in the guardrail script itself while building this:**
+`check-schema-contract.mjs`'s regexes for `alter table`, `insert into`, `update ... set`,
+and joined-alias detection all required the literal word `"public"` to appear —
+written as `"?public"?\.?"?` (public not actually optional) instead of
+`(?:"?public"?\.)?` (the whole prefix optional as a unit). Since every function body in
+this codebase writes bare `insert into attendance (...)` / `alter table attendance ...`
+(schema-qualification isn't needed once `search_path` is set), **every ALTER-added
+column and every INSERT/UPDATE statement had been silently unchecked since the first
+migration that grew a table via ALTER TABLE instead of the original CREATE TABLE
+(`0005`)** — the guardrail had been reporting "clean" without actually checking most of
+what it claims to. Only `alias.col` references against columns declared via
+`v_row sometable;`-style variables were ever really validated. Found because `0012` was
+the first place a function referenced an ALTER-added column that way
+(`v_row.manager_decision`), which turned a silent no-op into a real (correct) failure.
+Fixed all 6 occurrences; re-ran across every migration from `0002` onward — nothing
+else was hiding, confirming the already-shipped Phase 3 work was genuinely fine despite
+the checker not actually checking it.
+
+**Verified by script against live production** (same disposable-employee approach as
+Phase 3, cleaned up after — no leftover data), 13/13 checks: apply → Pending → manager
+approves → `Manager Approved` (not final) → admin approves → `Approved` · admin blocked
+from deciding before the manager does · manager rejection is final · a no-manager
+employee's request goes straight to admin · double-decision guards on both stages ·
+insufficient balance blocks a new application · balance actually deducted (`consumed`/
+`balance` changed by exactly 1) on final approval, not before · `admin_get_leaves` now
+returns `has_manager`/`manager_name` so admin can see who already decided.
+
+**Not independently verified** — pure UI, same caveat as Phase 3: the manager panel's
+new "Approved by You · Awaiting Admin" section, admin's split "Ready for Your Decision"
+vs "Awaiting Manager" queues, and the employee's new "Your Manager" card actually
+rendering correctly on screen. The data and logic underneath all three are proven; the
+pixels aren't.
 
 ---
 
@@ -452,7 +508,7 @@ Real, but not needed for a working system.
 | Q-1 | ~~3 office locations — name, coordinates, radius~~ ✅ **Resolved — no longer needs a fixed count.** Sites are added via the Sites admin tab (or the dashboard); 1 of 3 offices in so far, punch screen picks up new ones automatically | YOU | — | ✅ |
 | **Q-2** | Where is the app hosted? | YOU | P4-6 | Day 2 PM |
 | **Q-3** | Who has DNS access for `ecoste.in`? | YOU | P4-6 | Day 2 PM |
-| Q-4 | Confirm biometric stays official during dual-run | YOU | P3-12 | Day 2 PM |
+| Q-4 | ~~Confirm biometric stays official during dual-run~~ ✅ **Resolved — opposite of plan.md Decision 8's assumption.** Both readings always kept regardless; whichever an employee actually uses (app or biometric) becomes official for that day, since staff won't uniformly switch to the app. Admin can still override per-day via the switch (P3-12) | — | — | ✅ |
 | Q-5 | **Paternity Leave quota** — undefined in policy | YOU / HR | P4B-6 | Day 3 AM |
 | Q-6 | Maternity "1 week" — calendar or working days? | YOU / HR | P4B-6 | Day 3 AM |
 | Q-7 | Sick/Marriage/Maternity/Bereavement sit on top of 26? | YOU / HR | P4B-6 | Day 3 AM |

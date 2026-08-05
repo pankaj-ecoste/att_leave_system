@@ -239,7 +239,7 @@ Never called by the app: `admin_fetch_all_leave_balances`, `admin_get_holidays`,
 | 5 | **2-hourly location tracking runs silently** — no indicator, no notice. Deliberate decision; see risk note below |
 | 6 | Location log visible to **manager (own team only) and admin** |
 | 7 | **App and biometric punches stored completely separately**, shown side by side |
-| 8 | **Biometric stays official** for reports during the dual-run; flip to app via an admin switch when ready *(assumption — confirm)* |
+| 8 | **Resolved 2026-08-06, opposite of the original assumption:** whichever source an employee actually uses that day (app or biometric) becomes official — not biometric-by-default. Staff won't uniformly switch to the app, so defaulting to biometric would mean early app adopters' real, GPS-verified punches get silently ignored. Both readings are always kept regardless of which is official; admin can still override per-day via the switch (P3-12) |
 | 9 | Two-stage leave approval: **manager first, then admin**, with email at each step |
 | 10 | Database migrates to the new paid Supabase project **HRMS** |
 | 11 | **Broken functions are fixed during the migration**, not copied across |

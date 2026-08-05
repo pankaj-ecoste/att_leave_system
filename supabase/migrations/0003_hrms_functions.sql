@@ -685,6 +685,12 @@ $function$;
 
 -- ============ ADMIN — LEAVE (paginated) ============
 
+-- Dropped first — same reason as admin_get_all_location_logs above: a later migration
+-- (0012_two_stage_leave_approval.sql) widens this function's RETURNS shape from
+-- `setof leave_applications` to an explicit `returns table(...)`, and Postgres refuses
+-- a plain CREATE OR REPLACE across that kind of change either direction.
+drop function if exists public.admin_get_leaves(uuid, text, date, date, integer, integer);
+
 create or replace function public.admin_get_leaves(
   p_token uuid, p_status text default null, p_from date default null, p_to date default null,
   p_limit integer default 500, p_offset integer default 0

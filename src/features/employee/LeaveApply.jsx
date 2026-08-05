@@ -15,7 +15,7 @@ function monthlyPartialCount(leaves, empId, label) {
     new Date(l.date).getMonth() + 1 === m && new Date(l.date).getFullYear() === y).length
 }
 
-export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied }) {
+export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ type: '', date: todayIST(), reason: '', location: null })
   const [errs, setErrs] = useState({})
@@ -23,6 +23,10 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
 
   const myLeaves = leaves.filter(l => l.empId === currentUser.id)
   const avLT = availableLeaveTypes()
+  // P4-5 — manager name + email visible to the employee, and where their pending
+  // requests currently stand (Pending = with manager, Manager Approved = with admin).
+  const manager = currentUser.managerEmpId ? (directory || []).find(e => e.id === currentUser.managerEmpId) : null
+  const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
     setForm({ type: label, date: todayIST(), reason: '', location: null })
@@ -40,7 +44,14 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     setErrs(nextErrs)
     if (Object.keys(nextErrs).length) return
 
-    await applyLeave(currentUser, form)
+    try {
+      await applyLeave(currentUser, form)
+    } catch (err) {
+      // Includes the server's own balance check (P4-9 — "Insufficient X balance"),
+      // surfaced plainly rather than as an unhandled error (§8C).
+      setErrs({ submit: err.message || 'Could not submit application — please try again' })
+      return
+    }
     if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
     setModalOpen(false)
     setForm({ type: '', date: todayIST(), reason: '', location: null })
@@ -58,6 +69,23 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
 
   return (
     <>
+      {(manager || pendingCount > 0) && (
+        <Card>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-white/40 text-xs uppercase tracking-wide mb-1">Your Manager</p>
+              {manager ? (
+                <p className="text-white text-sm">{manager.name}{manager.email && <span className="text-white/30"> · {manager.email}</span>}</p>
+              ) : (
+                <p className="text-white/40 text-sm">None on file — your requests go straight to admin</p>
+              )}
+            </div>
+            {pendingCount > 0 && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">{pendingCount} pending</span>
+            )}
+          </div>
+        </Card>
+      )}
       <Card>
         <h2 className="text-white font-semibold mb-4">Apply For Leave</h2>
         <div className="grid grid-cols-2 gap-2 mb-5">
@@ -114,7 +142,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
                   <p className="text-white text-sm font-medium">{l.leaveType}</p>
                   <p className="text-white/30 text-xs">{l.date} · {l.reason?.slice(0, 35)}{l.reason?.length > 35 ? '...' : ''}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span>
+                <span className={`text-xs px-2 py-1 rounded-full border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span>
               </div>
             ))}
           </div>
@@ -146,6 +174,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
           </div>
         )}
         {errs.location && <p className="text-red-400 text-xs mb-2">{errs.location}</p>}
+        {errs.submit && <p className="text-red-400 text-xs mb-2">{errs.submit}</p>}
         <div className="flex gap-2 mt-3">
           <Button className="flex-1" onClick={submit}>Submit Application</Button>
           <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>

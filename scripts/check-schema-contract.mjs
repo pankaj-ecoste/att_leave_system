@@ -97,7 +97,7 @@ function loadCombinedSql() {
 }
 
 function parseCreateTables(sql, tables) {
-  const re = /create table (?:if not exists )?"?public"?\.?"?(\w+)"?\s*\(/gi
+  const re = /create table (?:if not exists )?(?:"?public"?\.)?"?(\w+)"?\s*\(/gi
   let m
   while ((m = re.exec(sql))) {
     const name = m[1]
@@ -126,8 +126,23 @@ function parseCreateTables(sql, tables) {
 
 // `alter table X add column [if not exists] col ...` — a table can grow columns in a
 // later migration file without its `create table` statement ever changing.
+//
+// The `"?public"?\.?"?` shape below (matching a *bare* "public", not
+// `(?:"?public"?\.)?` as an optional whole unit) was a real bug: "public" was a
+// required literal, not an optional prefix, so it only ever matched
+// `public.table`/`"public"."table"` — every bare `alter table table_name` statement in
+// this codebase (which is all of them; function bodies never schema-qualify once
+// `search_path` is set) silently failed to match at all. Table growth via ALTER TABLE
+// was never actually tracked, and (see the same fix in checkInsertStatements /
+// checkUpdateStatements / buildAliasMap below) neither were bare INSERT/UPDATE
+// statements or joined-alias references — this guardrail had been silently skipping
+// most of what it claims to check since the first migration that added columns via
+// ALTER TABLE (0005) rather than the original CREATE TABLE. Found while adding
+// 0012_two_stage_leave_approval.sql, the first place a function referenced an
+// ALTER-added column via `alias.col` syntax, which exposed the gap as a real failure
+// instead of a silent no-op.
 function parseAlterTables(sql, tables) {
-  const re = /alter table\s+"?public"?\.?"?(\w+)"?\s+/gi
+  const re = /alter table\s+(?:"?public"?\.)?"?(\w+)"?\s+/gi
   let m
   while ((m = re.exec(sql))) {
     const name = m[1]
@@ -174,7 +189,7 @@ function buildAliasMap(body, tables, fnName) {
   // Every table is addressable by its own name even without an explicit alias.
   for (const t of Object.keys(tables)) aliases[t] = t
 
-  const fromJoinRe = /\b(?:from|join)\s+"?public"?\.?"?(\w+)"?\s+(?:as\s+)?(\w+)/gi
+  const fromJoinRe = /\b(?:from|join)\s+(?:"?public"?\.)?"?(\w+)"?\s+(?:as\s+)?(\w+)/gi
   let m
   while ((m = fromJoinRe.exec(body))) {
     const [, table, alias] = m
@@ -197,7 +212,7 @@ function buildAliasMap(body, tables, fnName) {
   }
 
   // ON CONFLICT ... DO UPDATE SET excluded.col — excluded mirrors the insert target.
-  const insertTableMatch = body.match(/insert into\s+"?public"?\.?"?(\w+)"?/i)
+  const insertTableMatch = body.match(/insert into\s+(?:"?public"?\.)?"?(\w+)"?/i)
   if (insertTableMatch && tables[insertTableMatch[1]]) {
     aliases.excluded = insertTableMatch[1]
   }
@@ -212,7 +227,7 @@ function buildAliasMap(body, tables, fnName) {
 }
 
 function checkInsertStatements(body, tables, issues, fnName) {
-  const re = /insert into\s+"?public"?\.?"?(\w+)"?\s*\(([^)]*)\)/gi
+  const re = /insert into\s+(?:"?public"?\.)?"?(\w+)"?\s*\(([^)]*)\)/gi
   let m
   while ((m = re.exec(body))) {
     const [, table, colList] = m
@@ -228,7 +243,7 @@ function checkInsertStatements(body, tables, issues, fnName) {
 }
 
 function checkUpdateStatements(body, tables, issues, fnName) {
-  const re = /update\s+"?public"?\.?"?(\w+)"?\s+set\b/gi
+  const re = /update\s+(?:"?public"?\.)?"?(\w+)"?\s+set\b/gi
   let m
   while ((m = re.exec(body))) {
     const table = m[1]

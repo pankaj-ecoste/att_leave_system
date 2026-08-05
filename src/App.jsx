@@ -90,6 +90,7 @@ export default function App() {
           odTrackingActive={empAttendance.odTrackingActive}
           odTrackLog={empAttendance.odTrackLog}
           holidays={auth.holidays}
+          directory={auth.directory}
           regularizations={empLeave.regularizations}
           submitRegularization={empLeave.submitRegularization}
           leaves={empLeave.leaves}

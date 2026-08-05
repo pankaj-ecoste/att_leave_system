@@ -194,6 +194,17 @@ export function rowToLeave(row) {
     status: row.status,
     appliedAt: row.applied_at,
     updatedAt: row.updated_at,
+    // Two-stage approval (P4-1) — who decided each stage and when. admin_get_leaves
+    // (admin-only) also returns hasManager/managerName; the other leave-fetch RPCs
+    // (employee_get_leaves, manager_get_team_leaves) are `select *` off the same table
+    // and simply won't have those two keys in the row, so they come through undefined.
+    managerDecision: row.manager_decision,
+    managerDecidedBy: row.manager_decided_by,
+    managerDecidedAt: row.manager_decided_at,
+    adminDecision: row.admin_decision,
+    adminDecidedAt: row.admin_decided_at,
+    hasManager: row.has_manager,
+    managerName: row.manager_name,
   }
 }
 

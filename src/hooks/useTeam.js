@@ -61,8 +61,12 @@ export function useTeam(token, empId, onAudit) {
 
   async function decideLeave(leaveId, status) {
     try {
-      await apiManagerDecideLeave(token, empId, leaveId, status)
-      setTeamLeaves(prev => prev.map(l => (l.id === leaveId ? { ...l, status } : l)))
+      // Trust the server's returned row rather than the status passed in — an
+      // 'Approved' manager decision lands on 'Manager Approved' (P4-1, two-stage
+      // approval), not 'Approved' outright, so echoing the argument back would show
+      // the wrong state until the next refetch.
+      const updated = await apiManagerDecideLeave(token, empId, leaveId, status)
+      setTeamLeaves(prev => prev.map(l => (l.id === leaveId ? updated : l)))
       onAudit?.('MANAGER_ACTION', `${status} leave ${leaveId}`)
     } catch (e) {
       throw new Error(`Could not update leave: ${e.message}`)

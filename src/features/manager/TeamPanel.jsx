@@ -34,7 +34,14 @@ export function TeamPanel({
 
   const pendingLeaves = teamLeaves.filter(l => l.status === 'Pending')
   const pendingRegs = teamRegs.filter(r => r.status === 'Pending')
-  const actioned = [...teamLeaves.filter(l => l.status !== 'Pending'), ...teamRegs.filter(r => r.status !== 'Pending')].slice(0, 10)
+  // P4-3 — a manager's "Approved" isn't final anymore (P4-1, two-stage approval): it
+  // moves to 'Manager Approved' and waits on admin. Shown separately, read-only, so the
+  // manager can see it's out of their hands without it looking like a final outcome.
+  const awaitingAdmin = teamLeaves.filter(l => l.status === 'Manager Approved')
+  const actioned = [
+    ...teamLeaves.filter(l => l.status === 'Approved' || l.status === 'Rejected'),
+    ...teamRegs.filter(r => r.status !== 'Pending'),
+  ].slice(0, 10)
 
   return (
     <div className="space-y-4">
@@ -69,6 +76,22 @@ export function TeamPanel({
                 </div>
               </div>
             ))}
+            {awaitingAdmin.length > 0 && (
+              <>
+                <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-2 mt-4">Approved by You · Awaiting Admin</p>
+                {awaitingAdmin.map(l => (
+                  <div key={l.id} className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 mb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-white font-medium text-sm">{l.empName}</p>
+                        <p className="text-white/50 text-xs">{l.leaveType} · {l.date}</p>
+                      </div>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 shrink-0">Sent to Admin</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
             <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-2 mt-4">Correction Requests</p>
             {pendingRegs.length === 0 ? (
               <p className="text-white/30 text-sm text-center py-4">No pending correction requests</p>
