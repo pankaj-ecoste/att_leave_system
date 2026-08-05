@@ -176,12 +176,13 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
               <p className="text-white/30 text-center py-10">{locLoading ? 'Loading...' : 'No location logs for this date'}</p>
             ) : (
               <table className="w-full text-xs text-white/60 min-w-max">
-                <thead className="sticky top-0 bg-slate-950"><tr className="border-b border-white/10">{['Time', 'Employee', 'Location', 'Type'].map(h => <th key={h} className="text-left px-3 py-2.5 text-white/30 font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+                <thead className="sticky top-0 bg-slate-950"><tr className="border-b border-white/10">{['Time', 'Employee', 'Location', 'Coordinates', 'Type'].map(h => <th key={h} className="text-left px-3 py-2.5 text-white/30 font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
                 <tbody>{locLogs.filter(r => !q || `${r.empName} ${r.empNum} ${r.latLon} ${r.type}`.toLowerCase().includes(q)).map((r, i) => (
                   <tr key={i} className="border-b border-white/5 hover:bg-white/5">
                     <td className="px-3 py-2 whitespace-nowrap font-mono">{new Date(r.capturedAt).toLocaleTimeString()}</td>
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-white/80">{r.empName}</td>
                     <td className="px-3 py-2 max-w-[250px] truncate text-purple-400/80">{r.latLon}</td>
+                    <td className="px-3 py-2 whitespace-nowrap font-mono text-white/40">{r.lat != null && r.lon != null ? `${Number(r.lat).toFixed(5)}, ${Number(r.lon).toFixed(5)}` : '--'}</td>
                     <td className="px-3 py-2 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'punch_in' ? 'bg-emerald-500/20 text-emerald-300' : r.type === 'punch_out' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300'}`}>{r.type === 'punch_in' ? 'Punch In' : r.type === 'punch_out' ? 'Punch Out' : 'Auto'}</span></td>
                   </tr>
                 ))}</tbody>

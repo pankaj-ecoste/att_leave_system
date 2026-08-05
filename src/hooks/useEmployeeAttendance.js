@@ -53,10 +53,10 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
     stopAutoLocTracking()
     autoLocIntervalRef.current = setInterval(() => {
       if (!empId || !token) return
-      getLocation(async loc => {
+      getLocation(async (loc, err, meta) => {
         if (!loc) return
         try {
-          await employeeLogLocation(token, empId, loc, todayIST(), 'auto')
+          await employeeLogLocation(token, empId, loc, todayIST(), 'auto', meta)
         } catch (e) {
           console.error('Auto location log failed:', e)
         }
@@ -74,10 +74,10 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
 
   function logOdLocation() {
     if (!empId || !token) return
-    getLocation(async loc => {
+    getLocation(async (loc, err, meta) => {
       if (!loc) return
       try {
-        await employeeLogOdLocation(token, empId, loc, todayIST())
+        await employeeLogOdLocation(token, empId, loc, todayIST(), meta)
         setOdTrackLog(prev => [...prev.slice(-49), { ts: new Date().toLocaleTimeString(), loc }])
       } catch (e) {
         console.error('OD log failed:', e)

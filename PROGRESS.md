@@ -238,23 +238,38 @@ display-only — the server independently recomputes and decides) · new
 each date and shows the note + location together, with an "· outside" flag when
 `in_inside_geofence` came back false.
 
-**Verified so far (this session):** migration applied clean to live HRMS · G-1 guardrail
-clean (68 functions, 18 tables, no missing-column refs) · G-2 smoke test 61/61 functions
-reachable, including a real `nearest_active_site()` call against the seeded ECOSTE site
-row · `npm run build` and `npm run test` (23 tests) both green.
+**Verified so far (this session):** migration applied clean to live HRMS, twice in a row
+with no diff (genuinely re-run-safe) · G-1 guardrail clean (68 functions, 18 tables, no
+missing-column refs) · G-2 smoke test 61/61 functions reachable, including a real
+`nearest_active_site()` call against the seeded ECOSTE site row · `npm run build` and
+`npm run test` (23 tests) both green · deployed to Vercel (pushed to `main`).
 
-**Not yet verified — needs a browser** (the Chrome extension wasn't connected this
-session, so this couldn't be driven automatically):
+**Verified live in the browser (you, this session):**
+1. ✅ Tile visibility matches the employee's Work Mode tag — Office-tagged shows only
+   ECOSTE, confirmed by screenshot.
+2. ✅ Field tile → note required, and the note + location + a FIELD badge show up
+   correctly in Admin → Attendance → Daily Records, sorted to the top — confirmed by
+   screenshot (test employee, note "Xyz").
+
+**Still to check:**
 1. Tap an office tile while genuinely outside its radius → confirm the punch is rejected
    with the server's message, not silently accepted.
-2. Tap an office tile while inside → confirm it's accepted and the nearest-tile highlight
-   matches reality.
-3. Set an employee to Field (Admin → Employees → Work Mode) → confirm the Field tile
-   requires a note, and that tapping it while physically at an office still labels the
-   row (visible in Attendance → Daily Records) without rejecting.
-4. Set an employee to WFH → confirm only the WFH tile shows, no geofence check.
-5. Add a 2nd/3rd site from the new Sites tab → confirm a new tile appears immediately
+2. Set an employee to WFH → confirm only the WFH tile shows, no geofence check.
+3. Add a 2nd/3rd site from the new Sites tab → confirm a new tile appears immediately
    for Office-tagged employees without a redeploy.
+
+**Follow-up fix (`0008_real_coords_background_tracking.sql`):** the silent 2-hourly
+background tracking (`location_logs`, plan.md Decision 5) and the 5-minutely On Duty
+tracking (`od_tracking_logs`) were still only storing the reverse-geocoded *address
+text* — real numeric lat/lon/accuracy, same as the punch itself got in `0007`, was
+missing. Fixed: both tables gained `lat`/`lon`/`accuracy_m` columns, `employee_log_location`/
+`employee_log_od_location` now take them, and Database → Location Logs shows a
+Coordinates column. Caught a real migration-tooling bug fixing this: `apply-migrations.mjs`
+always re-runs every file from scratch, and `admin_get_all_location_logs`'s column list
+changed in `0008` — re-running `0003`'s original narrower definition over the widened
+live one failed with "cannot change return type." Added the same drop-before-redefine
+guard `fetch_directory` already had (0005) to `0003` itself; confirmed genuinely
+re-run-safe by applying twice in a row.
 
 ## Midday — Field staff & quality
 

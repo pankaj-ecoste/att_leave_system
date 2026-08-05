@@ -900,6 +900,15 @@ end;$function$;
 
 -- ============ ADMIN — LOCATION / OD LOGS ============
 
+-- Dropped first, same reason as fetch_directory in 0005: a later migration
+-- (0008_real_coords_background_tracking.sql) widens this function's RETURNS TABLE
+-- column list, and Postgres refuses a plain CREATE OR REPLACE across a column-list
+-- change. Without this guard, re-running every migration from scratch (which
+-- apply-migrations.mjs always does) would recreate the narrow 8-column version here
+-- and then fail trying to widen it back in 0008 — this makes the file order-independent
+-- and genuinely re-run-safe regardless of what already landed after it.
+drop function if exists public.admin_get_all_location_logs(uuid, date);
+
 create or replace function public.admin_get_all_location_logs(p_token uuid, p_date date)
  returns table(id uuid, emp_id uuid, emp_name text, emp_num text, date date, lat_lon text, type text, captured_at timestamp with time zone)
  language plpgsql
