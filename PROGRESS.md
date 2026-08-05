@@ -35,7 +35,7 @@
 ✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
-🔄 NOW       Day 2 morning through afternoon (P3-1..P3-13, P3-15) code-complete and DB-verified live — one combined browser click-through pass away from ✅, see Day 2 section below
+🔄 NOW       Day 2 morning through afternoon (P3-1..P3-15) — server-side logic verified live via script (20 checks, 0 failures, disposable test employee, cleaned up); a handful of pure UI-rendering items remain unwatched since the Chrome extension isn't reachable this session, see Day 2 section below
 ⬜ NEXT      Day 2 evening — P4-1..P4-9 (two-stage leave approval + email)
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
@@ -214,10 +214,10 @@ Still needed later:
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-1 | `sites` table + admin screen, per-site radius | 🔄 code complete, DB verified live | DEV |
-| P3-2 | Store real lat/lon/accuracy — **server decides, not the phone** | 🔄 code complete, DB verified live | DEV |
-| P3-3 | Punch screen — office tiles (one per active site) with live distance | 🔄 code complete | DEV |
-| P3-4 | Reject punch outside radius (office tiles only) | 🔄 code complete, DB verified live | DEV |
+| P3-1 | `sites` table + admin screen, per-site radius | ✅ verified live (script + your screenshots) | DEV |
+| P3-2 | Store real lat/lon/accuracy — **server decides, not the phone** | ✅ verified live | DEV |
+| P3-3 | Punch screen — office tiles (one per active site) with live distance | 🔄 code complete — tile rendering confirmed by screenshot, live-distance display not independently watched | DEV |
+| P3-4 | Reject punch outside radius (office tiles only) | ✅ verified live | DEV |
 
 **What's in `0007_geofence_and_wfh.sql`:** `employees.work_mode` gains a 4th value,
 `wfh` (permanent remote — distinct from the existing "Work From Home" *leave type*,
@@ -251,12 +251,24 @@ missing-column refs) · G-2 smoke test 61/61 functions reachable, including a re
    correctly in Admin → Attendance → Daily Records, sorted to the top — confirmed by
    screenshot (test employee, note "Xyz").
 
-**Still to check:**
-1. Tap an office tile while genuinely outside its radius → confirm the punch is rejected
-   with the server's message, not silently accepted.
-2. Set an employee to WFH → confirm only the WFH tile shows, no geofence check.
-3. Add a 2nd/3rd site from the new Sites tab → confirm a new tile appears immediately
-   for Office-tagged employees without a redeploy.
+**Verified by script against live production (Chrome extension wasn't reachable from
+this session — no interactive desktop attached — so this is the closest honest
+substitute: a disposable test employee, created and deleted via the same RPCs the real
+app calls, exercising the exact server-side logic a browser click would trigger):**
+3. ✅ Tapping an office tile ~150km outside its radius → rejected with the server's
+   "Outside <site> radius" message, nothing written.
+4. ✅ Tapping the same tile from inside the radius → accepted, real lat/lon stored,
+   `official_source` claimed as `app`.
+5. ✅ An immediate repeat punch → rejected by the duplicate-tap guard.
+6. ✅ Field tile (no site id) → never rejected even from a location that happens to sit
+   inside an office radius; that day gets auto-labelled with the matched site instead.
+7. ✅ WFH tile → accepted from anywhere, confirming no geofence check runs for it.
+8. ✅ Sites admin CRUD (create/update/delete) all round-tripped correctly.
+
+**Not independently verified** — this one is UI-only and outside what a script can
+prove: whether a newly added site's tile appears on the punch screen without a
+redeploy. Logically it should (`PunchPanel.jsx` renders one tile per row in the `sites`
+prop, refetched at login), but nobody has actually watched it happen.
 
 **Follow-up fix (`0008_real_coords_background_tracking.sql`):** the silent 2-hourly
 background tracking (`location_logs`, plan.md Decision 5) and the 5-minutely On Duty
@@ -279,10 +291,10 @@ re-run-safe by applying twice in a row.
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-5 | Work mode per employee — Office / Field / Both / WFH | 🔄 code complete, DB verified live | DEV |
-| P3-6 | Structured note required for field staff | 🔄 code complete | DEV |
-| P3-7 | High accuracy · reject poor readings · retry | 🔄 code complete | DEV |
-| P3-8 | Ignore duplicate taps | 🔄 code complete, DB verified live | DEV |
+| P3-5 | Work mode per employee — Office / Field / Both / WFH | ✅ verified live (screenshot + script) | DEV |
+| P3-6 | Structured note required for field staff | ✅ verified live (screenshot) | DEV |
+| P3-7 | High accuracy · reject poor readings · retry | 🔄 code complete — client-side retry loop, no server call to script-verify | DEV |
+| P3-8 | Ignore duplicate taps | ✅ verified live | DEV |
 | P3-9 | Reverse geocoding server-side, cached, off Nominatim | ✅ verified live (0005) | DEV |
 
 **Also fixed while here:** `scripts/check-schema-contract.mjs` (the G-1 guardrail) used
@@ -300,11 +312,12 @@ they now share one rewritten `employee_punch`, so it's one verification pass, no
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-10 | **Separate app and biometric punches** — schema change | 🔄 code complete, DB verified live | DEV |
-| P3-11 | Side-by-side comparison + mismatch report | 🔄 code complete | DEV |
-| P3-12 | Admin switch for which source is official | 🔄 code complete | DEV |
-| P3-13 | Adoption dashboard — app vs machine | 🔄 code complete | DEV |
-| P3-15 *(pulled forward from Day 3)* | Manager view of own team's location log | 🔄 code complete, DB verified live | DEV |
+| P3-10 | **Separate app and biometric punches** — schema change | ✅ verified live (script) | DEV |
+| P3-11 | Side-by-side comparison + mismatch report | 🔄 code complete — columns proven correct, table rendering not screen-watched | DEV |
+| P3-12 | Admin switch for which source is official | 🔄 code complete — same, the underlying upsert is proven, the button click isn't | DEV |
+| P3-13 | Adoption dashboard — app vs machine | 🔄 code complete — pure client-side aggregation off already-verified data, low risk | DEV |
+| P3-15 *(pulled forward from Day 3)* | Manager view of own team's location log | ✅ verified live (script, scoped to direct reports only) | DEV |
+| P3-14 | Silent 2-hourly capture + 90-day retention | ✅ retention cron confirmed active on live HRMS (`cleanup-old-location-logs`, 03:30 IST daily) | DEV |
 
 **The real bug this closes:** `useDailyBioImport.js`/`useMonthlyBioImport.js` did
 `if (arrTime) existing.inTime = arrTime` unconditionally — importing yesterday's
@@ -322,12 +335,23 @@ finished this session.
 **Verified:** migration applied live and confirmed genuinely re-run-safe (applied twice
 in a row, no errors) · G-1 guardrail clean (69 functions, 18 tables) · G-2 smoke test
 62/62 reachable, including `manager_get_team_location_logs` · `npm run build` and
-`npm run test` (23 tests) both green. **Not yet verified in a browser this session**
-(same reason as the morning block — no Chrome extension connection): import a biometric
-file for a day an app-punched employee already has, confirm their official time survives
-and the mismatch/App-vs-Bio columns show both readings; try the "use bio"/"use app"
-switch; check the new App Adoption stat card on the Dashboard tab; check Location under
-My Team as a manager.
+`npm run test` (23 tests) both green.
+
+**Verified by script against live production** (same disposable-test-employee approach
+as the morning block, cleaned up afterward — no leftover data): an `admin_upsert_attendance`
+call shaped exactly like the *protected* branch of `useDailyBioImport.js` (an
+already-`app`-official day) records `bio_in_time`/`bio_out_time` without touching the
+official `in_time`/`out_time`/`official_source` · the same call shaped like the
+*unprotected* branch (no prior official source) correctly lets `biometric` become
+official · `manager_get_team_location_logs` only returns rows for the caller's own
+direct reports.
+
+**Not independently verified** — these are pure UI rendering/interaction, not something
+a script proves: the "App vs Biometric" column actually displaying both readings side by
+side with a MISMATCH badge, clicking "use bio"/"use app" from that column, the App
+Adoption stat card rendering on the Dashboard tab, and the manager's Location tab
+actually showing rows in the browser. All of them read data already proven correct at
+the column level above — the risk left is display-only, not data-integrity.
 
 ## Evening — Two-stage approval + email
 
@@ -378,7 +402,7 @@ My Team as a manager.
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
 | P4B-15 | **Leave Policy page** in employee panel — readable in-app text | ⬜ | DEV |
-| P3-14 | Silent 2-hourly capture · only while punched in · 90-day retention | 🔄 capture done (Day 1, real coords added Day 2 morning) · 90-day retention cron not yet built | DEV |
+| ~~P3-14~~ | ~~Silent 2-hourly capture · only while punched in · 90-day retention~~ ✅ **done Day 2 afternoon** — see above | — | — |
 | ~~P3-15~~ | ~~Manager view of own team's location log~~ ✅ **done Day 2 afternoon** — see above | — | — |
 | **P4C-1** | **Daily report download** — date picker + button in admin | ⬜ | DEV |
 | **P4C-2** | 5-sheet workbook — Summary · Attendance · Location log · Leave · Exceptions | ⬜ | DEV |
