@@ -36,8 +36,8 @@
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
 ✅ DONE      Day 2 morning through afternoon — Phase 3 (P3-1..P3-15) complete, you confirmed 2026-08-06
-🔄 NOW       Day 2 evening — real two-stage leave approval built and verified live (P4-1, P4-2, P4-4, P4-8, P4-9 ✅; P4-3/P4-5 UI not screen-watched). P4-6 (email) blocked on Q-2/Q-3; P4-7 moot (Q-10 already resolved). Day 2 fully code-complete
-⬜ NEXT      Day 3 — P4B-1..P4B-15 (half-day + accrual + year-end leave policy engine), hardening, testing
+✅ DONE      Day 2 evening — real two-stage leave approval (P4-1, P4-2, P4-4, P4-8, P4-9), verified live via 13 scripted checks. P4-3/P4-5 UI code-complete but not screen-watched. P4-6 (email) stays blocked on Q-2/Q-3 (hosting URL, DNS access) — not a code task, needs your answer. P4-7 needs nothing — Q-10 already resolved it. **Day 2 is done.**
+⬜ NEXT      Day 3 — P4B-1..P4B-15 (half-day leave, year-end accrual/lapsing, probation caps), P4C-1..P4C-4 (daily report export), P6 hardening/testing. Start fresh session here — see "Next chat" section at the bottom of this file
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -551,14 +551,31 @@ Hosting URL: ________________________________
 
 ## Next chat — how to start
 
-Say any of these:
+**As of 2026-08-06 night: Day 1 and Day 2 are both fully done.** Day 3 (the leave
+policy engine — half-days, year-end accrual/lapsing, probation caps, plus the daily
+report export and final hardening) hasn't been started. Say any of these:
 
 ```
-"start day 1"          → runs the whole Day 1 block in order
-"start P0B"            → just the 5 broken function fixes
-"do P0B-4"             → one specific task
-"Q-1 answer is ..."    → records an answer and unblocks its tasks
+"start day 3"          → runs the whole Day 3 block in order (P4B-1..P4B-15, P4C-1..P4C-4, P6)
+"do P4B-6"              → one specific task
+"Q-5 answer is ..."    → records an answer and unblocks its tasks
 "status"               → current position
 ```
 
-Both files carry full context. Nothing from the planning conversation is lost.
+**Open questions that will block Day 3 tasks the moment you reach them** (all HR
+policy answers, not code — see the Open Questions table above for the full list):
+`Q-5` (Paternity Leave quota), `Q-6` (Maternity "1 week" — calendar or working days),
+`Q-7` (do Sick/Marriage/Maternity/Bereavement sit on top of the 26-day cap), `Q-8`
+(keep or drop the two hourly Partial Leave types). If you have these answers ready,
+lead with them — it saves a round trip once Day 3 tasks actually need them.
+
+**One thing to do yourself before/during Day 3, if you get a chance:** a real
+browser click-through of Phase 3 and Phase 4 evening — no Chrome extension was
+reachable from this machine's session, so everything was verified by scripting real
+calls against the live database instead of watching the screen. The data and logic
+are proven; nobody has looked at the actual pixels for: the App vs Biometric column,
+the "use bio"/"use app" switch, the App Adoption stat card, the manager's Location
+tab, the manager's "Approved by You · Awaiting Admin" section, admin's split leave
+queues, and the employee's "Your Manager" card.
+
+Both files carry full context. Nothing from this conversation is lost.
