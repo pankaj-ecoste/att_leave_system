@@ -75,13 +75,18 @@ export const DAY_TYPES = { WORKING: 'working', WEEK_OFF: 'week_off', HOLIDAY: 'h
 
 export const EMPLOYMENT_STATUSES = ['Probation', 'Confirmed', 'Notice Period', 'Exited']
 
-// Office / Field / Both (plan.md Decision 4 — field staff are exempt from the office
-// geofence check but must write a structured note instead). 'office' matches the
-// employees.work_mode column default.
+// OS / FS / WFH (plan.md §6B) — the tag admin sets per employee at creation, driving
+// which punch tiles they see. 'office' matches the employees.work_mode column default.
+// 'both' (Office + Field) is a fourth, non-abbreviated combination: office tiles plus
+// the Field tile, for staff who genuinely split between the two — field staff are
+// exempt from the office geofence check on the Field tile but must write a structured
+// note instead (Decision 4). 'wfh' is *permanent* remote, not the occasional
+// WFH leave type (unrelated, unchanged — see requiresFieldNote below and §6B).
 export const WORK_MODES = [
-  { id: 'office', label: 'Office' },
-  { id: 'field', label: 'Field' },
+  { id: 'office', label: 'Office (OS)' },
+  { id: 'field', label: 'Field (FS)' },
   { id: 'both', label: 'Office + Field' },
+  { id: 'wfh', label: 'WFH' },
 ]
 
 export function findWorkMode(id) {

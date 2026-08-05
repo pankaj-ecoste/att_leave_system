@@ -95,9 +95,17 @@ const CALLS = [
   ['admin_get_monthly_sheet', { p_token: FAKE_UUID }],
   ['admin_set_monthly_sheet', { p_token: FAKE_UUID, p_filename: 'test.xlsx', p_report_month: 1, p_report_year: 2026, p_synced: 0, p_skipped: 0 }],
   ['admin_clear_monthly_sheet', { p_token: FAKE_UUID }],
+  // Sites (P3-1) — admin-only writes; reads go straight through PostgREST (`sites`
+  // has an anon select policy, 0006), so there's no fetch RPC to smoke-test here.
+  ['admin_create_site', { p_token: FAKE_UUID, p_data: { name: 'test', latitude: 0, longitude: 0 } }],
+  ['admin_update_site', { p_token: FAKE_UUID, p_site_id: FAKE_UUID, p_data: {} }],
+  ['admin_delete_site', { p_token: FAKE_UUID, p_site_id: FAKE_UUID }],
   // Reverse geocoding (P3-9) — no token, just needs to be reachable and not 404.
   // Real coordinates so a live run also proves the http extension + cache actually work.
   ['reverse_geocode', { p_lat: 21.1458, p_lon: 79.0882 }],
+  // Geofence helpers (P3-2) — no token; a real point near the seeded ECOSTE site so a
+  // live run also proves haversine_m/nearest_active_site actually execute.
+  ['nearest_active_site', { p_lat: 28.702994, p_lon: 77.156833 }],
 ]
 
 async function main() {

@@ -35,8 +35,8 @@
 ✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
-🔄 NOW       Day 2 midday (P3-5..P3-9, field staff & quality) code-complete — needs migration 0005 applied + live check, see Day 2 section below
-⬜ NEXT      P3-1..P3-4 (sites, geofence, punch tiles) — blocked on Q-1, the 3 office coordinates
+🔄 NOW       Day 2 morning + midday (P3-1..P3-9) code-complete and DB-verified live — one browser click-through pass away from ✅, see Day 2 section below
+⬜ NEXT      Day 2 afternoon/evening — P3-10..P3-13 (app vs biometric split), P4-1..P4-9 (two-stage approval + email)
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -202,60 +202,84 @@ Still needed later:
 # 📅 DAY 2 — Location & approvals
 
 > **Outcome:** office staff geofenced · field staff tracked with notes · app and biometric side by side · approvals flowing with email.
-> 🚫 **Needs `Q-1` (office coordinates) by morning.**
+> ✅ **`Q-1` no longer a hard blocker** — the punch screen renders off however many active `sites` rows exist, so geofencing works with 1 office today and grows to 3 without a code change.
 
 ## Morning — Sites & geofence
 
+> **Q-1 answered differently than expected — and better.** Rather than wait for all 3
+> coordinates up front, the punch screen is now fully **data-driven off the `sites`
+> table**: however many active rows exist (0, 1, 3, more) is exactly how many office
+> tiles render. You're filling rows in via the Supabase dashboard (1 of 3 so far) or the
+> new Sites admin screen — either way, no code change needed as the rest arrive.
+
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-1 | `sites` table + admin screen, per-site radius | 🚫 | DEV |
-| P3-2 | Store real lat/lon/accuracy — **server decides, not the phone** | ⬜ | DEV |
-| P3-3 | Punch screen — 3 office tiles with live distance | ⬜ | DEV |
-| P3-4 | Reject punch outside radius (office staff only) | ⬜ | DEV |
+| P3-1 | `sites` table + admin screen, per-site radius | 🔄 code complete, DB verified live | DEV |
+| P3-2 | Store real lat/lon/accuracy — **server decides, not the phone** | 🔄 code complete, DB verified live | DEV |
+| P3-3 | Punch screen — office tiles (one per active site) with live distance | 🔄 code complete | DEV |
+| P3-4 | Reject punch outside radius (office tiles only) | 🔄 code complete, DB verified live | DEV |
+
+**What's in `0007_geofence_and_wfh.sql`:** `employees.work_mode` gains a 4th value,
+`wfh` (permanent remote — distinct from the existing "Work From Home" *leave type*,
+untouched) · 14 new `attendance` columns — `in_lat`/`in_lon`/`in_accuracy_m`/`in_site_id`/
+`in_matched_site_id`/`in_distance_m`/`in_inside_geofence` and the same 7 for `out_` ·
+`haversine_m()` + `nearest_active_site()` helper functions · `employee_punch` rewritten
+so a tapped office tile (`{in|out}_site_id` present) gets a hard geofence check —
+**reject outside radius, no override** — while a Field/WFH tile (no site id) is never
+rejected but auto-detected against the nearest active site and labelled if it happens to
+match, purely for admin's reporting (plan.md §6B) · `admin_create_site`/
+`admin_update_site`/`admin_delete_site` for the new Sites admin tab.
+
+**Frontend:** `PunchPanel.jsx` rebuilt around dynamic tiles (`lib/geo.js`'s
+`nearestSite()` highlights the closest office and shows live distance before tapping,
+display-only — the server independently recomputes and decides) · new
+`features/admin/Sites.jsx` CRUD screen, wired into `AdminPanel.jsx` as a new tab ·
+`AttendanceGrid.jsx`'s Daily Records table now sorts Field-tagged entries first within
+each date and shows the note + location together, with an "· outside" flag when
+`in_inside_geofence` came back false.
+
+**Verified so far (this session):** migration applied clean to live HRMS · G-1 guardrail
+clean (68 functions, 18 tables, no missing-column refs) · G-2 smoke test 61/61 functions
+reachable, including a real `nearest_active_site()` call against the seeded ECOSTE site
+row · `npm run build` and `npm run test` (23 tests) both green.
+
+**Not yet verified — needs a browser** (the Chrome extension wasn't connected this
+session, so this couldn't be driven automatically):
+1. Tap an office tile while genuinely outside its radius → confirm the punch is rejected
+   with the server's message, not silently accepted.
+2. Tap an office tile while inside → confirm it's accepted and the nearest-tile highlight
+   matches reality.
+3. Set an employee to Field (Admin → Employees → Work Mode) → confirm the Field tile
+   requires a note, and that tapping it while physically at an office still labels the
+   row (visible in Attendance → Daily Records) without rejecting.
+4. Set an employee to WFH → confirm only the WFH tile shows, no geofence check.
+5. Add a 2nd/3rd site from the new Sites tab → confirm a new tile appears immediately
+   for Office-tagged employees without a redeploy.
 
 ## Midday — Field staff & quality
 
-> **Code complete, awaiting the migration apply + live verification below** — not
-> marked ✅ yet per this file's own rule ("never mark ✅ until tested and working").
-> Built ahead of `P3-1`..`P3-4` because none of these five need the office coordinates
-> (`Q-1`), unlike the morning block, which stays 🚫 blocked.
+> Built ahead of `P3-1`..`P3-4` originally because none of these five needed the office
+> coordinates (`Q-1`) — now folded together with the morning block above since both
+> shipped through the same `employee_punch` rewrite.
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-5 | Work mode per employee — Office / Field / Both | 🔄 code complete | DEV |
+| P3-5 | Work mode per employee — Office / Field / Both / WFH | 🔄 code complete, DB verified live | DEV |
 | P3-6 | Structured note required for field staff | 🔄 code complete | DEV |
 | P3-7 | High accuracy · reject poor readings · retry | 🔄 code complete | DEV |
-| P3-8 | Ignore duplicate taps | 🔄 code complete | DEV |
-| P3-9 | Reverse geocoding server-side, cached, off Nominatim | 🔄 code complete | DEV |
-
-**What's in `0005_field_staff_and_geo.sql`:** `employees.work_mode` (office/field/both) +
-`attendance.field_note` (a new column, not `remark` — `remark` is bio-import territory
-and would collide with it) · `geocode_cache` table + `reverse_geocode()` RPC via the
-`http` Postgres extension, so punches stop calling Nominatim straight from the browser
-· `fetch_directory`/`admin_create_employee`/`admin_update_employee` updated to carry
-`work_mode` · `employee_punch` updated to store `field_note` and reject a same-type
-re-punch within 30s (server backstop; the client also disables the button while a punch
-is in flight and runs the same check locally first).
+| P3-8 | Ignore duplicate taps | 🔄 code complete, DB verified live | DEV |
+| P3-9 | Reverse geocoding server-side, cached, off Nominatim | ✅ verified live (0005) | DEV |
 
 **Also fixed while here:** `scripts/check-schema-contract.mjs` (the G-1 guardrail) used
 to hardcode reading only `0002_hrms_schema.sql` + `0003_hrms_functions.sql` — any table
 or function change in a later migration file was invisible to it. It now reads every
 migration file (except the excluded `0001` baseline) in order and understands
-`alter table ... add column` on top of `create table`. Verified clean before and after
-`0005` was added.
+`alter table ... add column` on top of `create table`. Verified clean through `0007`.
+`scripts/smoke-test-functions.mjs` extended to cover the 3 new site functions +
+`nearest_active_site`.
 
-**To finish (needs you):**
-1. Apply the migration: `DATABASE_URL="..." node scripts/apply-migrations.mjs`
-   (same flow as `0002`-`0004`). **Risk flagged in advance**: if the `http` extension
-   isn't enabled on this Supabase plan, that one statement will fail loudly and the
-   apply will stop there — tell me and I'll cut the extension/RPC and fall back to
-   client-side reverse geocoding (today's behaviour) rather than block on it.
-2. `node scripts/smoke-test-functions.mjs` against live HRMS.
-3. Quick browser check: set a seeded employee to Field mode (Admin → Employees), log in
-   as them, confirm Punch In is blocked until a note is entered and a rapid double-click
-   only records once.
-
-Once that's back clean, these flip to ✅.
+All of `P3-1`..`P3-9` flip to ✅ together once the 5-point browser check above is done —
+they now share one rewritten `employee_punch`, so it's one verification pass, not nine.
 
 ## Afternoon — App vs biometric
 
@@ -362,7 +386,7 @@ Real, but not needed for a working system.
 
 | ID | Question | Owner | Blocks | Needed by |
 |---|---|:--:|---|---|
-| **Q-1** | **3 office locations** — name, coordinates, radius · *user will supply on Day 2 when reached* | YOU | P3-1 → all location work | **Day 2 AM** |
+| Q-1 | ~~3 office locations — name, coordinates, radius~~ ✅ **Resolved — no longer needs a fixed count.** Sites are added via the Sites admin tab (or the dashboard); 1 of 3 offices in so far, punch screen picks up new ones automatically | YOU | — | ✅ |
 | **Q-2** | Where is the app hosted? | YOU | P4-6 | Day 2 PM |
 | **Q-3** | Who has DNS access for `ecoste.in`? | YOU | P4-6 | Day 2 PM |
 | Q-4 | Confirm biometric stays official during dual-run | YOU | P3-12 | Day 2 PM |

@@ -1,16 +1,68 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card } from '../../components/ui/Card'
 import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
 import { calcRawHrs, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
+import { haversineMeters, nearestSite } from '../../lib/geo'
+import { getLocation } from '../../hooks/useGeolocation'
 
-export function PunchPanel({ currentUser, record, stdHours, holidays, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog }) {
+// Which action is next for today: nothing punched yet -> 'in', punched in but not out
+// -> 'out', both done -> 'done'. Drives which tiles are tappable (plan.md §6B).
+function phaseOf(record) {
+  if (!record.inTime) return 'in'
+  if (!record.outTime) return 'out'
+  return 'done'
+}
+
+function PunchTile({ title, subtitle, phase, disabled, onClick, highlight, title2 }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`w-full flex items-center justify-between rounded-2xl p-4 text-left transition-all active:scale-[0.98] border disabled:opacity-40 disabled:cursor-not-allowed ${highlight ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+    >
+      <div>
+        <p className="text-white font-medium text-sm">{title}{title2 && <span className="text-white/30 font-normal"> {title2}</span>}</p>
+        <p className="text-white/40 text-xs mt-0.5">{subtitle}</p>
+      </div>
+      <span className={`text-xs font-semibold whitespace-nowrap ml-3 ${phase === 'in' ? 'text-emerald-400' : 'text-red-400'}`}>
+        {phase === 'in' ? 'Punch In' : 'Punch Out'}
+      </span>
+    </button>
+  )
+}
+
+export function PunchPanel({ currentUser, record, stdHours, holidays, sites, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog }) {
   const [note, setNote] = useState('')
-  // Field/Both employees don't get the office geofence check once it lands (they're
-  // exempt from it, plan.md Decision 4) — a note ("where they are / where going")
-  // stands in for it instead. Required before Punch In; free to update before Punch Out.
-  const needsNote = requiresFieldNote(currentUser?.workMode)
+  // A soft, silent location fetch purely to highlight the nearest office tile and show
+  // live distances before the employee taps anything (plan.md §6B — "highlights the
+  // nearest one"). The actual punch always takes its own fresh, high-accuracy reading
+  // via useEmployeeAttendance's punch() — this is display-only and never blocks a tap.
+  const [liveCoords, setLiveCoords] = useState(null)
+
+  const phase = phaseOf(record)
+  const workMode = currentUser?.workMode || 'office'
+  const showOfficeTiles = workMode === 'office' || workMode === 'both'
+  const showFieldTile = workMode === 'field' || workMode === 'both'
+  const showWfhTile = workMode === 'wfh'
+  const activeSites = (sites || []).filter(s => s.active)
+
+  useEffect(() => {
+    if (phase === 'done' || !showOfficeTiles) return
+    getLocation((loc, err, meta) => {
+      if (meta) setLiveCoords({ lat: meta.lat, lon: meta.lon })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, showOfficeTiles])
+
+  const nearest = liveCoords ? nearestSite(liveCoords.lat, liveCoords.lon, activeSites) : null
+
+  // Field/Both employees don't get the office geofence check on the Field tile (they're
+  // exempt, plan.md Decision 4) — a note ("where they are / where going") stands in for
+  // it instead. Required before that tile is tappable.
+  const needsNote = requiresFieldNote(workMode)
   const noteMissing = needsNote && !note.trim()
+
   const raw = calcRawHrs(record.inTime, record.outTime)
   const net = Math.max(0, raw) // deduction for partial leave applied elsewhere; kept simple here since this is "today" only
   const ot = Math.max(0, net - stdHours)
@@ -18,14 +70,29 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, punch, isP
   const today = todayIST()
   const upcomingHolidays = holidays.filter(h => h.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 5)
 
+  const actionLabel = phase === 'in' ? 'Punch In' : phase === 'out' ? 'Punch Out' : null
+
   return (
     <>
       <Card>
-        <h2 className="text-white font-semibold mb-4">Punch In / Out</h2>
-        {needsNote && (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-white font-semibold">{actionLabel || 'Today'}</h2>
+          <div className="flex gap-4">
+            <div className="text-right">
+              <p className="text-white/30 text-xs uppercase tracking-widest">In</p>
+              <p className="text-white font-mono text-sm">{record.inTime || '--:--'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-white/30 text-xs uppercase tracking-widest">Out</p>
+              <p className="text-white font-mono text-sm">{record.outTime || '--:--'}</p>
+            </div>
+          </div>
+        </div>
+
+        {needsNote && phase !== 'done' && (
           <div className="mb-4">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1.5">
-              Where are you? <span className="text-amber-400/70 normal-case">(required to punch in — you're on {currentUser.workMode === 'both' ? 'Office + Field' : 'Field'} mode)</span>
+              Where are you? <span className="text-amber-400/70 normal-case">(required for the Field tile)</span>
             </p>
             <textarea
               value={note}
@@ -36,34 +103,60 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, punch, isP
             />
           </div>
         )}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <button
-            onClick={() => punch('in', note)}
-            disabled={isPunching || noteMissing}
-            title={noteMissing ? 'Enter a note before punching in' : undefined}
-            className="bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/40 rounded-2xl p-5 text-center transition-all active:scale-95 cursor-pointer group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/5 disabled:hover:border-white/10"
-          >
-            <p className="text-white/40 text-xs uppercase tracking-widest mb-2">IN TIME</p>
-            <p className="text-white font-mono text-2xl font-bold mb-3">{record.inTime || '--:--'}</p>
-            <p className="text-emerald-400 text-xs font-semibold group-hover:text-emerald-300">{isPunching ? 'Working…' : 'Punch In'}</p>
-          </button>
-          <button
-            onClick={() => punch('out', note)}
-            disabled={isPunching}
-            className="bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/40 rounded-2xl p-5 text-center transition-all active:scale-95 cursor-pointer group disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/5 disabled:hover:border-white/10"
-          >
-            <p className="text-white/40 text-xs uppercase tracking-widest mb-2">OUT TIME</p>
-            <p className="text-white font-mono text-2xl font-bold mb-3">{record.outTime || '--:--'}</p>
-            <p className="text-red-400 text-xs font-semibold group-hover:text-red-300">{isPunching ? 'Working…' : 'Punch Out'}</p>
-          </button>
-        </div>
+
+        {phase === 'done' ? (
+          <div className="rounded-xl p-4 text-center bg-emerald-500/10 border border-emerald-500/20">
+            <p className="text-emerald-300 text-sm font-medium">Punched in and out for today</p>
+          </div>
+        ) : (
+          <div className="space-y-2 mb-1">
+            {showOfficeTiles && activeSites.length === 0 && (
+              <p className="text-white/30 text-xs text-center py-2">No office sites configured yet — ask admin to add one in Sites.</p>
+            )}
+            {showOfficeTiles && activeSites.map(site => {
+              const isNearest = nearest?.site.id === site.id
+              const distance = liveCoords ? haversineMeters(liveCoords.lat, liveCoords.lon, site.latitude, site.longitude) : null
+              return (
+                <PunchTile
+                  key={site.id}
+                  title={site.name}
+                  title2={isNearest ? '· Nearest' : ''}
+                  subtitle={distance == null ? 'Locating…' : `${Math.round(distance)}m away · ${site.radiusM}m radius`}
+                  phase={phase}
+                  highlight={isNearest}
+                  disabled={isPunching}
+                  onClick={() => punch(phase, { siteId: site.id })}
+                />
+              )
+            })}
+            {showFieldTile && (
+              <PunchTile
+                title="Field"
+                subtitle="No location check — note required"
+                phase={phase}
+                disabled={isPunching || noteMissing}
+                onClick={() => punch(phase, { fieldNote: note })}
+              />
+            )}
+            {showWfhTile && (
+              <PunchTile
+                title="Work From Home"
+                subtitle="Your usual routine"
+                phase={phase}
+                disabled={isPunching}
+                onClick={() => punch(phase, {})}
+              />
+            )}
+          </div>
+        )}
+
         {locationStatus && (
-          <div className={`rounded-lg p-2 mb-1 text-xs text-center ${locationStatus.startsWith('Located') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+          <div className={`rounded-lg p-2 mb-1 mt-2 text-xs text-center ${locationStatus.startsWith('Located') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
             {locationStatus}
           </div>
         )}
         {locationBlocked && (
-          <div className="rounded-lg p-3 mb-1 text-xs text-center bg-red-500/10 text-red-300 border border-red-500/20">
+          <div className="rounded-lg p-3 mb-1 mt-2 text-xs text-center bg-red-500/10 text-red-300 border border-red-500/20">
             <p className="font-semibold mb-1">Location access required</p>
             <p className="text-red-300/70">Please allow location access in your browser settings, then try again. Punching is not allowed without location.</p>
           </div>

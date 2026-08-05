@@ -105,11 +105,13 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
     return saved
   }
 
-  // GPS is REQUIRED — punch is blocked until location is captured (Decision-adjacent to
-  // the office geofence work landing in Day 2; for now this just requires *a* location).
-  // `fieldNote` is only meaningful for Field/Both work-mode employees (P3-6) — the
-  // caller (PunchPanel) decides whether to collect and pass one.
-  async function punch(type, currentUser, fieldNote) {
+  // GPS is REQUIRED — punch is blocked until location is captured. `opts.siteId` is set
+  // when an office tile was tapped (plan.md §6B) — the server (employee_punch,
+  // 0007_geofence_and_wfh.sql) is the one that decides whether that's inside the site's
+  // radius and rejects if not; the client never makes that call itself. `opts.fieldNote`
+  // is only meaningful for the Field tile (P3-6).
+  async function punch(type, currentUser, opts = {}) {
+    const { siteId, fieldNote } = opts
     // In-flight guard: a second tap while one is already resolving is ignored outright,
     // no round trip. The cooldown check below is the fallback once a punch has *landed*.
     if (punchingRef.current) return
@@ -138,8 +140,17 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
         const next = { ...rec }
         const now = new Date()
         const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-        if (type === 'in') { next.inTime = t; next.inLocation = loc }
-        if (type === 'out') { next.outTime = t; next.outLocation = loc; stopAutoLocTracking(); stopOdTracking() }
+        if (type === 'in') {
+          next.inTime = t; next.inLocation = loc
+          next.inLat = meta?.lat ?? null; next.inLon = meta?.lon ?? null; next.inAccuracyM = meta?.accuracy ?? null
+          next.inSiteId = siteId || null
+        }
+        if (type === 'out') {
+          next.outTime = t; next.outLocation = loc
+          next.outLat = meta?.lat ?? null; next.outLon = meta?.lon ?? null; next.outAccuracyM = meta?.accuracy ?? null
+          next.outSiteId = siteId || null
+          stopAutoLocTracking(); stopOdTracking()
+        }
         if (fieldNote) next.fieldNote = fieldNote
         next.punchType = type
         next.status = calcStatus(next, stdHours, next.dayType)
@@ -163,7 +174,8 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
           if (type === 'in') startAutoLocTracking()
         } catch (e) {
           // Includes the server's own duplicate-tap rejection (employee_punch's cooldown
-          // check) — surfaced plainly rather than as a raw Postgres error (§8C).
+          // check) and the geofence rejection ("Outside <site> radius — ...") — surfaced
+          // plainly rather than as a raw Postgres error (§8C).
           setLocationStatus(e.message || 'Could not save punch — please try again')
           setTimeout(() => setLocationStatus(''), 5000)
         } finally {

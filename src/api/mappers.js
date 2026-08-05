@@ -86,6 +86,20 @@ export function rowToAttendance(row) {
     monthlySource: row.monthly_source,
     source: row.source,
     fieldNote: row.field_note,
+    inLat: row.in_lat != null ? Number(row.in_lat) : null,
+    inLon: row.in_lon != null ? Number(row.in_lon) : null,
+    inAccuracyM: row.in_accuracy_m != null ? Number(row.in_accuracy_m) : null,
+    inSiteId: row.in_site_id,
+    inMatchedSiteId: row.in_matched_site_id,
+    inDistanceM: row.in_distance_m != null ? Number(row.in_distance_m) : null,
+    inInsideGeofence: row.in_inside_geofence,
+    outLat: row.out_lat != null ? Number(row.out_lat) : null,
+    outLon: row.out_lon != null ? Number(row.out_lon) : null,
+    outAccuracyM: row.out_accuracy_m != null ? Number(row.out_accuracy_m) : null,
+    outSiteId: row.out_site_id,
+    outMatchedSiteId: row.out_matched_site_id,
+    outDistanceM: row.out_distance_m != null ? Number(row.out_distance_m) : null,
+    outInsideGeofence: row.out_inside_geofence,
   }
 }
 
@@ -119,6 +133,25 @@ export function attendanceToRow(record) {
     monthly_source: record.monthlySource || null,
     source: record.source || null,
     field_note: record.fieldNote || null,
+    // Real coordinates (P3-2). in_distance_m/in_matched_site_id/in_inside_geofence and
+    // their out_ counterparts are server-computed inside employee_punch and always
+    // overwritten there for whichever punch_type is active this call — sent here only
+    // so the *other* type's already-computed values survive the round trip instead of
+    // being nulled out, same reasoning as in_time/out_time above.
+    in_lat: record.inLat ?? null,
+    in_lon: record.inLon ?? null,
+    in_accuracy_m: record.inAccuracyM ?? null,
+    in_site_id: record.inSiteId || null,
+    in_matched_site_id: record.inMatchedSiteId || null,
+    in_distance_m: record.inDistanceM ?? null,
+    in_inside_geofence: record.inInsideGeofence ?? null,
+    out_lat: record.outLat ?? null,
+    out_lon: record.outLon ?? null,
+    out_accuracy_m: record.outAccuracyM ?? null,
+    out_site_id: record.outSiteId || null,
+    out_matched_site_id: record.outMatchedSiteId || null,
+    out_distance_m: record.outDistanceM ?? null,
+    out_inside_geofence: record.outInsideGeofence ?? null,
     // Not a DB column — read only by employee_punch's duplicate-tap cooldown check
     // (0005_field_staff_and_geo.sql), ignored harmlessly by every other RPC that
     // takes a full attendance payload (admin upsert, bulk upserts).
@@ -186,6 +219,28 @@ export function rowToRegularization(row) {
     reason: row.reason,
     status: row.status,
     createdAt: row.created_at,
+  }
+}
+
+export function rowToSite(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    name: row.name,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    radiusM: row.radius_m,
+    active: row.active,
+  }
+}
+
+export function siteToPayload(site) {
+  return {
+    name: site.name,
+    latitude: site.latitude,
+    longitude: site.longitude,
+    radiusM: site.radiusM,
+    active: site.active,
   }
 }
 

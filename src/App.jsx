@@ -82,7 +82,8 @@ export default function App() {
           attendance={empAttendance.attendance}
           todayRecord={empAttendance.todayRecord}
           stdHours={auth.stdHours}
-          punch={(type, currentUser, note) => empAttendance.punch(type, currentUser, note)}
+          punch={(type, currentUser, opts) => empAttendance.punch(type, currentUser, opts)}
+          sites={auth.sites}
           isPunching={empAttendance.isPunching}
           locationStatus={empAttendance.locationStatus}
           locationBlocked={empAttendance.locationBlocked}

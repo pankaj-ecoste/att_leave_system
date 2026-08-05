@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchDirectory, fetchStdHours, employeeLogin as apiEmployeeLogin, employeeLogout as apiEmployeeLogout, adminLogin as apiAdminLogin, adminLogout as apiAdminLogout } from '../api/auth'
 import { fetchHolidays } from '../api/admin'
+import { fetchSites } from '../api/sites'
 
 const SESSION_KEY = 'hrms_session'
 
@@ -14,6 +15,7 @@ export function useAuth() {
   const [directory, setDirectory] = useState([])
   const [stdHours, setStdHours] = useState(9)
   const [holidays, setHolidays] = useState([])
+  const [sites, setSites] = useState([])
 
   const [currentUser, setCurrentUser] = useState(null)
   const [employeeToken, setEmployeeToken] = useState(null)
@@ -24,10 +26,11 @@ export function useAuth() {
   useEffect(() => {
     ;(async () => {
       try {
-        const [dir, std, hols] = await Promise.all([fetchDirectory(), fetchStdHours(), fetchHolidays()])
+        const [dir, std, hols, sts] = await Promise.all([fetchDirectory(), fetchStdHours(), fetchHolidays(), fetchSites()])
         setDirectory(dir)
         setStdHours(std)
         setHolidays(hols)
+        setSites(sts)
         try {
           const saved = localStorage.getItem(SESSION_KEY)
           if (saved) {
@@ -93,7 +96,7 @@ export function useAuth() {
 
   return {
     loading, view, setView,
-    directory, stdHours, setStdHours, holidays, setHolidays,
+    directory, stdHours, setStdHours, holidays, setHolidays, sites, setSites,
     currentUser, setCurrentUser, employeeToken, adminToken,
     restoredSession, clearRestoredSession: () => setRestoredSession(null), loginAsEmployee,
     employeeLogin, employeeLogout, adminLogin, adminLogout,

@@ -11,6 +11,7 @@ import {
 } from '../api/leave'
 import { adminGetRegularizations, adminDecideRegularization as apiDecideRegularization } from '../api/attendance'
 import { adminFetchAuditLogs, adminUpdateSettings as apiUpdateSettings, fetchHolidays, adminAddHoliday as apiAddHoliday, adminDeleteHoliday as apiDeleteHoliday } from '../api/admin'
+import { fetchSites, adminCreateSite as apiCreateSite, adminUpdateSite as apiUpdateSite, adminDeleteSite as apiDeleteSite } from '../api/sites'
 
 // Everything an admin session needs that ISN'T attendance (see useAdminAttendance for
 // why that one is separate) — employees, leave applications + balances, audit log,
@@ -27,23 +28,25 @@ export function useAdminData(token, stdHours, onStdHoursChange) {
   const [auditLogs, setAuditLogs] = useState([])
   const [adminRegs, setAdminRegs] = useState([])
   const [holidays, setHolidays] = useState([])
+  const [sites, setSites] = useState([])
 
   useEffect(() => {
     if (!token) {
-      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([])
+      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([]); setSites([])
       return
     }
     ;(async () => {
       try {
-        const [emps, lvs, lb, logs, regs, hols] = await Promise.all([
+        const [emps, lvs, lb, logs, regs, hols, sts] = await Promise.all([
           adminFetchEmployees(token),
           adminFetchLeaves(token, { limit: 2000 }),
           adminFetchLeaveBalances(token, { limit: 3000 }),
           adminFetchAuditLogs(token, 500),
           adminGetRegularizations(token),
           fetchHolidays(),
+          fetchSites(),
         ])
-        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols)
+        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols); setSites(sts)
       } catch (err) {
         console.error(err)
       }
@@ -122,10 +125,27 @@ export function useAdminData(token, stdHours, onStdHoursChange) {
     setHolidays(prev => prev.filter(h => h.id !== id))
   }
 
+  // --- Sites (P3-1) ---
+  async function createSite(site) {
+    const created = await apiCreateSite(token, site)
+    setSites(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+    return created
+  }
+  async function updateSite(id, site) {
+    const updated = await apiUpdateSite(token, id, site)
+    setSites(prev => prev.map(s => (s.id === id ? updated : s)))
+    return updated
+  }
+  async function deleteSite(id) {
+    await apiDeleteSite(token, id)
+    setSites(prev => prev.filter(s => s.id !== id))
+  }
+
   return {
-    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, stdHours,
+    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours,
     createEmployee, updateEmployee, setEmploymentStatus, toggleEmployeeStatus, deleteEmployee,
     decideLeave, upsertLeaveBalance, bulkUpsertLeaveBalances, resetLeaveBalancesForNewFY, refreshLeaveBalances,
     decideRegularization, updateSettings, addHoliday, deleteHoliday,
+    createSite, updateSite, deleteSite,
   }
 }

@@ -33,7 +33,18 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
   let rows = Object.values(attendance)
   if (filters.location) rows = rows.filter(r => employees.find(e => e.id === r.empId)?.locationInfo === filters.location)
   if (filters.empId && !filters.allSummary) rows = rows.filter(r => r.empId === filters.empId)
-  rows = rows.sort((a, b) => b.date.localeCompare(a.date))
+  // Field-tagged entries sort first within each date, note + location shown together
+  // (plan.md §6B — "Admin's eye goes straight to the handful of entries that need a
+  // judgment call"), then newest date first as before.
+  const isFieldRow = r => {
+    const mode = employees.find(e => e.id === r.empId)?.workMode
+    return mode === 'field' || mode === 'both'
+  }
+  rows = rows.sort((a, b) => {
+    const dateCmp = b.date.localeCompare(a.date)
+    if (dateCmp !== 0) return dateCmp
+    return Number(isFieldRow(b)) - Number(isFieldRow(a))
+  })
 
   const summaryRows = (() => {
     const map = {}
@@ -155,13 +166,14 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
           <h3 className="text-white font-semibold mb-3">Daily Records</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-white/70 min-w-max">
-              <thead><tr className="border-b border-white/10">{['Date', 'Emp Code', 'Name', 'Dept', 'In Time', 'Out Time', 'Net Hrs', 'OT', 'Status', 'Leave Type'].map(h => <th key={h} className="text-left py-2.5 pr-3 text-white/30 font-medium uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-white/10">{['Date', 'Emp Code', 'Name', 'Dept', 'In Time', 'Out Time', 'Net Hrs', 'OT', 'Status', 'Leave Type', 'Mode / Note'].map(h => <th key={h} className="text-left py-2.5 pr-3 text-white/30 font-medium uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{rows.map(r => {
                 const emp = employees.find(e => e.id === r.empId) || {}
                 const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
                 const aKey = `${r.empId}_${r.date}`
+                const isField = emp.workMode === 'field' || emp.workMode === 'both'
                 return (
-                  <tr key={aKey} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <tr key={aKey} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isField ? 'bg-amber-500/[0.04]' : ''}`}>
                     <td className="py-2 pr-3 font-mono text-white/50 whitespace-nowrap">{r.date}</td>
                     <td className="py-2 pr-3 text-white/40 whitespace-nowrap">{emp.empNum || '--'}</td>
                     <td className="py-2 pr-3 font-medium text-white/80 whitespace-nowrap">{emp.name}</td>
@@ -180,6 +192,18 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                     <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{net > stdHours ? fmtHrs(net - stdHours) : '--'}</td>
                     <td className="py-2 pr-3 whitespace-nowrap"><Badge status={r.status || 'Absent'} /></td>
                     <td className="py-2 pr-3 text-white/30 text-xs whitespace-nowrap">{r.leaveType || ''}</td>
+                    <td className="py-2 pr-3 max-w-[220px]">
+                      {isField && (
+                        <span className="inline-block mb-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">FIELD</span>
+                      )}
+                      {r.fieldNote && <p className="text-amber-200/70 text-xs truncate" title={r.fieldNote}>{r.fieldNote}</p>}
+                      {(r.inLocation || r.outLocation) && (
+                        <p className="text-white/30 text-xs truncate" title={r.inLocation || r.outLocation}>
+                          {r.inLocation || r.outLocation}
+                          {r.inInsideGeofence === false && <span className="text-red-400"> · outside</span>}
+                        </p>
+                      )}
+                    </td>
                   </tr>
                 )
               })}</tbody>
