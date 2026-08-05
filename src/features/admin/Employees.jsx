@@ -22,10 +22,16 @@ const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTi
 export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, onAudit }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [search, setSearch] = useState('')
   const [form, setForm] = useState(null)
   const [balEditor, setBalEditor] = useState(null)
 
-  const filtered = employees.filter(e => (!filter || e.company === filter) && (!statusFilter || e.employmentStatus === statusFilter))
+  const q = search.trim().toLowerCase()
+  const filtered = employees.filter(e =>
+    (!filter || e.company === filter) &&
+    (!statusFilter || e.employmentStatus === statusFilter) &&
+    (!q || e.name.toLowerCase().includes(q) || (e.empNum || '').toLowerCase().includes(q))
+  )
 
   // Phase 2 — "admin alert when probation is nearing its end" (plan.md).
   const today = todayIST()
@@ -111,6 +117,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h3 className="text-white font-semibold">Employees <span className="text-white/30 text-sm font-normal ml-1">({filtered.length})</span></h3>
         <div className="flex gap-2 flex-wrap">
+          <Input className="!w-56 py-2 text-sm" placeholder="Search by name or emp #..." value={search} onChange={e => setSearch(e.target.value)} />
           <Select className="w-auto py-2" value={filter} onChange={e => setFilter(e.target.value)}>
             <option value="">All Companies</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
           </Select>
