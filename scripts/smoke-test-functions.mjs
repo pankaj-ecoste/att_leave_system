@@ -54,6 +54,7 @@ const CALLS = [
   ['employee_get_od_logs', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_date: TODAY }],
   ['employee_get_my_team', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['manager_get_team_attendance', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_month: 1, p_year: 2026 }],
+  ['manager_get_team_location_logs', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_date: TODAY }],
   ['manager_get_team_leaves', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID }],
   ['manager_decide_leave', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_leave_id: FAKE_UUID, p_status: 'Approved' }],
   ['manager_get_team_regularizations', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID }],

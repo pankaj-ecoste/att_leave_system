@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { employeeGetMyTeam } from '../api/employees'
 import { managerGetTeamLeaves, managerDecideLeave as apiManagerDecideLeave } from '../api/leave'
 import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideRegularization as apiManagerDecideReg } from '../api/attendance'
+import { managerGetTeamLocationLogs } from '../api/location'
 
 // "My Team" — appears automatically for anyone with direct reports (the manager view
 // lives inside the employee dashboard, not a separate login, since one person is both).
@@ -11,6 +12,8 @@ export function useTeam(token, empId, onAudit) {
   const [teamRegs, setTeamRegs] = useState([])
   const [teamAttn, setTeamAttn] = useState({})
   const [teamLoading, setTeamLoading] = useState(false)
+  const [teamLocationLogs, setTeamLocationLogs] = useState([])
+  const [teamLocationLoading, setTeamLocationLoading] = useState(false)
 
   useEffect(() => {
     if (!token || !empId) {
@@ -45,6 +48,17 @@ export function useTeam(token, empId, onAudit) {
     }
   }
 
+  async function loadTeamLocationLogs(date) {
+    try {
+      setTeamLocationLoading(true)
+      setTeamLocationLogs(await managerGetTeamLocationLogs(token, empId, date))
+    } catch (e) {
+      console.error('loadTeamLocationLogs:', e)
+    } finally {
+      setTeamLocationLoading(false)
+    }
+  }
+
   async function decideLeave(leaveId, status) {
     try {
       await apiManagerDecideLeave(token, empId, leaveId, status)
@@ -65,5 +79,8 @@ export function useTeam(token, empId, onAudit) {
     }
   }
 
-  return { myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization }
+  return {
+    myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
+    teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
+  }
 }

@@ -57,3 +57,17 @@ export async function adminGetLocationLogs(token, empId, date) {
   if (error) throw error
   return (data || []).map(r => ({ id: r.id, latLon: r.lat_lon, type: r.type, capturedAt: r.captured_at, lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m }))
 }
+
+// P3-15 — a manager's own team, scoped server-side to direct reports only
+// (manager_get_team_location_logs), not every employee.
+export async function managerGetTeamLocationLogs(token, managerId, date) {
+  const { data, error } = await supabase.rpc('manager_get_team_location_logs', {
+    p_token: token, p_manager_id: managerId, p_date: date,
+  })
+  if (error) throw error
+  return (data || []).map(r => ({
+    id: r.id, empId: r.emp_id, empName: r.emp_name, empNum: r.emp_num,
+    date: r.date, latLon: r.lat_lon, type: r.type, capturedAt: r.captured_at,
+    lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m,
+  }))
+}

@@ -117,8 +117,19 @@ export function useDailyBioImport(token, employees, setEmployees, attendance, bu
         if (!emp) { log.push({ type: 'skip', msg: `Row ${idx + 1}: no match` }); skipped++; continue }
 
         const existing = { ...(attMap[`${emp.id}_${reportDate}`] || { empId: emp.id, date: reportDate }) }
-        if (arrTime) existing.inTime = arrTime
-        if (deptTime) existing.outTime = deptTime
+        // Always record what the device said (P3-10/P3-11 — the raw reading, for the
+        // comparison view), but only let it become the OFFICIAL in/out/status when
+        // nothing has already claimed the day as an app punch or a manual admin
+        // correction — otherwise this import would silently overwrite a real,
+        // GPS-verified punch with no record anything had changed (the exact bug
+        // plan.md flagged as a known follow-up).
+        if (arrTime) existing.bioInTime = arrTime
+        if (deptTime) existing.bioOutTime = deptTime
+        const protectedSource = existing.officialSource === 'app' || existing.officialSource === 'manual'
+        if (!protectedSource) {
+          if (arrTime) existing.inTime = arrTime
+          if (deptTime) existing.outTime = deptTime
+        }
         if (inTemp) existing.inTemp = inTemp
         if (outTemp) existing.outTemp = outTemp
         if (remark) existing.remark = remark
@@ -132,11 +143,14 @@ export function useDailyBioImport(token, employees, setEmployees, attendance, bu
         if (desig && !existing.designation) existing.designation = desig
         existing.bioStatusRaw = bioStatusRaw
         existing.bioSource = file.name
-        if (existing.leaveType) {
-          const lt = findLeaveType(existing.leaveType)
-          existing.status = lt && !lt.present ? 'Leave' : calcStatus(existing, stdHours, existing.dayType)
-        } else if (bioStatus) existing.status = bioStatus
-        else existing.status = calcStatus(existing, stdHours, existing.dayType)
+        if (!protectedSource) {
+          existing.officialSource = 'biometric'
+          if (existing.leaveType) {
+            const lt = findLeaveType(existing.leaveType)
+            existing.status = lt && !lt.present ? 'Leave' : calcStatus(existing, stdHours, existing.dayType)
+          } else if (bioStatus) existing.status = bioStatus
+          else existing.status = calcStatus(existing, stdHours, existing.dayType)
+        }
 
         attMap[`${emp.id}_${reportDate}`] = existing
         records.push(existing)

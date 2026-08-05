@@ -100,6 +100,7 @@ export default function App() {
           team={{
             token: auth.employeeToken, myTeam: team.myTeam, teamLeaves: team.teamLeaves, teamRegs: team.teamRegs,
             teamAttn: team.teamAttn, teamLoading: team.teamLoading, loadTeamAttendance: team.loadTeamAttendance,
+            teamLocationLogs: team.teamLocationLogs, teamLocationLoading: team.teamLocationLoading, loadTeamLocationLogs: team.loadTeamLocationLogs,
             decideLeave: team.decideLeave, decideRegularization: team.decideRegularization,
           }}
         />

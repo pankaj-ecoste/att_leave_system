@@ -174,24 +174,36 @@ export function useMonthlyBioImport(token, employees, setEmployees, attendance, 
           const existing = { ...(attMap[`${emp.id}_${dateStr}`] || { empId: emp.id, date: dateStr }) }
           const inTime = parseBioTime(arrRaw)
           const outTime = parseBioTime(depRaw)
-          if (inTime) existing.inTime = inTime
-          if (outTime) existing.outTime = outTime
+          // Same rule as the daily bio import (P3-10): always record the device's raw
+          // reading, but don't let it overwrite an already-official app punch or manual
+          // admin correction.
+          if (inTime) existing.bioInTime = inTime
+          if (outTime) existing.bioOutTime = outTime
+          const protectedSource = existing.officialSource === 'app' || existing.officialSource === 'manual'
+          if (!protectedSource) {
+            if (inTime) existing.inTime = inTime
+            if (outTime) existing.outTime = outTime
+          }
           if (wrkRaw && wrkRaw !== '00:00') existing.bioWrkHrs = wrkRaw
           if (otRaw && otRaw !== '00:00') existing.bioOT = otRaw
           if (shRaw) existing.shift = shRaw
           existing.monthlySource = file.name
           const stUp = stRaw.toUpperCase()
-          if (existing.leaveType) {
-            const lt = findLeaveType(existing.leaveType)
-            existing.status = lt && !lt.present ? 'Leave' : calcStatus(existing, stdHours, existing.dayType)
-          } else if (stUp === 'P') existing.status = 'Present'
-          else if (stUp === 'A') existing.status = 'Absent'
-          else if (stUp === 'HL') existing.status = 'Half Day'
-          else if (stUp === 'WO') { existing.status = 'Week Off'; existing.dayType = 'week_off' }
-          else if (stUp === 'L') existing.status = 'Leave'
-          else if (stUp === 'OD') { existing.status = 'Present'; existing.onDuty = true }
-          else if (stUp === 'WFH') { existing.status = 'Present'; existing.wfh = true }
-          else existing.status = calcStatus(existing, stdHours, existing.dayType)
+          if (stUp === 'WO') existing.dayType = 'week_off'
+          if (!protectedSource) {
+            existing.officialSource = 'biometric'
+            if (existing.leaveType) {
+              const lt = findLeaveType(existing.leaveType)
+              existing.status = lt && !lt.present ? 'Leave' : calcStatus(existing, stdHours, existing.dayType)
+            } else if (stUp === 'P') existing.status = 'Present'
+            else if (stUp === 'A') existing.status = 'Absent'
+            else if (stUp === 'HL') existing.status = 'Half Day'
+            else if (stUp === 'WO') existing.status = 'Week Off'
+            else if (stUp === 'L') existing.status = 'Leave'
+            else if (stUp === 'OD') { existing.status = 'Present'; existing.onDuty = true }
+            else if (stUp === 'WFH') { existing.status = 'Present'; existing.wfh = true }
+            else existing.status = calcStatus(existing, stdHours, existing.dayType)
+          }
           attMap[`${emp.id}_${dateStr}`] = existing
           records.push(existing)
           daysSynced++; synced++

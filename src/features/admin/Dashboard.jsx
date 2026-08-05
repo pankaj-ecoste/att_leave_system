@@ -28,6 +28,15 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours }) {
     pending: leaves.filter(l => l.status === 'Pending').length,
   }
 
+  // P3-13 — adoption: of today's records with any punch recorded at all (either
+  // source), what share is actually coming from the app vs still relying on the
+  // biometric device import. officialSource is only set once one of the two sources
+  // has actually written to the record (P3-10) — records with neither yet are excluded
+  // rather than counted as "biometric" by default.
+  const sourced = todayRecs.filter(r => r.officialSource)
+  const appSourced = sourced.filter(r => r.officialSource === 'app').length
+  const adoptionPct = sourced.length ? Math.round((appSourced / sourced.length) * 100) : 0
+
   return (
     <>
       <h2 className="text-white font-bold text-lg">Today's Summary — {today}</h2>
@@ -40,6 +49,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours }) {
         <StatCard label="WFH" value={stats.wfh} color="cyan" sub="Work from home" />
         <StatCard label="On Duty" value={stats.onDuty} color="purple" sub="Out on duty" />
         <StatCard label="Pending" value={stats.pending} color="orange" sub="Leave requests" />
+        <StatCard label="App Adoption" value={`${adoptionPct}%`} color="blue" sub={sourced.length ? `${appSourced}/${sourced.length} via the app today` : 'No punches recorded yet'} />
       </div>
       <Card>
         <h3 className="text-white font-semibold mb-3">Today's Attendance Details</h3>

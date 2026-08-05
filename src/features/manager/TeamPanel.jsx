@@ -1,19 +1,27 @@
 import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { Input } from '../../components/ui/Input'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs } from '../../lib/datetime'
+import { calcRawHrs, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 
 // The manager view for anyone with direct reports — appears as a tab inside the
 // employee dashboard (one person can be both), not a separate login.
-export function TeamPanel({ token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization }) {
+export function TeamPanel({
+  token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
+  teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
+}) {
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
+  const [locDate, setLocDate] = useState(todayIST())
 
   function selectTab(t) {
     setTab(t)
     if (t === 'attendance') loadTeamAttendance(monthSel.month, monthSel.year)
+    // P3-15 — the manager's own team's location log, scoped server-side to direct
+    // reports only (manager_get_team_location_logs).
+    if (t === 'location') loadTeamLocationLogs(locDate)
   }
 
   async function handleDecide(fn, id, status) {
@@ -36,7 +44,7 @@ export function TeamPanel({ token, myTeam, teamLeaves, teamRegs, teamAttn, teamL
           {teamLoading && <span className="text-white/30 text-xs">Loading...</span>}
         </div>
         <div className="flex gap-2 mb-4 flex-wrap">
-          {[['requests', 'Requests'], ['attendance', 'Attendance'], ['members', 'Members']].map(([t, l]) => (
+          {[['requests', 'Requests'], ['attendance', 'Attendance'], ['location', 'Location'], ['members', 'Members']].map(([t, l]) => (
             <button key={t} onClick={() => selectTab(t)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${tab === t ? 'bg-indigo-600/30 border-indigo-500/40 text-white' : 'bg-white/5 border-white/10 text-white/50'}`}>{l}</button>
           ))}
         </div>
@@ -131,6 +139,33 @@ export function TeamPanel({ token, myTeam, teamLeaves, teamRegs, teamAttn, teamL
                 })}</tbody>
               </table>
             </div>
+          </>
+        )}
+
+        {tab === 'location' && (
+          <>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-white/40 text-xs">Date:</span>
+              <Input type="date" className="w-auto text-xs" value={locDate} max={todayIST()} onChange={e => { setLocDate(e.target.value); loadTeamLocationLogs(e.target.value) }} />
+              {teamLocationLoading && <span className="text-white/30 text-xs">Loading...</span>}
+            </div>
+            {teamLocationLogs.length === 0 ? (
+              <p className="text-white/30 text-sm text-center py-8">{teamLocationLoading ? 'Loading...' : 'No location pings for this date'}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-white/60 min-w-max">
+                  <thead><tr className="border-b border-white/10">{['Time', 'Employee', 'Location', 'Type'].map(h => <th key={h} className="text-left py-2 pr-4 text-white/30 font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+                  <tbody>{teamLocationLogs.map(r => (
+                    <tr key={r.id} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2 pr-4 whitespace-nowrap font-mono">{new Date(r.capturedAt).toLocaleTimeString()}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap font-medium text-white/80">{r.empName}</td>
+                      <td className="py-2 pr-4 max-w-[250px] truncate text-purple-400/80">{r.latLon}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'punch_in' ? 'bg-emerald-500/20 text-emerald-300' : r.type === 'punch_out' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300'}`}>{r.type === 'punch_in' ? 'Punch In' : r.type === 'punch_out' ? 'Punch Out' : 'Auto'}</span></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
 

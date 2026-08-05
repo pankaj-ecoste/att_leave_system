@@ -100,6 +100,11 @@ export function rowToAttendance(row) {
     outMatchedSiteId: row.out_matched_site_id,
     outDistanceM: row.out_distance_m != null ? Number(row.out_distance_m) : null,
     outInsideGeofence: row.out_inside_geofence,
+    appInTime: row.app_in_time ? row.app_in_time.slice(0, 5) : null,
+    appOutTime: row.app_out_time ? row.app_out_time.slice(0, 5) : null,
+    bioInTime: row.bio_in_time ? row.bio_in_time.slice(0, 5) : null,
+    bioOutTime: row.bio_out_time ? row.bio_out_time.slice(0, 5) : null,
+    officialSource: row.official_source,
   }
 }
 
@@ -152,6 +157,16 @@ export function attendanceToRow(record) {
     out_matched_site_id: record.outMatchedSiteId || null,
     out_distance_m: record.outDistanceM ?? null,
     out_inside_geofence: record.outInsideGeofence ?? null,
+    // App vs biometric (P3-10). app_in_time/app_out_time are only ever set inside
+    // employee_punch itself (derived straight from in_time/out_time there, not from
+    // this payload) — admin_upsert_attendance/admin_bulk_upsert_attendance don't even
+    // read them. bio_in_time/bio_out_time/official_source are what those two RPCs do
+    // read: forwarded here so a field-by-field edit (e.g. just inTime) doesn't wipe out
+    // whichever of these the record already carried, same "preserve the rest" reasoning
+    // as everywhere else in this function.
+    bio_in_time: record.bioInTime || null,
+    bio_out_time: record.bioOutTime || null,
+    official_source: record.officialSource || null,
     // Not a DB column — read only by employee_punch's duplicate-tap cooldown check
     // (0005_field_staff_and_geo.sql), ignored harmlessly by every other RPC that
     // takes a full attendance payload (admin upsert, bulk upserts).

@@ -35,8 +35,8 @@
 ✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
-🔄 NOW       Day 2 morning + midday (P3-1..P3-9) code-complete and DB-verified live — one browser click-through pass away from ✅, see Day 2 section below
-⬜ NEXT      Day 2 afternoon/evening — P3-10..P3-13 (app vs biometric split), P4-1..P4-9 (two-stage approval + email)
+🔄 NOW       Day 2 morning through afternoon (P3-1..P3-13, P3-15) code-complete and DB-verified live — one combined browser click-through pass away from ✅, see Day 2 section below
+⬜ NEXT      Day 2 evening — P4-1..P4-9 (two-stage leave approval + email)
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -300,10 +300,34 @@ they now share one rewritten `employee_punch`, so it's one verification pass, no
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-10 | **Separate app and biometric punches** — schema change | ⬜ | DEV |
-| P3-11 | Side-by-side comparison + mismatch report | ⬜ | DEV |
-| P3-12 | Admin switch for which source is official | ⬜ | DEV |
-| P3-13 | Adoption dashboard — app vs machine | ⬜ | DEV |
+| P3-10 | **Separate app and biometric punches** — schema change | 🔄 code complete, DB verified live | DEV |
+| P3-11 | Side-by-side comparison + mismatch report | 🔄 code complete | DEV |
+| P3-12 | Admin switch for which source is official | 🔄 code complete | DEV |
+| P3-13 | Adoption dashboard — app vs machine | 🔄 code complete | DEV |
+| P3-15 *(pulled forward from Day 3)* | Manager view of own team's location log | 🔄 code complete, DB verified live | DEV |
+
+**The real bug this closes:** `useDailyBioImport.js`/`useMonthlyBioImport.js` did
+`if (arrTime) existing.inTime = arrTime` unconditionally — importing yesterday's
+biometric export after an employee had punched via the app silently overwrote their
+real, GPS-verified punch, with nothing recording that anything had changed. Both bio
+imports and the admin's manual inline edit now write to `bio_in_time`/`bio_out_time` or
+mark `official_source='manual'` instead of blindly overwriting; only `employee_punch`
+(a live app punch) or an explicit admin switch (P3-12, in the new "App vs Biometric"
+column on Attendance → Daily Records) can promote a reading to the official
+`in_time`/`out_time` everything else still reads. `0009_app_vs_biometric.sql` added the
+columns; `0010_manager_team_location.sql` added the manager-scoped location RPC for
+P3-15, pulled forward from Day 3 since it reuses the same `location_logs` table shape
+finished this session.
+
+**Verified:** migration applied live and confirmed genuinely re-run-safe (applied twice
+in a row, no errors) · G-1 guardrail clean (69 functions, 18 tables) · G-2 smoke test
+62/62 reachable, including `manager_get_team_location_logs` · `npm run build` and
+`npm run test` (23 tests) both green. **Not yet verified in a browser this session**
+(same reason as the morning block — no Chrome extension connection): import a biometric
+file for a day an app-punched employee already has, confirm their official time survives
+and the mismatch/App-vs-Bio columns show both readings; try the "use bio"/"use app"
+switch; check the new App Adoption stat card on the Dashboard tab; check Location under
+My Team as a manager.
 
 ## Evening — Two-stage approval + email
 
@@ -354,8 +378,8 @@ they now share one rewritten `employee_punch`, so it's one verification pass, no
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
 | P4B-15 | **Leave Policy page** in employee panel — readable in-app text | ⬜ | DEV |
-| P3-14 | Silent 2-hourly capture · only while punched in · 90-day retention | ⬜ | DEV |
-| P3-15 | Manager view of own team's location log | ⬜ | DEV |
+| P3-14 | Silent 2-hourly capture · only while punched in · 90-day retention | 🔄 capture done (Day 1, real coords added Day 2 morning) · 90-day retention cron not yet built | DEV |
+| ~~P3-15~~ | ~~Manager view of own team's location log~~ ✅ **done Day 2 afternoon** — see above | — | — |
 | **P4C-1** | **Daily report download** — date picker + button in admin | ⬜ | DEV |
 | **P4C-2** | 5-sheet workbook — Summary · Attendance · Location log · Leave · Exceptions | ⬜ | DEV |
 | **P4C-3** | Server-side generation, streamed — not built from what's on screen | ⬜ | DEV |
