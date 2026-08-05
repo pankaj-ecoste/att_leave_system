@@ -3,7 +3,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, getShiftInfo } from '../../lib/constants'
+import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, WORK_MODES, getShiftInfo } from '../../lib/constants'
 import { todayIST } from '../../lib/datetime'
 
 const PROBATION_ALERT_WINDOW_DAYS = 14
@@ -17,7 +17,7 @@ const FORM_FIELDS = [
   ['locationInfo', 'Location'], ['email', 'Email'], ['phone', 'Phone'],
   ['joiningDate', 'Joining Date', 'date'],
 ]
-const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', shiftType: 'none', employmentStatus: 'Probation' }
+const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office' }
 
 export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, onAudit }) {
   const [filter, setFilter] = useState('')
@@ -179,6 +179,12 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                 {EMPLOYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </Select>
             </div>
+            <div>
+              <Label>Work Mode</Label>
+              <Select value={form.workMode || 'office'} onChange={e => setForm(p => ({ ...p, workMode: e.target.value }))}>
+                {WORK_MODES.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
+              </Select>
+            </div>
           </div>
           <div className="flex gap-2 mt-3">
             <Button className="text-xs" onClick={save}>Save Employee</Button>
@@ -200,6 +206,11 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                   <span className={`text-xs px-1.5 py-0.5 rounded-full ${e.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>{e.active ? 'Active' : 'Inactive'}</span>
                   <span className="text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-white/50">{e.employmentStatus}</span>
                   {(() => { const sh = getShiftInfo(null, e); return sh.id !== 'none' && <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: sh.color + '33', color: sh.color, border: `1px solid ${sh.color}55` }}>{sh.label}</span> })()}
+                  {e.workMode && e.workMode !== 'office' && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/25">
+                      {WORK_MODES.find(w => w.id === e.workMode)?.label || e.workMode}
+                    </span>
+                  )}
                 </div>
                 <p className="text-white/30 text-xs">{e.empNum && `#${e.empNum} · `}{e.company?.split(' ')[0]} · {e.dept || '—'}</p>
               </div>

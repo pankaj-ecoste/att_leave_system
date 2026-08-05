@@ -41,6 +41,15 @@ $function$;
 
 -- ============ PUBLIC (PRE-LOGIN) ============
 
+-- Re-run-safety fix (same class as the CREATE POLICY fix noted in PROGRESS.md):
+-- a later migration (0005) changes this function's RETURNS TABLE column list, and
+-- Postgres refuses `create or replace` across a shape change either direction. Without
+-- this DROP, replaying every migration file from scratch (apply-migrations.mjs always
+-- does) fails here the moment 0005 has already run once, because this statement would
+-- be trying to shrink the shape back down. DROP IF EXISTS + CREATE works no matter
+-- which shape the function is currently in.
+drop function if exists public.fetch_directory();
+
 create or replace function public.fetch_directory()
  returns table(id uuid, name text, company text, emp_num text, job_title text, bu text, dept text, sub_dept text, location_info text, cost_center text, manager text, email text, phone text, joining_date date, active boolean, shift_type text, manager_emp_id uuid)
  language plpgsql

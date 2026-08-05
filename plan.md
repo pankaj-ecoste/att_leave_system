@@ -328,6 +328,83 @@ Source: **ATPL|HR|22|1002 — Leave Management Policy, Asma Traexim Pvt Ltd.**
 
 ---
 
+## 6B. Work-mode tags & the 5-tile punch screen (refined 2026-08-05)
+
+Worked out in conversation while building `P3-5`..`P3-9` (the coordinate-independent
+half of Phase 3) — this is the locked design for `P3-1`..`P3-4`, still waiting on `Q-1`
+(the 3 office coordinates) to actually build. Refines Decision 1 and Decision 4 above;
+doesn't replace them.
+
+### The tag
+
+Every employee gets one tag, **set by Admin when the profile is created, editable later
+but not meant to change often**:
+
+| Tag | Meaning |
+|---|---|
+| **OS** — Office Staff | Works from one of the 3 offices |
+| **FS** — Field Staff | Visits clients/sites, no fixed location |
+| **WFH** | **Permanently** remote — this is their normal way of working, not a request |
+
+This is the `employees.work_mode` column already added in
+`0005_field_staff_and_geo.sql` (currently `office`/`field`/`both`) — it will need a
+`wfh` value added when this lands, and the admin Employees form's "Work Mode" dropdown
+already built is the same UI, just relabelled OS/FS/WFH.
+
+### The punch screen — 5 tiles
+
+Instead of one generic Punch In/Out panel, every employee sees tiles matching their tag:
+
+```
+OS  →  Office 1 · Office 2 · Office 3   (Decision 1 — highlights the nearest one)
+FS  →  Field Staff                      (a note is required — Decision 4)
+WFH →  Work From Home                   (their daily routine, not a request)
+```
+
+- **Office tiles**: GPS is checked against that office's radius. Outside it → punch
+  rejected, no override (Decision 3, unchanged).
+- **Field tile**: a short note is required ("where are you / where going" — Decision 4,
+  unchanged). The punch is never rejected based on location.
+- **WFH tile**: no office check either — this is their expected daily pattern.
+- **GPS is captured on every tile, no exceptions** (Decision 5 — the silent 2-hourly
+  tracking already applies to everyone regardless of tag).
+
+### Handling a Field employee who's actually at the office that day
+
+No manual "I'm at the office today" switch. Since GPS is captured on the Field tile
+too, the server can silently check whether that day's coordinates happen to fall inside
+an office radius, and label the record accordingly for reporting — without rejecting
+the punch if they *aren't* there. Zero extra taps for the employee; better data for
+Admin either way.
+
+### Occasional WFH for an OS/FS employee is NOT a tile
+
+That's already the existing "Work From Home" **leave type** — applied for in advance,
+approved by the manager, and once approved the day's status is already set to WFH
+automatically (`lib/datetime.js`'s `calcStatus` already does this — untouched, no
+change needed here). The WFH *tile* is only ever shown to employees tagged `WFH`
+(permanently remote); everyone else requesting an occasional work-from-home day goes
+through that existing approval flow, not a self-service tile.
+
+### Admin visibility — Field Staff surfaces first
+
+On the admin's daily attendance/log view, entries from Field-tagged employees sort to
+the top, each showing the note and the captured location together — so Admin's eye
+goes straight to the handful of entries that need a judgment call (does the note match
+where the GPS says they actually were?) instead of scanning past every ordinary office
+punch. This is the practical form of the "note vs actual area" fraud check already
+listed in Phase 3 below (`Note says Gurgaon, coordinates say Nagpur`).
+
+### Open, for when `P3-1` starts
+
+Whether Field-tagged employees should also see the 3 office tiles as an option (so a
+day spent genuinely at the office gets the real geofence check instead of just a
+plausibility label) — leaning no, since the auto-detect-and-label approach above gets
+the same reporting value without adding a manual step; revisit if it turns out Admin
+wants the stronger guarantee for those days specifically.
+
+---
+
 ## 7. The plan
 
 ### Phase 0 — Safety net · do first
@@ -423,18 +500,20 @@ Head Office · 47m · inside ✅  →  punch accepted
 ```
 
 - [ ] `sites` table + admin screen to manage the 3 offices and their radii
-- [ ] Employee work mode: **Office / Field / Both**
-- [ ] Punch screen showing 3 tiles with live distance
-- [ ] Hard rejection outside radius (office staff only)
-- [ ] Structured note required for field staff
-- [ ] Request **high** accuracy; reject poor readings and retry
-- [ ] Ignore duplicate taps
+- [ ] Employee tag: **OS / FS / WFH**, admin-set at creation, editable — see §6B for the full design
+- [ ] 5-tile punch screen: 3 office tiles (OS) · Field tile (FS, note required) · WFH tile (WFH tag only) — §6B
+- [ ] Hard rejection outside radius (office tiles only)
+- [ ] Structured note required for the Field tile
+- [ ] Auto-detect + label when a Field-tagged employee's GPS happens to match an office that day — no manual switch, never rejects (§6B)
+- [x] Request **high** accuracy; reject poor readings and retry — done in `0005_field_staff_and_geo.sql` / `useGeolocation.js` (P3-7)
+- [x] Ignore duplicate taps — done, client in-flight guard + server-side cooldown in `employee_punch` (P3-8)
 - [ ] **Separate app and biometric punches** — schema change; today one row per day means the Excel import overwrites app punches
 - [ ] Side-by-side comparison view + mismatch report
 - [ ] Admin switch for which source is official
 - [ ] Silent 2-hourly capture, only while punched in, 90-day retention
 - [ ] Manager view of own team's location log
-- [ ] Reverse geocoding moved server-side, cached, non-blocking, off Nominatim
+- [ ] Admin daily log sorts Field-tagged entries first, with note + captured location shown together (§6B)
+- [x] Reverse geocoding moved server-side, cached, non-blocking, off Nominatim — `reverse_geocode()` RPC + `geocode_cache` table, live-verified (P3-9)
 - [ ] Adoption dashboard — who is using the app vs the machine
 
 **Fraud checks that genuinely work in a browser** (fake-GPS detection itself does **not** — that needs an installed app):

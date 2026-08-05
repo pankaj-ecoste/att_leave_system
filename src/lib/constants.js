@@ -75,6 +75,37 @@ export const DAY_TYPES = { WORKING: 'working', WEEK_OFF: 'week_off', HOLIDAY: 'h
 
 export const EMPLOYMENT_STATUSES = ['Probation', 'Confirmed', 'Notice Period', 'Exited']
 
+// Office / Field / Both (plan.md Decision 4 — field staff are exempt from the office
+// geofence check but must write a structured note instead). 'office' matches the
+// employees.work_mode column default.
+export const WORK_MODES = [
+  { id: 'office', label: 'Office' },
+  { id: 'field', label: 'Field' },
+  { id: 'both', label: 'Office + Field' },
+]
+
+export function findWorkMode(id) {
+  return WORK_MODES.find(w => w.id === id) || WORK_MODES[0]
+}
+
+// A field-mode employee must write a note (where they are / where they're going,
+// plan.md Decision 4) before a punch is accepted, since they don't get the office
+// geofence check once it lands.
+export function requiresFieldNote(workMode) {
+  return workMode === 'field' || workMode === 'both'
+}
+
+// GPS quality (P3-7) — request a high-accuracy reading and retry a few times rather
+// than silently accepting the first (possibly very poor) fix. Real coordinate storage
+// and server-side rejection land with the `sites` table (P3-1/P3-2); until then this
+// only shapes what the employee sees.
+export const ACCEPTABLE_GPS_ACCURACY_M = 100
+export const GPS_RETRY_ATTEMPTS = 3
+
+// Duplicate-tap guard (P3-8). Mirrored server-side in employee_punch's cooldown check
+// (supabase/migrations/0005_field_staff_and_geo.sql) — keep both in sync if this changes.
+export const PUNCH_COOLDOWN_MS = 30000
+
 // Leave policy quotas (plan.md §6A) — CL 12 / EL 6 / SL 4 per year, credited in full on
 // 1 April, pro-rated for part-year joiners. Used by both the balance-generation script
 // (Stage G) and the Day 3 accrual engine.

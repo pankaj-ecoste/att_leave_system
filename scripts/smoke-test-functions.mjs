@@ -95,6 +95,9 @@ const CALLS = [
   ['admin_get_monthly_sheet', { p_token: FAKE_UUID }],
   ['admin_set_monthly_sheet', { p_token: FAKE_UUID, p_filename: 'test.xlsx', p_report_month: 1, p_report_year: 2026, p_synced: 0, p_skipped: 0 }],
   ['admin_clear_monthly_sheet', { p_token: FAKE_UUID }],
+  // Reverse geocoding (P3-9) — no token, just needs to be reachable and not 404.
+  // Real coordinates so a live run also proves the http extension + cache actually work.
+  ['reverse_geocode', { p_lat: 21.1458, p_lon: 79.0882 }],
 ]
 
 async function main() {

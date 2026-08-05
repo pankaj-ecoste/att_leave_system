@@ -34,8 +34,9 @@
 ✅ DONE      Schema live on HRMS, 56/56 functions verified reachable, 131 employees + 10 holidays seeded (112 manager links, 393 leave balance rows)
 ✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
-🔄 NOW       Nothing running — code-complete for everything that doesn't need your input
-⬜ NEXT      New Vercel project + env vars — the only Day 1 item left, needs your Vercel access
+✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
+🔄 NOW       Day 2 midday (P3-5..P3-9, field staff & quality) code-complete — needs migration 0005 applied + live check, see Day 2 section below
+⬜ NEXT      P3-1..P3-4 (sites, geofence, punch tiles) — blocked on Q-1, the 3 office coordinates
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -214,13 +215,47 @@ Still needed later:
 
 ## Midday — Field staff & quality
 
+> **Code complete, awaiting the migration apply + live verification below** — not
+> marked ✅ yet per this file's own rule ("never mark ✅ until tested and working").
+> Built ahead of `P3-1`..`P3-4` because none of these five need the office coordinates
+> (`Q-1`), unlike the morning block, which stays 🚫 blocked.
+
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P3-5 | Work mode per employee — Office / Field / Both | ⬜ | DEV |
-| P3-6 | Structured note required for field staff | ⬜ | DEV |
-| P3-7 | High accuracy · reject poor readings · retry | ⬜ | DEV |
-| P3-8 | Ignore duplicate taps | ⬜ | DEV |
-| P3-9 | Reverse geocoding server-side, cached, off Nominatim | ⬜ | DEV |
+| P3-5 | Work mode per employee — Office / Field / Both | 🔄 code complete | DEV |
+| P3-6 | Structured note required for field staff | 🔄 code complete | DEV |
+| P3-7 | High accuracy · reject poor readings · retry | 🔄 code complete | DEV |
+| P3-8 | Ignore duplicate taps | 🔄 code complete | DEV |
+| P3-9 | Reverse geocoding server-side, cached, off Nominatim | 🔄 code complete | DEV |
+
+**What's in `0005_field_staff_and_geo.sql`:** `employees.work_mode` (office/field/both) +
+`attendance.field_note` (a new column, not `remark` — `remark` is bio-import territory
+and would collide with it) · `geocode_cache` table + `reverse_geocode()` RPC via the
+`http` Postgres extension, so punches stop calling Nominatim straight from the browser
+· `fetch_directory`/`admin_create_employee`/`admin_update_employee` updated to carry
+`work_mode` · `employee_punch` updated to store `field_note` and reject a same-type
+re-punch within 30s (server backstop; the client also disables the button while a punch
+is in flight and runs the same check locally first).
+
+**Also fixed while here:** `scripts/check-schema-contract.mjs` (the G-1 guardrail) used
+to hardcode reading only `0002_hrms_schema.sql` + `0003_hrms_functions.sql` — any table
+or function change in a later migration file was invisible to it. It now reads every
+migration file (except the excluded `0001` baseline) in order and understands
+`alter table ... add column` on top of `create table`. Verified clean before and after
+`0005` was added.
+
+**To finish (needs you):**
+1. Apply the migration: `DATABASE_URL="..." node scripts/apply-migrations.mjs`
+   (same flow as `0002`-`0004`). **Risk flagged in advance**: if the `http` extension
+   isn't enabled on this Supabase plan, that one statement will fail loudly and the
+   apply will stop there — tell me and I'll cut the extension/RPC and fall back to
+   client-side reverse geocoding (today's behaviour) rather than block on it.
+2. `node scripts/smoke-test-functions.mjs` against live HRMS.
+3. Quick browser check: set a seeded employee to Field mode (Admin → Employees), log in
+   as them, confirm Punch In is blocked until a note is entered and a rapid double-click
+   only records once.
+
+Once that's back clean, these flip to ✅.
 
 ## Afternoon — App vs biometric
 

@@ -22,6 +22,7 @@ export function rowToEmployee(row) {
     joiningDate: row.joining_date,
     active: row.active,
     shiftType: row.shift_type || 'none',
+    workMode: row.work_mode || 'office',
     employmentStatus: row.employment_status || 'Probation',
     probationEndDate: row.probation_end_date,
     confirmedOn: row.confirmed_on,
@@ -50,6 +51,7 @@ export function employeeToPayload(emp) {
     phone: emp.phone || null,
     joiningDate: emp.joiningDate || null,
     shiftType: emp.shiftType || 'none',
+    workMode: emp.workMode || 'office',
   }
 }
 
@@ -83,6 +85,7 @@ export function rowToAttendance(row) {
     bioSource: row.bio_source,
     monthlySource: row.monthly_source,
     source: row.source,
+    fieldNote: row.field_note,
   }
 }
 
@@ -115,6 +118,11 @@ export function attendanceToRow(record) {
     bio_source: record.bioSource || null,
     monthly_source: record.monthlySource || null,
     source: record.source || null,
+    field_note: record.fieldNote || null,
+    // Not a DB column — read only by employee_punch's duplicate-tap cooldown check
+    // (0005_field_staff_and_geo.sql), ignored harmlessly by every other RPC that
+    // takes a full attendance payload (admin upsert, bulk upserts).
+    punch_type: record.punchType || null,
   }
 }
 

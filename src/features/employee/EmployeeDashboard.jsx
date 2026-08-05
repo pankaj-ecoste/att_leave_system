@@ -10,7 +10,7 @@ import { todayIST } from '../../lib/datetime'
 
 export function EmployeeDashboard({
   currentUser, empTab, setEmpTab, onLogout,
-  attendance, todayRecord, stdHours, punch, locationStatus, locationBlocked, autoTrackingActive, odTrackingActive, odTrackLog,
+  attendance, todayRecord, stdHours, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
   holidays, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
   team,
@@ -60,9 +60,9 @@ export function EmployeeDashboard({
         {empTab === 'today' && (
           <PunchPanel
             currentUser={currentUser} record={todayRecord} stdHours={stdHours} holidays={holidays}
-            punch={type => punch(type, currentUser)}
+            punch={(type, note) => punch(type, currentUser, note)} isPunching={isPunching}
             locationStatus={locationStatus} locationBlocked={locationBlocked}
-            autoTrackingActive={autoTrackingActive} odTrackingActive={odTrackingActive} odTrackLog={odTrackLog}
+            odTrackingActive={odTrackingActive} odTrackLog={odTrackLog}
           />
         )}
         {empTab === 'history' && (

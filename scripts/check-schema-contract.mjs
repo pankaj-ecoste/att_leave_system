@@ -1,27 +1,38 @@
 #!/usr/bin/env node
 // G-1 guardrail — "schema <-> code contract check".
 //
-// Statically reads the table definitions in supabase/migrations/0002_hrms_schema.sql
-// and every function body in 0003_hrms_functions.sql, then flags any column reference
-// that does not exist on the table it's used against. This is the exact class of bug
-// that broke admin_create_employee, admin_update_employee, fetch_directory,
-// manager_decide_leave, admin_reset_leave_balances and manager_get_team_leaves in the
-// old app — someone renamed a column and nothing ever checked the functions again.
+// Statically reads every table/column reference across all applied migrations and every
+// function body defined in them, then flags any column reference that does not exist on
+// the table it's used against. This is the exact class of bug that broke
+// admin_create_employee, admin_update_employee, fetch_directory, manager_decide_leave,
+// admin_reset_leave_balances and manager_get_team_leaves in the old app — someone renamed
+// a column and nothing ever checked the functions again.
+//
+// Reads supabase/migrations/*.sql in filename order (skipping 0001_baseline_schema.sql,
+// which is the OLD project's schema kept for historical reference only and never applied
+// to HRMS). Tables can be introduced by `create table` in one file and grown by
+// `alter table ... add column` in a later one — both are tracked. A function redefined
+// in a later file (`create or replace function`, same name) supersedes the earlier body,
+// matching real Postgres semantics, so only the last definition is checked.
 //
 // Deliberately static (no live DB needed) so it can run on every save, not just after
 // a deploy. It is a heuristic regex-based reader, not a real SQL parser — it covers the
 // patterns this codebase actually uses (insert into (...), update ... set ..., alias.col,
-// excluded.col, declared record variables). Anything it can't confidently classify it
-// leaves alone rather than guessing, so a clean run is meaningful but not a proof of
-// absence of bugs — G-2 (smoke test every function against a live DB) is the backstop.
+// excluded.col, declared record variables, alter table add column). Anything it can't
+// confidently classify it leaves alone rather than guessing, so a clean run is meaningful
+// but not a proof of absence of bugs — G-2 (smoke test every function against a live DB)
+// is the backstop.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const SCHEMA_FILE = path.join(__dirname, '..', 'supabase', 'migrations', '0002_hrms_schema.sql')
-const FUNCTIONS_FILE = path.join(__dirname, '..', 'supabase', 'migrations', '0003_hrms_functions.sql')
+const MIGRATIONS_DIR = path.join(__dirname, '..', 'supabase', 'migrations')
+
+// 0001_baseline_schema.sql is the OLD project's extracted schema — never applied to
+// HRMS, so it must never contribute tables/functions here (see apply-migrations.mjs).
+const EXCLUDED_FILES = new Set(['0001_baseline_schema.sql'])
 
 // Trigger functions read NEW/OLD, which aren't declared anywhere in the SQL text —
 // wire them to their target table by hand since there are only ever a couple of these.
@@ -77,9 +88,15 @@ function findTopLevelKeyword(str, keyword) {
   return -1
 }
 
-function parseTables(schemaSql) {
-  const sql = stripComments(schemaSql)
-  const tables = {}
+function loadCombinedSql() {
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter(f => f.endsWith('.sql') && !EXCLUDED_FILES.has(f))
+    .sort()
+  const combined = files.map(f => readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8')).join('\n')
+  return { files, sql: stripComments(combined) }
+}
+
+function parseCreateTables(sql, tables) {
   const re = /create table (?:if not exists )?"?public"?\.?"?(\w+)"?\s*\(/gi
   let m
   while ((m = re.exec(sql))) {
@@ -94,7 +111,7 @@ function parseTables(schemaSql) {
       i++
     }
     const body = sql.slice(start, i - 1)
-    const cols = new Set()
+    const cols = tables[name] || new Set()
     for (const rawLine of splitTopLevel(body, ',')) {
       const line = rawLine.trim()
       if (!line) continue
@@ -105,18 +122,51 @@ function parseTables(schemaSql) {
     }
     tables[name] = cols
   }
+}
+
+// `alter table X add column [if not exists] col ...` — a table can grow columns in a
+// later migration file without its `create table` statement ever changing.
+function parseAlterTables(sql, tables) {
+  const re = /alter table\s+"?public"?\.?"?(\w+)"?\s+/gi
+  let m
+  while ((m = re.exec(sql))) {
+    const name = m[1]
+    if (!tables[name]) continue // alter on a table this pass never saw created — skip rather than guess
+    let i = m.index + m[0].length
+    let depth = 0
+    const start = i
+    while (i < sql.length) {
+      const ch = sql[i]
+      if (ch === '(') depth++
+      else if (ch === ')') depth--
+      else if (ch === ';' && depth === 0) break
+      i++
+    }
+    const body = sql.slice(start, i)
+    for (const clause of splitTopLevel(body, ',')) {
+      const cm = clause.trim().match(/^add\s+column\s+(?:if\s+not\s+exists\s+)?"?(\w+)"?/i)
+      if (cm) tables[name].add(cm[1])
+    }
+  }
+}
+
+function parseTables(sql) {
+  const tables = {}
+  // Two passes: a table can be created in one file and altered in a later one, and
+  // migration files are already concatenated in filename order by loadCombinedSql.
+  parseCreateTables(sql, tables)
+  parseAlterTables(sql, tables)
   return tables
 }
 
-function parseFunctions(functionsSql) {
-  const sql = stripComments(functionsSql)
-  const fns = []
+function parseFunctions(sql) {
+  const byName = new Map() // last definition wins, matching `create or replace function`
   const re = /create or replace function public\.(\w+)\(([^)]*)\)[\s\S]*?as \$function\$([\s\S]*?)\$function\$/gi
   let m
   while ((m = re.exec(sql))) {
-    fns.push({ name: m[1], body: m[3] })
+    byName.set(m[1], { name: m[1], body: m[3] })
   }
-  return fns
+  return [...byName.values()]
 }
 
 function buildAliasMap(body, tables, fnName) {
@@ -220,19 +270,22 @@ function checkAliasColumnRefs(body, aliases, tables, issues, fnName) {
 }
 
 function main() {
-  const schemaSql = readFileSync(SCHEMA_FILE, 'utf8')
-  const functionsSql = readFileSync(FUNCTIONS_FILE, 'utf8')
-
-  const tables = parseTables(schemaSql)
-  const tableCount = Object.keys(tables).length
-  if (tableCount === 0) {
-    console.error('No tables parsed from', SCHEMA_FILE, '— check the CREATE TABLE format.')
+  const { files, sql } = loadCombinedSql()
+  if (files.length === 0) {
+    console.error('No migration files found in', MIGRATIONS_DIR)
     process.exit(2)
   }
 
-  const fns = parseFunctions(functionsSql)
+  const tables = parseTables(sql)
+  const tableCount = Object.keys(tables).length
+  if (tableCount === 0) {
+    console.error('No tables parsed from', files.join(', '), '— check the CREATE TABLE format.')
+    process.exit(2)
+  }
+
+  const fns = parseFunctions(sql)
   if (fns.length === 0) {
-    console.error('No functions parsed from', FUNCTIONS_FILE, '— check the function delimiter format.')
+    console.error('No functions parsed from', files.join(', '), '— check the function delimiter format.')
     process.exit(2)
   }
 
@@ -244,7 +297,8 @@ function main() {
     checkAliasColumnRefs(body, aliases, tables, issues, name)
   }
 
-  console.log(`Parsed ${tableCount} tables, ${fns.length} functions.`)
+  console.log(`Parsed ${files.length} migration file(s): ${files.join(', ')}`)
+  console.log(`${tableCount} tables, ${fns.length} functions.`)
   if (issues.length === 0) {
     console.log('✓ No missing-column references found.')
     process.exit(0)

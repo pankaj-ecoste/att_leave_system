@@ -105,3 +105,14 @@ export function monthsOfServiceSince(joiningDateStr, refDateStr = todayIST()) {
   if (rd < jd) months -= 1
   return Math.max(0, months)
 }
+
+// Duplicate-tap guard (plan.md P3-8) — client-side half. `lastPunchAtMs` is when this
+// tab last completed a punch of the same type; if that was recent, a second tap is
+// almost certainly the same physical tap landing twice, so it's rejected without a
+// round trip. `employee_punch` in 0005_field_staff_and_geo.sql carries the real
+// backstop against the actual DB state ("server decides, not the phone", §8C) — this
+// is just the fast local check, not the source of truth.
+export function isWithinCooldown(lastPunchAtMs, nowMs, cooldownMs) {
+  if (lastPunchAtMs == null) return false
+  return nowMs - lastPunchAtMs < cooldownMs
+}

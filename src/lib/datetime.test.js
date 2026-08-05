@@ -2,7 +2,7 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, financialYearFor, monthsOfServiceSince } from './datetime'
+import { calcRawHrs, calcStatus, financialYearFor, monthsOfServiceSince, isWithinCooldown } from './datetime'
 import { DAY_TYPES } from './constants'
 
 describe('calcRawHrs', () => {
@@ -94,5 +94,26 @@ describe('monthsOfServiceSince', () => {
 
   it('returns 0 when there is no joining date', () => {
     expect(monthsOfServiceSince(null, '2026-04-20')).toBe(0)
+  })
+})
+
+describe('isWithinCooldown', () => {
+  it('is not on cooldown when there is no prior punch', () => {
+    expect(isWithinCooldown(null, Date.now(), 30000)).toBe(false)
+  })
+
+  it('flags a repeat within the cooldown window', () => {
+    const last = 1000
+    expect(isWithinCooldown(last, last + 5000, 30000)).toBe(true)
+  })
+
+  it('clears once the cooldown window has passed', () => {
+    const last = 1000
+    expect(isWithinCooldown(last, last + 30001, 30000)).toBe(false)
+  })
+
+  it('is exclusive at the exact boundary', () => {
+    const last = 1000
+    expect(isWithinCooldown(last, last + 30000, 30000)).toBe(false)
   })
 })
