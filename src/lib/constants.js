@@ -1,0 +1,97 @@
+// Every rule value the app enforces lives here — never typed inline elsewhere (G-3,
+// plan.md §8C). The old app hardcoded the half-day threshold as 4.5 in one place while
+// its own settings screen promised "std hours ÷ 2"; that's the bug this rule exists to
+// prevent.
+
+export const COMPANIES = [
+  'Asma Traexim Pvt Ltd',
+  'Metamask Design Solutions LLP',
+  'Lamora Buildtech Pvt Ltd',
+]
+export const COMPANY_COLORS = [
+  'from-violet-600 to-indigo-600',
+  'from-cyan-600 to-blue-600',
+  'from-emerald-600 to-teal-600',
+]
+export const COMPANY_ICONS = ['A', 'M', 'L']
+
+export const LEAVE_TYPES = [
+  { label: 'Sick Leave', deduct: 0, present: false, max: null, icon: 'SL' },
+  { label: 'Casual Leave', deduct: 0, present: false, max: null, icon: 'CL' },
+  { label: 'Earned Leave', deduct: 0, present: false, max: null, icon: 'EL' },
+  { label: 'Unpaid Leave', deduct: 0, present: false, max: null, icon: 'UL' },
+  { label: 'Bereavement Leave', deduct: 0, present: false, max: null, icon: 'BL' },
+  { label: 'Marriage Leave', deduct: 0, present: false, max: null, icon: 'ML' },
+  { label: 'Maternity Leave', deduct: 0, present: false, max: null, icon: 'MT' },
+  { label: 'Paternity Leave', deduct: 0, present: false, max: null, icon: 'PT' },
+  { label: 'Partial Leave - 1 Hour', deduct: 1, present: true, max: 2, icon: 'P1' },
+  { label: 'Partial Leave - 2 Hours', deduct: 2, present: true, max: 1, icon: 'P2' },
+  { label: 'Work From Home', deduct: 0, present: true, max: null, icon: 'WH' },
+  { label: 'On Duty', deduct: 0, present: true, max: null, icon: 'OD' },
+]
+
+export function findLeaveType(label) {
+  return LEAVE_TYPES.find(l => l.label === label) || null
+}
+
+export const SHIFTS = [
+  { id: 'day', label: 'Day Shift', start: '09:00', end: '18:00', color: '#f59e0b' },
+  { id: 'night', label: 'Night Shift', start: '21:00', end: '06:00', color: '#818cf8' },
+  { id: 'both', label: 'Both Shifts', start: '', end: '', color: '#10b981' },
+  { id: 'none', label: 'No Shift', start: '', end: '', color: '#64748b' },
+]
+
+export function findShift(id) {
+  return SHIFTS.find(s => s.id === id) || null
+}
+
+// Falls back through: the employee's configured shift -> a shift name recorded on the
+// attendance row itself (from biometric imports) -> a guess from the punch-in hour ->
+// "No Shift". Order matters: the employee's own setting should always win when present.
+export function getShiftInfo(rec, emp) {
+  if (emp?.shiftType && emp.shiftType !== 'none') {
+    const s = findShift(emp.shiftType)
+    if (s) return s
+  }
+  if (rec?.shift) {
+    const sl = rec.shift.toLowerCase()
+    if (sl.includes('night') || sl.includes('n-') || sl === 'n') return SHIFTS[1]
+    if (sl.includes('day') || sl.includes('d-') || sl === 'd') return SHIFTS[0]
+    if (sl.includes('both') || sl.includes('general')) return SHIFTS[2]
+  }
+  if (rec?.inTime) {
+    const h = parseInt(rec.inTime.split(':')[0], 10)
+    if (h >= 18 || h < 6) return SHIFTS[1]
+    return SHIFTS[0]
+  }
+  return SHIFTS[3]
+}
+
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// attendance.day_type — the single source of truth for what kind of calendar day a row
+// represents (plan.md §8B S-2c). Replaces the old ignored `week_off` boolean.
+export const DAY_TYPES = { WORKING: 'working', WEEK_OFF: 'week_off', HOLIDAY: 'holiday' }
+
+export const EMPLOYMENT_STATUSES = ['Probation', 'Confirmed', 'Notice Period', 'Exited']
+
+// Leave policy quotas (plan.md §6A) — CL 12 / EL 6 / SL 4 per year, credited in full on
+// 1 April, pro-rated for part-year joiners. Used by both the balance-generation script
+// (Stage G) and the Day 3 accrual engine.
+export const LEAVE_POLICY = {
+  CASUAL: { label: 'Casual Leave', perYear: 12, proRataPerMonth: 1 },
+  EARNED: { label: 'Earned Leave', perYear: 6, proRataPerMonth: 0.5 },
+  SICK: { label: 'Sick Leave', perYear: 4, proRataPerMonth: null }, // not pro-rated per policy
+}
+
+// Leave year runs 1 April -> 31 March.
+export const FINANCIAL_YEAR_START_MONTH = 4
+
+export const ABSENT_STATUS = 'Absent'
+export const PRESENT_STATUS = 'Present'
+export const HALF_DAY_STATUS = 'Half Day'
+export const LEAVE_STATUS = 'Leave'
+export const WFH_STATUS = 'WFH'
+export const ON_DUTY_STATUS = 'On Duty'
+export const WEEK_OFF_STATUS = 'Week Off'
+export const HOLIDAY_STATUS = 'Holiday'

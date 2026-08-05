@@ -1,0 +1,156 @@
+import { useState } from 'react'
+import { Card } from '../../components/ui/Card'
+import { Button } from '../../components/ui/Button'
+import { Input, Label } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
+import { getLocation } from '../../hooks/useGeolocation'
+import { todayIST } from '../../lib/datetime'
+
+const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
+
+function monthlyPartialCount(leaves, empId, label) {
+  const m = new Date().getMonth() + 1
+  const y = new Date().getFullYear()
+  return leaves.filter(l => l.empId === empId && l.leaveType === label && l.status !== 'Rejected' &&
+    new Date(l.date).getMonth() + 1 === m && new Date(l.date).getFullYear() === y).length
+}
+
+export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied }) {
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState({ type: '', date: todayIST(), reason: '', location: null })
+  const [errs, setErrs] = useState({})
+  const [locationStatus, setLocationStatus] = useState('')
+
+  const myLeaves = leaves.filter(l => l.empId === currentUser.id)
+  const avLT = availableLeaveTypes()
+
+  function openFor(label) {
+    setForm({ type: label, date: todayIST(), reason: '', location: null })
+    setErrs({})
+    setLocationStatus('')
+    setModalOpen(true)
+  }
+
+  async function submit() {
+    const nextErrs = {}
+    if (!form.type) nextErrs.type = 'Please select a leave type'
+    if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
+    const needsLocation = form.type === 'Work From Home' || form.type === 'On Duty'
+    if (needsLocation && !form.location) nextErrs.location = `Location is required for ${form.type}`
+    setErrs(nextErrs)
+    if (Object.keys(nextErrs).length) return
+
+    await applyLeave(currentUser, form)
+    if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
+    setModalOpen(false)
+    setForm({ type: '', date: todayIST(), reason: '', location: null })
+    setErrs({})
+    setLocationStatus('')
+  }
+
+  function captureLocation() {
+    setLocationStatus('Capturing location...')
+    getLocation((loc) => {
+      if (loc) { setForm(p => ({ ...p, location: loc })); setLocationStatus('') }
+      else setLocationStatus('Location access denied — please enable GPS and try again')
+    })
+  }
+
+  return (
+    <>
+      <Card>
+        <h2 className="text-white font-semibold mb-4">Apply For Leave</h2>
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          {avLT.map(lt => (
+            <button key={lt.label} onClick={() => openFor(lt.label)} className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-indigo-500/10 border border-white/10 hover:border-indigo-500/40 text-left transition-all active:scale-95">
+              <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500/30 to-violet-500/30 flex items-center justify-center text-xs font-bold text-white shrink-0">{lt.icon}</span>
+              <span className="text-white/70 text-xs">Apply for {lt.label}</span>
+            </button>
+          ))}
+        </div>
+        {Object.keys(balances).length > 0 && (
+          <>
+            <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-3">Leave Balances</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {Object.entries(balances).filter(([lt]) => !lt.includes('Partial')).map(([lt, v]) => (
+                <div key={lt} className="bg-white/5 rounded-xl p-3 border border-white/10">
+                  <p className="text-white/40 text-xs truncate">{lt}</p>
+                  <p className="text-white font-bold text-lg mt-1">{v.balance}<span className="text-white/30 text-sm">/{v.quota}</span></p>
+                  <div className="w-full bg-white/10 rounded-full h-1.5 mt-2">
+                    <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, (v.balance / Math.max(v.quota, 1)) * 100)}%` }} />
+                  </div>
+                  <p className="text-white/20 text-xs mt-1">{v.consumed} consumed</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="pt-3 border-t border-white/10">
+          <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-2">Partial Leave Tracker (This Month)</p>
+          {PARTIAL_TYPES.map(({ label: lt, max }) => {
+            const used = monthlyPartialCount(leaves, currentUser.id, lt)
+            return (
+              <div key={lt} className="flex items-center justify-between mb-2">
+                <span className="text-white/50 text-xs">{lt}</span>
+                <div className="flex items-center gap-2">
+                  {Array.from({ length: max }).map((_, i) => <div key={i} className={`w-3 h-3 rounded-full ${i < used ? 'bg-red-400' : 'bg-white/10 border border-white/20'}`} />)}
+                  <span className={`text-xs ${used >= max ? 'text-red-400' : 'text-emerald-400'}`}>{max - used} left</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="text-white font-semibold mb-3">Recent Applications</h2>
+        {myLeaves.length === 0 ? (
+          <p className="text-white/30 text-sm text-center py-4">No applications yet</p>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {myLeaves.slice(0, 10).map(l => (
+              <div key={l.id} className="bg-white/5 rounded-xl p-3 flex items-center justify-between border border-white/5">
+                <div>
+                  <p className="text-white text-sm font-medium">{l.leaveType}</p>
+                  <p className="text-white/30 text-xs">{l.date} · {l.reason?.slice(0, 35)}{l.reason?.length > 35 ? '...' : ''}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Apply Leave / Status">
+        <Label>Type <span className="text-red-400">*</span></Label>
+        <div className="grid grid-cols-2 gap-2 mb-3 max-h-52 overflow-y-auto pr-1">
+          {avLT.map(lt => (
+            <button key={lt.label} onClick={() => setForm(p => ({ ...p, type: lt.label }))} className={`p-2 rounded-xl text-xs text-left border transition-all ${form.type === lt.label ? 'bg-indigo-600/30 border-indigo-500/50 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
+              <p className="text-xs font-bold text-white/40 mb-0.5">{lt.icon}</p>{lt.label}
+            </button>
+          ))}
+        </div>
+        {errs.type && <p className="text-red-400 text-xs mb-2">{errs.type}</p>}
+        <Label>Date</Label>
+        <Input type="date" className="mb-3" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+        <Label>Reason <span className="text-red-400">*</span></Label>
+        <textarea rows={3} className={`w-full bg-white/5 border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-400 focus:bg-white/10 transition-all placeholder-white/20 resize-none mb-1 ${errs.reason ? 'border-red-500' : 'border-white/15'}`} value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Enter reason for leave..." />
+        {errs.reason && <p className="text-red-400 text-xs mb-2">{errs.reason}</p>}
+        {(form.type === 'Work From Home' || form.type === 'On Duty') && (
+          <div className={`mb-2 p-3 rounded-xl border ${form.type === 'Work From Home' ? 'bg-amber-500/10 border-amber-500/20' : 'bg-purple-500/10 border-purple-500/20'}`}>
+            <p className={`text-xs font-medium mb-2 ${form.type === 'Work From Home' ? 'text-amber-300' : 'text-purple-300'}`}>Location is mandatory for {form.type}</p>
+            {form.location
+              ? <p className="text-emerald-400 text-xs">Located: {form.location}</p>
+              : <Button variant="secondary" className="w-full text-xs" onClick={captureLocation}>Capture My Location (Required)</Button>}
+            {locationStatus && <p className="text-red-400 text-xs mt-1">{locationStatus}</p>}
+          </div>
+        )}
+        {errs.location && <p className="text-red-400 text-xs mb-2">{errs.location}</p>}
+        <div className="flex gap-2 mt-3">
+          <Button className="flex-1" onClick={submit}>Submit Application</Button>
+          <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+        </div>
+      </Modal>
+    </>
+  )
+}

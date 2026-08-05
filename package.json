@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-schema": "node scripts/check-schema-contract.mjs",
+    "smoke-test": "node scripts/smoke-test-functions.mjs",
+    "apply-migrations": "node scripts/apply-migrations.mjs",
+    "seed": "node scripts/seed-employees-and-holidays.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -17,8 +23,10 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "pg": "^8.13.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^2.1.4"
   }
 }

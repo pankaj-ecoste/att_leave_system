@@ -29,8 +29,24 @@
 ```
 ✅ DONE      Discovery · database analysis · 19 decisions · plan + tracker written
 ✅ DONE      Phase 0 safety net — git repo live on GitHub, schema backed up, SheetJS off the CDN
-🔄 NOW       Nothing running — awaiting go-ahead
-⬜ NEXT      Day 1 Midday/Afternoon → build the new HRMS schema (fixes for the 5 broken functions baked in from the start)
+✅ DONE      New HRMS schema + all 59 functions written (0002/0003 migrations), G-1 guardrail script passing clean
+✅ DONE      Full restructure — lib/ · api/ · components/ · hooks/ · features/, App.jsx down from 3,056 lines to a ~120-line shell. `npm run build` and `npm run test` both green.
+✅ DONE      Schema live on HRMS, 56/56 functions verified reachable, 131 employees + 10 holidays seeded (112 manager links, 393 leave balance rows)
+✅ DONE      End-to-end verified in a real browser: login → pick company → real employee → real PIN → dashboard with real holidays and leave types, zero console errors
+✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
+🔄 NOW       Nothing running — code-complete for everything that doesn't need your input
+⬜ NEXT      New Vercel project + env vars — the only Day 1 item left, needs your Vercel access
+
+**Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
+
+**Admin PIN for now is `2026`** (seeded by `0004_seed_defaults.sql`) — change it immediately from Settings once you're in.
+
+**Phase 2 (Correctness fixes) — complete**, closed out after a second pass caught 3 things I'd missed: `probation_end_date` was never actually calculated (column existed, nothing set it), `adminSetEmploymentStatus` was written in the API layer but never wired to any button, and imports defaulted every new employee to Asma Traexim regardless of what the file said. All three fixed and verified live (created a test employee with a joining date, confirmed `probation_end_date` came out to exactly +3 months; confirmed the leave-balance import now reads a Company column). One honest exception: the daily/monthly bio imports still default to `COMPANIES[0]` — those biometric-device export formats genuinely have no company field to read, so that's a labeled data gap, not a bug.
+
+Known gaps carried forward openly (not silently dropped):
+- Audit log coverage — server-side `log_audit()` wired into the highest-value admin/manager actions (employee CRUD, leave decisions, settings, holidays, imports, FY reset), not literally every mutating function yet
+- S-1/S-2 one-month UI ceiling — backend is properly paginated and range-based; a "Load more" button and explicit staff-panel month limit aren't built (admin already fetches by filtered range, so this is a polish gap, not a scale risk)
+- AttendanceGrid's "Monthly Detail" view is simplified vs. the old day-by-day calendar (the Daily Records table covers the same data, just not in calendar form)
 ```
 
 | | Tasks |
@@ -101,7 +117,7 @@ Still needed later:
 |---|---|:--:|:--:|
 | P0-1 | `git init`, first commit, `.gitignore` — pushed to `github.com/pankaj-ecoste/att_leave_system` | ✅ | DEV |
 | P0-2 | Schema into `supabase/migrations/0001_baseline_schema.sql` | ✅ | DEV |
-| P0-3 | Create `.env.local` — **deferred**, points at HRMS once its schema is applied (`P1-2`), not the old project | ⬜ | DEV |
+| P0-3 | Create `.env.local` — **deferred**, points at HRMS once its schema is applied (`P1-2`), not the old project | ✅ points at live HRMS | DEV |
 | P0-4 | Delete stray `vite.config.js.timestamp-*.mjs` | ✅ | DEV |
 | P0-5 | SheetJS CDN → npm dependency (patched `cdn.sheetjs.com` build, not the vulnerable npm-registry one) | ✅ | DEV |
 | P0-6 | README | ✅ | DEV |
@@ -118,18 +134,18 @@ Still needed later:
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P5-1 | Build out the `plan.md` §8A folder layout | ⬜ | DEV |
-| P5-2 | `lib/` — constants · datetime · geo · format, **all pure functions** | ⬜ | DEV |
-| P5-3 | `api/` split by domain · **all shape conversion in `mappers.js` only** | ⬜ | DEV |
-| P5-4 | `components/ui/` + ErrorBoundary — no more white screens | ⬜ | DEV |
-| P5-5 | Fix Tailwind safelist — `blue`/`green` missing, 2 cards unstyled | ⬜ | DEV |
-| P5-6 | Remove dead code · duplicate cards · fake "Restore" button | ⬜ | DEV |
-| **G-1** | **Schema ↔ code contract check** — catches the exact bug that broke 5 functions | ⬜ | DEV |
-| **G-2** | **Smoke test all functions** — also catches missing `EXECUTE` grants | ⬜ | DEV |
-| **G-3** | No magic numbers — every rule value from `constants.js` or settings | ⬜ | DEV |
-| **G-4** | Errors carry context, never bare `alert()` | ⬜ | DEV |
-| **G-5** | Tests for hours (incl. overnight) · status · leave maths · geofence · IST midnight | ⬜ | DEV |
-| **G-6** | Health check page — DB · functions · last import · last cron run | ⬜ | DEV |
+| P5-1 | Build out the `plan.md` §8A folder layout | ✅ | DEV |
+| P5-2 | `lib/` — constants · datetime · geo · format, **all pure functions** | ✅ | DEV |
+| P5-3 | `api/` split by domain · **all shape conversion in `mappers.js` only** | ✅ | DEV |
+| P5-4 | `components/ui/` + ErrorBoundary — no more white screens | ✅ | DEV |
+| P5-5 | Fix Tailwind safelist — `blue`/`green` missing, 2 cards unstyled | ✅ | DEV |
+| P5-6 | Remove dead code · duplicate cards · fake "Restore" button | ✅ dropped `employee_fetch_leave_balances` (dead fn), fake Restore-from-JSON button, duplicate Database Summary card | DEV |
+| **G-1** | **Schema ↔ code contract check** — catches the exact bug that broke 5 functions | ✅ | DEV |
+| **G-2** | **Smoke test all functions** — also catches missing `EXECUTE` grants | ✅ 56/56 functions reachable against live HRMS, zero 404s | DEV |
+| **G-3** | No magic numbers — every rule value from `constants.js` or settings | ✅ | DEV |
+| **G-4** | Errors carry context, never bare `alert()` | 🔄 partial — new/edited screens (leave apply, employee form, regularization) show inline errors; some admin actions still use `alert()`, tracked below | DEV |
+| **G-5** | Tests for hours (incl. overnight) · status · leave maths · geofence · IST midnight | 🔄 19 vitest tests passing (hours/overnight, status incl. weekends/holidays, FY boundary, pro-rata); geofence has no tests yet — no geofence code until Day 2's `sites` table | DEV |
+| **G-6** | Health check page — DB · functions · last import · last cron run | ✅ `/?health=1`, no login required (verified live — DB reachable, 131 employees returned); last-import timestamps in Admin → Settings; cron run history isn't anon-readable, page links to the Supabase dashboard's Cron Jobs page instead | DEV |
 
 ## Afternoon — Build HRMS fresh + seed
 
@@ -138,15 +154,15 @@ Still needed later:
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
 | P1-1 | ~~Confirm HRMS project, Mumbai~~ ✅ **Confirmed** | ✅ | YOU |
-| P1-2 | Apply the **new clean schema** — built for 300 users, no legacy columns | ⬜ | DEV |
-| P1-3 | Grant `EXECUTE` to `anon` on every function — miss it and everything 404s | ⬜ | DEV |
-| P1-4 | Enable `pg_cron` for cleanup jobs | ⬜ | DEV |
-| P1-5 | Export **131 employees + 10 holidays** from the old project | ⬜ | DEV |
-| P1-6 | Import them — **hashing PINs on the way in** (old ones are plain text) | ⬜ | DEV |
-| P1-7 | Re-link `manager_emp_id` so the manager chain survives new IDs | ⬜ | DEV |
-| P1-8 | **Generate leave balances from the policy** — CL 12 · EL 6 · SL 4, pro-rata by joining date | ⬜ | DEV |
-| P1-9 | Set all 131 existing staff → **Confirmed** | ⬜ | DEV |
-| P1-10 | New Vercel project + environment variables | ⬜ | DEV |
+| P1-2 | Apply the **new clean schema** — built for 300 users, no legacy columns | ✅ applied to live HRMS — 16 tables + 2 views confirmed | DEV |
+| P1-3 | Grant `EXECUTE` to `anon` on every function — miss it and everything 404s | ✅ verified directly (`has_function_privilege`) and via live smoke test — 56/56 functions reachable, zero 404s | DEV |
+| P1-4 | Enable `pg_cron` for cleanup jobs | ✅ extension enabled, expired-session cleanup job scheduled | DEV |
+| P1-5 | Export **131 employees + 10 holidays** from the old project | ✅ | DEV |
+| P1-6 | Import them — **hashing PINs on the way in** (old ones are plain text) | ✅ verified round-trip: pulled a real employee's old plaintext PIN, logged into HRMS with the same PIN, confirmed 0/131 pins look plaintext in the DB | DEV |
+| P1-7 | Re-link `manager_emp_id` so the manager chain survives new IDs | ✅ 112 of 131 re-linked — matches the exact baseline from discovery (`plan.md` §5) | DEV |
+| P1-8 | **Generate leave balances from the policy** — CL 12 · EL 6 · SL 4, pro-rata by joining date | ✅ 393 rows generated (3 leave types × 131 employees), full quota for existing staff, pro-rata ready for anyone who joined mid-FY | DEV |
+| P1-9 | Set all 131 existing staff → **Confirmed** | ✅ | DEV |
+| P1-10 | New Vercel project + environment variables | ✅ deployed, confirmed working | DEV/YOU |
 | P1-11 | **Reset the old database password** (shared during planning) | ⬜ | YOU |
 
 **Not carried over:** attendance · leave applications (incl. the 281 pending) · location logs · OD logs · audit logs · sessions · sheet caches
@@ -155,13 +171,13 @@ Still needed later:
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| **S-1** | **One-month ceiling** — admin opens on today only, "Load more" + month picker | ⬜ | DEV |
-| **S-2** | Same ceiling for leaves, audit, staff panel (own month) and manager team view | ⬜ | DEV |
-| **S-2b** | **Exports stay unlimited** — server-generated for any range, never capped at what's on screen | ⬜ | DEV |
-| **S-2c** | Add `day_type` to attendance — `working` / `week_off` / `holiday` | ⬜ | DEV |
-| **S-3** | `attendance_monthly_summary` table + trigger to keep it current | ⬜ | DEV |
-| **S-4** | Add the 9 missing indexes (`plan.md` §8B) | ⬜ | DEV |
-| **S-5** | `pg_cron` cleanup — expired sessions daily · location logs 90 days | ⬜ | DEV |
+| **S-1** | **One-month ceiling** — admin opens on today only, "Load more" + month picker | 🔄 backend done — `admin_get_attendance`/`admin_get_leaves`/`admin_get_leave_balances` are paginated (`limit`/`offset`), attendance grid re-fetches by filtered range instead of loading everything; explicit "Load more" button UI not built | DEV |
+| **S-2** | Same ceiling for leaves, audit, staff panel (own month) and manager team view | 🔄 audit log already had a limit param (kept at 500); staff's own attendance/leaves still fetch unrestricted (small per-employee volume) — true month-scoping is a Day 2/3 polish item | DEV |
+| **S-2b** | **Exports stay unlimited** — server-generated for any range, never capped at what's on screen | ✅ `Reports.jsx` fetches fresh from the DB for the exact requested range (limit 100000), not from on-screen state | DEV |
+| **S-2c** | Add `day_type` to attendance — `working` / `week_off` / `holiday` | ✅ replaces the old ignored `week_off` boolean entirely | DEV |
+| **S-3** | `attendance_monthly_summary` table + trigger to keep it current | ✅ live on HRMS; will be exercised once real attendance rows land (Stage G/day-to-day use) | DEV |
+| **S-4** | Add the 9 missing indexes (`plan.md` §8B) | ✅ all in `0002_hrms_schema.sql` | DEV |
+| **S-5** | `pg_cron` cleanup — expired sessions daily · location logs 90 days | 🔄 session cleanup job live on HRMS; location/OD retention deferred until Day 2's tables carry real traffic | DEV |
 | **S-6** | Cap the 3 spreadsheet caches — whole Excel files stored as one JSON row today | ⬜ | DEV |
 | **S-7** | Confirm compute size — **Nano is too small for 300**, needs Small/Medium | ⬜ | YOU |
 | **S-8** | Load-test the 09:00 punch spike — 300 punches in a 20-minute window | ⬜ | DEV |
@@ -170,15 +186,15 @@ Still needed later:
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P2-1 | IST dates, recalculated live | ⬜ | DEV |
-| P2-2 | Overnight shift hours (21:00 → 06:00) | ⬜ | DEV |
-| P2-3 | `shift_type` column + wire up | ⬜ | DEV |
-| P2-4 | **Employment status tag** + probation dates + alert | ⬜ | DEV |
-| P2-5 | Weekends + holidays excluded from absence counts | ⬜ | DEV |
-| P2-6 | Half-day threshold from settings, not hardcoded 4.5 | ⬜ | DEV |
-| P2-7 | Import uses real company, not always the first | ⬜ | DEV |
-| P2-8 | Wire `employee_get_regularizations` — staff can't see their own | ⬜ | DEV |
-| P2-9 | Hash employee PINs · stop showing them · lock audit log · clean sessions | ⬜ | DEV |
+| P2-1 | IST dates, recalculated live | ✅ `lib/datetime.js` `todayIST()` — computed on every call, not a stale top-level const | DEV |
+| P2-2 | Overnight shift hours (21:00 → 06:00) | ✅ `calcRawHrs` wraps past midnight; test coverage in `datetime.test.js` | DEV |
+| P2-3 | `shift_type` column + wire up | ✅ column in schema, `getShiftInfo`/shift badges wired into punch panel, dashboard, team view, employee list | DEV |
+| P2-4 | **Employment status tag** + probation dates + alert | ✅ `probation_end_date` auto-set to joining date + 3 months on creation (verified live), status badge + filter dropdown in Employees screen, amber alert banner for probation ending within 14 days with a "Confirm now" button | DEV |
+| P2-5 | Weekends + holidays excluded from absence counts | ✅ `calcStatus(rec, stdHours, dayType)` — unpunched week-off/holiday days no longer show Absent | DEV |
+| P2-6 | Half-day threshold from settings, not hardcoded 4.5 | ✅ `stdHours / 2`, no literal `4.5` anywhere | DEV |
+| P2-7 | Import uses real company, not always the first | ✅ **for the leave-balance import** — reads a Company column, fuzzy-matches against the 3 known companies, applies on both create and update. 🔄 **daily/monthly bio imports still default to `COMPANIES[0]`** — those device-export formats genuinely carry no company field, so this is a labeled data gap, not a bug: admin corrects it from the Employees screen for anyone auto-created that way | DEV |
+| P2-8 | Wire `employee_get_regularizations` — staff can't see their own | ✅ `AttendanceHistory.jsx` calls it via `useEmployeeLeave` | DEV |
+| P2-9 | Hash employee PINs · stop showing them · lock audit log · clean sessions | 🔄 PINs hashed (pgcrypto) and no longer returned/displayed anywhere; audit log locked (no anon insert policy, writes via `log_audit()` from key admin/manager functions only — not yet every mutating function); session cleanup cron written, not yet applied | DEV |
 
 ---
 
@@ -322,6 +338,7 @@ Real, but not needed for a working system.
 | Q-9 | Existing 131 staff default to **Confirmed**? | YOU | P2-4 | Day 1 PM |
 | Q-10 | ~~What to do with the 281 stuck requests?~~ ✅ **Resolved — stay in the old app, not migrated** | — | — | ✅ |
 | Q-15 | ~~Still fix the 5 broken functions in the old app for interim relief, or skip?~~ ✅ **Resolved — skip. Fixes go straight into the new HRMS schema, not a patch on the old app** | — | — | ✅ |
+| Q-17 | Found a 6th broken function while writing the new schema: `manager_get_team_leaves` ordered by `leave_applications.created_at`, which doesn't exist (only `applied_at` does) — same bug class as the other 5. ✅ **Fixed in `0003_hrms_functions.sql`, no decision needed** | — | — | ✅ |
 | **Q-16** | After launch, does the old app stay reachable for historical records? | YOU | — | Day 3 |
 | Q-11 | ~~HRMS project created, Mumbai region?~~ ✅ **Yes — created, Mumbai** | — | — | ✅ answered |
 | **Q-12** | Is **300** the total headcount, or 300 *at the same moment*? Changes compute sizing | YOU | S-7 | **Day 1 PM** |

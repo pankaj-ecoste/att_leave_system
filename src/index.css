@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Native <select> dropdown options render as an OS/browser popup that Tailwind classes
+   on the <select> itself can't reach — but `color` on the <select> DOES leak into that
+   popup's option text in Chrome, while the popup's background stays browser-default
+   white. Net effect: white text on a white background, invisible except when an option
+   is hover-highlighted. This makes every dropdown in the app readable regardless. */
+select option {
+  background-color: #1e1b3a;
+  color: #ffffff;
+}
