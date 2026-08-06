@@ -770,12 +770,23 @@ T-3           → reset the database password (was shared during planning)
 Q-16          → after launch, does the old app stay reachable for historical records?
 ```
 
-**One thing to do yourself, if you get a chance:** a real browser click-through of
-everything verified by script rather than by watching the screen this whole build —
-the App vs Biometric column, the manager's Location tab, admin's split leave queues,
-the half-day picker in Apply Leave, the new Leave Policy tab, and the Daily Report's
-downloaded Excel file actually opening correctly with all 5 sheets. The data and server
-logic behind every one of these is proven; nobody has looked at the actual pixels.
+**Browser click-through done 2026-08-06 (post-Day 3):** the half-day picker in Apply
+Leave (Full Day/First Half/Second Half, live "deducts 0.5 day" note), the pre-approval
+rule (same-day Casual Leave correctly rejected in the UI with a clean inline error,
+Sick Leave correctly exempted), the new Leave Policy tab (full content, matches the
+policy doc), day-part tags on both the admin's "Awaiting Manager" list and "All
+Applications" table, the Settings screen's Current/New/Confirm PIN fields with a live
+wrong-PIN rejection, and the Daily Report — downloaded for real, opened, and confirmed
+to contain all 5 correctly-named sheets (Summary/Attendance/Location Log/Leave/
+Exceptions) with the right fallback text on empty ones. **Found and fixed one more real
+bug along the way** (pre-existing, not from this session's changes): `MonthlySummary.jsx`'s
+calendar grid used the day number as its React key for real day cells but the array
+index for the leading blank cells before day 1 — small integers that collide (e.g. the
+blank cell at index 1 and the day-1 cell both used key `1`), which React was silently
+warning about and could have duplicated or dropped calendar cells. Fixed.
+
+Still not screen-watched: the App vs Biometric column, the manager's Location tab, and
+admin's split leave queues (these predate Day 3, carried over from the Day 2 note).
 
 If something comes up that needs picking back up — a bug report, a new feature request,
 or one of the deferred items (`⏭️ Deferred past Day 3` table above) — just say what it
