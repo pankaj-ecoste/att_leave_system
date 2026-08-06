@@ -34,7 +34,7 @@ export default function App() {
   const team = useTeam(auth.employeeToken, auth.currentUser?.id)
 
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
-  const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours)
+  const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail)
   const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
   const dailyBioImport = useDailyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
   const monthlyBioImport = useMonthlyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
@@ -82,6 +82,7 @@ export default function App() {
           attendance={empAttendance.attendance}
           todayRecord={empAttendance.todayRecord}
           stdHours={auth.stdHours}
+          adminEmail={auth.adminEmail}
           punch={(type, currentUser, opts) => empAttendance.punch(type, currentUser, opts)}
           sites={auth.sites}
           isPunching={empAttendance.isPunching}

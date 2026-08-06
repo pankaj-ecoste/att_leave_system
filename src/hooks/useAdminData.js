@@ -18,10 +18,11 @@ import { fetchSites, adminCreateSite as apiCreateSite, adminUpdateSite as apiUpd
 // regularizations and holidays. Loaded once on admin login; each is a bounded dataset
 // at the current ~300-employee scale (leave apps ~7,800/year, balances ~2,400 rows).
 //
-// stdHours is NOT owned here — it's a single global setting (app_settings.std_hours)
-// that useAuth already loads once at bootstrap for both roles. Keeping a second copy
-// here would be exactly the "one name, two things" duplication that broke the old app.
-export function useAdminData(token, stdHours, onStdHoursChange) {
+// stdHours and adminEmail are NOT owned here — both are single global settings
+// (app_settings.std_hours / .admin_email) that useAuth already loads once at bootstrap
+// for both roles. Keeping a second copy here would be exactly the "one name, two things"
+// duplication that broke the old app.
+export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAdminEmailChange) {
   const [employees, setEmployees] = useState([])
   const [leaves, setLeaves] = useState([])
   const [leaveBalances, setLeaveBalances] = useState({})
@@ -111,9 +112,10 @@ export function useAdminData(token, stdHours, onStdHoursChange) {
   }
 
   // --- Settings / holidays ---
-  async function updateSettings(newStdHours, newAdminPin, oldPin) {
-    await apiUpdateSettings(token, newStdHours, newAdminPin || null, oldPin || null)
+  async function updateSettings(newStdHours, newAdminPin, oldPin, newAdminEmail) {
+    await apiUpdateSettings(token, newStdHours, newAdminPin || null, oldPin || null, newAdminEmail || null)
     onStdHoursChange?.(newStdHours)
+    if (newAdminEmail) onAdminEmailChange?.(newAdminEmail)
   }
   async function addHoliday(date, name, type) {
     const h = await apiAddHoliday(token, date, name, type)
@@ -142,7 +144,7 @@ export function useAdminData(token, stdHours, onStdHoursChange) {
   }
 
   return {
-    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours,
+    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours, adminEmail,
     createEmployee, updateEmployee, setEmploymentStatus, toggleEmployeeStatus, deleteEmployee,
     decideLeave, upsertLeaveBalance, bulkUpsertLeaveBalances, resetLeaveBalancesForNewFY, refreshLeaveBalances,
     decideRegularization, updateSettings, addHoliday, deleteHoliday,

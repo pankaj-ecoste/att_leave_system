@@ -36,9 +36,10 @@
 ✅ DONE      Health check page (`/?health=1`, no login) — verified live, DB + functions both OK
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
 ✅ DONE      Day 2 morning through afternoon — Phase 3 (P3-1..P3-15) complete, you confirmed 2026-08-06
-✅ DONE      Day 2 evening — real two-stage leave approval (P4-1, P4-2, P4-4, P4-8, P4-9), verified live via 13 scripted checks. P4-3/P4-5 UI code-complete but not screen-watched. P4-6 (email) stays blocked on Q-2/Q-3 (hosting URL, DNS access) — not a code task, needs your answer. P4-7 needs nothing — Q-10 already resolved it. **Day 2 is done.**
+✅ DONE      Day 2 evening — real two-stage leave approval (P4-1, P4-2, P4-4, P4-8, P4-9), verified live via 13 scripted checks. P4-3/P4-5 UI code-complete but not screen-watched. P4-6 (email) **redesigned 2026-08-06 — see below**, no longer blocked on Q-2/Q-3. P4-7 needs nothing — Q-10 already resolved it. **Day 2 is done.**
 ✅ DONE      Day 3 — P4B-1..P4B-15 (half-day leave, accrual, probation/notice caps, 18-month service check, LOP rules), P4C-1..P4C-4 (daily report export), P6 hardening (soft delete, PIN old-PIN check, alert() replacement, indexes, export fix), T-1/T-2 (full end-to-end test, migration checklist). 6 migrations (0013-0018), 2 real security bugs found and fixed along the way (a pre-existing `log_audit` grant gap and a function-overload gap in the new PIN hardening — see below). **Day 3 is done — only T-3 (database password reset) is left, and it's yours.**
 ✅ DONE      Post-Day-3 refinements (your live feedback, 2026-08-06): the Apply Leave dialog no longer repeats the full tile grid inside itself (was confusing — looked like a bug where picking Casual Leave could "reopen" as Sick Leave) · **Earned Leave now requires 7 days' advance notice**, with the date field defaulting straight to the earliest allowed date and a clear on-screen note · **Sick Leave now requires a prescription/medical certificate upload** before you can submit, stored in a private Supabase Storage bucket, viewable by managers/admin via a "View prescription" link. `0019_earned_leave_advance_notice.sql`. A real pre-existing bug (unrelated to this session) was also found and fixed during the browser click-through: duplicate React keys in the monthly attendance calendar grid.
+✅ DONE      Real leave balance data loaded (2026-08-06): HR's `Leave Balance Sheet.xlsx` applied via `scripts/apply-leave-balance-corrections.mjs` — **53 employees, 125 Sick/Casual/Earned balance rows corrected**, verified live. Not the in-app importer — see the "Post-Day-3 refinements" section for why. 19 sheet rows left untouched, flagged for HR (unknown names or a code that points at a different employee).
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -373,7 +374,7 @@ the column level above — the risk left is display-only, not data-integrity.
 | P4-3 | Rebuild manager panel around the new flow | 🔄 code complete — logic proven server-side, screen not watched | DEV |
 | P4-4 | Admin sees manager's decision before final approval | ✅ verified live (script) | DEV |
 | P4-5 | Staff panel — manager name + email · leaves · pending | 🔄 code complete — same, UI not screen-watched | DEV |
-| P4-6 | Email sending — Edge Function + Resend + DNS | 🚫 blocked on `Q-2`/`Q-3` (hosting URL, DNS access) | DEV |
+| P4-6 | Email sending — **redesigned 2026-08-06**: `mailto:` nudge instead of Edge Function + Resend + DNS | ✅ verified live (script) — see below | DEV |
 | P4-7 | Handle the **281 existing pending requests** | ✅ **moot — resolved by `Q-10`**, they stay in the old app, never migrated into HRMS | — |
 | P4-8 | **Deduct balance on final approval** — never happened before today | ✅ verified live (script) | DEV |
 | P4-9 | Block insufficient balance · server-side caps | ✅ verified live (script) | DEV |
@@ -701,6 +702,86 @@ Your live feedback after a browser click-through of the finished build, actioned
 | — | Earned Leave requires 7 days' advance notice | ✅ verified live (script + browser) |
 | — | Sick Leave requires a prescription/medical certificate upload to submit | ✅ verified live (script + browser) |
 | — | Duplicate React keys in the monthly calendar grid (pre-existing, unrelated bug found during click-through) | ✅ fixed |
+| — | Real Sick/Casual/Earned leave balances loaded from HR's `Leave Balance Sheet.xlsx` (83 employees) | ✅ applied live — see below |
+| — | P4-6 (email) redesigned as a `mailto:` nudge — no DNS/Resend needed anymore | ✅ verified live — see below |
+
+**P4-6 redesigned — `mailto:` nudge instead of transactional email:** the original design
+(Edge Function + Resend + DNS records on `ecoste.in`) stayed blocked on Q-2/Q-3 since Day
+2. Revisited 2026-08-06: the manager and admin panels already show every pending leave
+live the moment either logs in, so the email was only ever a *nudge* to go look, not the
+actual data channel. Decided to drop the server-side email infrastructure entirely —
+instead, a "Notify via Email" button appears right after a successful leave application,
+opening a `mailto:` link (the employee's own mail client, whatever it is — deliberately
+not a Gmail-specific web-compose link, so it works the same for Outlook/company mail
+users too) addressed to the manager **and** a single admin notification address together,
+subject and body pre-filled with the leave details and a link back into the app. Manager
+approval and admin's final decision don't get their own nudge buttons — both already
+surface automatically in the staff panel's status list, so a second manual step there
+would add friction without adding information (your call, 2026-08-06).
+
+**What's in `0020_admin_notification_email.sql`:** `app_settings.admin_email` (nullable)
+— the one address that isn't tied to any employee record, since admin login is a shared
+PIN, not an individual account · `admin_update_settings` gains a 5th parameter,
+`p_admin_email`, applying the same lesson `0018` already documented for this exact
+function — `create or replace` with a new argument list creates a new overload instead of
+replacing the old one, so the old 4-argument signature is explicitly `drop function`-ed
+first, confirmed live afterward that exactly one overload exists · `app_settings_public`
+view widened to also expose `admin_email` (anon-readable, no token) so the employee's
+Apply Leave screen can build the mailto link without needing an admin session — no more
+sensitive than the manager's own email already shown on that same screen.
+
+**Frontend:** `lib/notify.js` — new pure function `buildLeaveNotifyMailto`, covered by 4
+vitest cases · `LeaveApply.jsx`'s submit flow no longer closes the modal immediately on
+success — it now shows a confirmation step with the notify button and a "Done" button,
+holding the just-submitted leave's details long enough to build the link · Settings.jsx
+gets a new "Admin Notification Email" card to set `admin_email` (starts empty; **you
+still need to fill this in from Settings before the notify button will include an admin
+address** — it silently falls back to manager-only if empty, never breaks).
+
+**Verified live:** migration applied clean (re-run-safe, applied alongside all 19 prior
+migrations in one run, zero errors) · G-1 guardrail clean (73 functions, 19 tables) · G-2
+smoke test 62/62 reachable, including a direct call to the new 5-argument
+`admin_update_settings` with a fake token (correctly rejected, not a 404) · a real admin
+login + `admin_update_settings` call with a genuine `p_admin_email` value round-tripped
+correctly through `app_settings_public` before being reset back to `null` (that value was
+only for the verification script, not a real address — Settings is where you set the
+actual one) · `npm run build` and `npm run test` (31 tests, 4 new) both green.
+
+**Not independently verified** — pure UI/browser behavior, same caveat as everywhere else
+in this file: the "Notify via Email" button actually launching the device's mail app with
+the right fields filled in hasn't been screen-watched.
+
+**Leave balance data load:** HR supplied `Leave Balance Sheet.xlsx` (83 employees, real
+current Sick/Casual/Earned balances). The in-app "Import Leave Balances" screen wasn't
+used for this — it silently skips a leave type when the sheet shows a real `0`, and with
+no Quota column in this sheet it would have set each employee's quota equal to their
+balance, corrupting the quota everyone's balance/quota progress bar reads from. Instead,
+`scripts/apply-leave-balance-corrections.mjs` (dry-run by default, `--apply` to write)
+reads each employee's *existing* quota from the database and only corrects
+`balance`/`consumed`, leaving quota/accrued untouched.
+
+The sheet's "Employee Code" column turned out to be unreliable for several rows — codes
+that, once leading zeros are stripped, collided with a *different* employee's real code
+(e.g. sheet code `1` for "Manish Kumar" landed on an unrelated placeholder employee
+literally named `"00000001"` — a leftover stub, worth cleaning up separately). The
+script was corrected to trust an exact, unique name match over the sheet's code column,
+falling back to company as a tie-breaker only when a name is genuinely ambiguous (two
+employees sharing it) — verified live against the real data before anything was written.
+
+**Applied: 53 employees, 125 balance rows corrected**, verified live afterward (queried
+Ashish Singh and both real "Manish Kumar"s directly — values match exactly what the dry
+run reported).
+
+**19 sheet rows could not be matched to any employee and were left untouched** — their
+name doesn't exist in the app at all (`Rishi, Amrit, Pooja, sambit, Ritu, Arvind, Shalini
+Viswakarma, Deepak, kamod, Ashutosh, Deepali, Rahul Das, Naresh Kumar, Anirudh, Sunny,
+Mahesh Garole, Rohit Suresh Gavhane`) — either new hires not yet entered, or a name
+spelled differently in the app. Plus 2 rows needing a human decision: **"Shalini Gupta"**
+(sheet code 46) — two different real employees share that name and the code doesn't
+match either one's actual code, so which one this row means is genuinely unknown. **"Sameer
+int"** (sheet code 133) — that code actually belongs to a different employee, "Md Samir",
+in the app; looks like a mix-up in the sheet. None of these 19 rows changed anything —
+flagged for HR to resolve, not guessed at.
 
 **Apply Leave dialog:** you flagged that clicking a leave tile (e.g. Casual Leave) opened
 a dialog that *also* showed the full type grid again inside it, letting the selection
@@ -767,8 +848,8 @@ Real, but not needed for a working system.
 | ID | Question | Owner | Blocks | Needed by |
 |---|---|:--:|---|---|
 | Q-1 | ~~3 office locations — name, coordinates, radius~~ ✅ **Resolved — no longer needs a fixed count.** Sites are added via the Sites admin tab (or the dashboard); 1 of 3 offices in so far, punch screen picks up new ones automatically | YOU | — | ✅ |
-| **Q-2** | Where is the app hosted? | YOU | P4-6 | Day 2 PM |
-| **Q-3** | Who has DNS access for `ecoste.in`? | YOU | P4-6 | Day 2 PM |
+| Q-2 | ~~Where is the app hosted?~~ ✅ **Answered 2026-08-06 — `https://att-leave-system.vercel.app`.** No longer blocks anything — P4-6 stopped needing DNS at all once redesigned as a `mailto:` nudge | — | — | ✅ |
+| Q-3 | ~~Who has DNS access for `ecoste.in`?~~ ✅ **Moot — same redesign.** No DNS/email-provider setup needed for P4-6 anymore | — | — | ✅ |
 | Q-4 | ~~Confirm biometric stays official during dual-run~~ ✅ **Resolved — opposite of plan.md Decision 8's assumption.** Both readings always kept regardless; whichever an employee actually uses (app or biometric) becomes official for that day, since staff won't uniformly switch to the app. Admin can still override per-day via the switch (P3-12) | — | — | ✅ |
 | Q-5 | **Paternity Leave quota** — undefined in policy | YOU / HR | P4B-6 | Day 3 AM |
 | Q-6 | Maternity "1 week" — calendar or working days? | YOU / HR | P4B-6 | Day 3 AM |
@@ -812,14 +893,17 @@ Hosting URL: ________________________________
 
 ## Next chat — how to start
 
-**As of 2026-08-06: Day 1, Day 2, and Day 3 are all fully done.** The leave policy
-engine (half-days, accrual, probation/notice caps, 18-month service check, LOP rules),
-the daily report export, and hardening are all live and verified. Only two things are
-left, and both are yours, not code:
+**As of 2026-08-06: Day 1, Day 2, and Day 3 are all fully done**, plus a same-day P4-6
+redesign (the `mailto:` nudge replacing the DNS/Resend email plan — see the writeup
+above). The leave policy engine (half-days, accrual, probation/notice caps, 18-month
+service check, LOP rules), the daily report export, and hardening are all live and
+verified. What's left:
 
 ```
-T-3           → reset the database password (was shared during planning)
-Q-16          → after launch, does the old app stay reachable for historical records?
+T-3           → reset the database password (was shared during planning) — yours, not code
+Q-16          → after launch, does the old app stay reachable for historical records? — yours
+Settings      → set the real Admin Notification Email from Admin → Settings — the
+                "Notify via Email" button falls back to manager-only until this is filled in
 ```
 
 **Browser click-through done 2026-08-06 (post-Day 3):** the half-day picker in Apply

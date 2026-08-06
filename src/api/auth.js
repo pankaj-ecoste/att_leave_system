@@ -18,13 +18,13 @@ export async function fetchDirectory() {
   return (data || []).map(rowToEmployee)
 }
 
-export async function fetchStdHours() {
-  const { data, error } = await supabase.from('app_settings_public').select('std_hours').single()
+export async function fetchAppSettings() {
+  const { data, error } = await supabase.from('app_settings_public').select('std_hours, admin_email').single()
   if (error) {
     console.error(error)
-    return 9
+    return { stdHours: 9, adminEmail: null }
   }
-  return Number(data.std_hours) || 9
+  return { stdHours: Number(data.std_hours) || 9, adminEmail: data.admin_email || null }
 }
 
 // ---------------------------------------------------------------------------

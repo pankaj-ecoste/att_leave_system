@@ -147,3 +147,7 @@ export const DAY_PARTS = [
   { id: 'first_half', label: 'First Half' },
   { id: 'second_half', label: 'Second Half' },
 ]
+
+// P4-6 (revised) — no DNS/Resend transactional email; the employee's own mail client
+// sends a nudge to the manager + admin instead, with a link back into the app.
+export const APP_URL = 'https://att-leave-system.vercel.app'

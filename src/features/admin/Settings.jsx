@@ -5,13 +5,15 @@ import { Input, Label, Select } from '../../components/ui/Input'
 
 const HOLIDAY_TYPES = ['Public', 'Optional', 'Restricted', 'Company']
 
-export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
+export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, adminEmail, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
   const [oldPin, setOldPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
   const [pinMsg, setPinMsg] = useState('')
   const [newStd, setNewStd] = useState('')
   const [stdMsg, setStdMsg] = useState('')
+  const [newAdminEmail, setNewAdminEmail] = useState('')
+  const [adminEmailMsg, setAdminEmailMsg] = useState('')
   const [showHolidayForm, setShowHolidayForm] = useState(false)
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', type: 'Public' })
   const [holidayMsg, setHolidayMsg] = useState('')
@@ -38,6 +40,17 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
       setNewStd(''); setStdMsg('')
       onAudit?.('SETTINGS', `Std hours set to ${v}`, 'admin')
     } catch (err) { setStdMsg(err.message) }
+  }
+
+  async function saveAdminEmail() {
+    const v = newAdminEmail.trim()
+    if (!v || !v.includes('@')) { setAdminEmailMsg('Enter a valid email address'); return }
+    try {
+      await updateSettings(stdHours, null, null, v)
+      setNewAdminEmail(''); setAdminEmailMsg('Saved')
+      onAudit?.('SETTINGS', `Admin notification email set to ${v}`, 'admin')
+    } catch (err) { setAdminEmailMsg(err.message) }
+    setTimeout(() => setAdminEmailMsg(''), 3000)
   }
 
   async function resetFY() {
@@ -89,6 +102,14 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         <p className="text-white/30 text-xs mb-3">Half-day threshold: below {((Number(newStd) || stdHours) / 2).toFixed(1)} hours</p>
         {stdMsg && <p className="text-red-400 text-xs mb-2">{stdMsg}</p>}
         <Button className="text-xs" onClick={saveStdHours}>Save</Button>
+      </Card>
+
+      <Card>
+        <h3 className="text-white font-semibold mb-1">Admin Notification Email</h3>
+        <p className="text-white/30 text-xs mb-3">Where an employee's "Notify via Email" button on the Apply Leave screen sends its message, alongside the manager. There's no DNS/mail-server setup here — the employee's own email client sends it (P4-6, revised).</p>
+        <Input type="email" className="mb-1" value={newAdminEmail || adminEmail || ''} onChange={e => setNewAdminEmail(e.target.value)} placeholder="admin@ecoste.in" />
+        {adminEmailMsg && <p className={`text-xs mb-2 ${adminEmailMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}>{adminEmailMsg}</p>}
+        <Button className="text-xs" onClick={saveAdminEmail}>Save</Button>
       </Card>
 
       <Card>

@@ -7,6 +7,7 @@ import { getLocation } from '../../hooks/useGeolocation'
 import { uploadLeaveDocument } from '../../api/documents'
 import { todayIST, daysFromTodayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
+import { buildLeaveNotifyMailto } from '../../lib/notify'
 
 const EARNED_LEAVE_ADVANCE_DAYS = 7
 
@@ -19,13 +20,17 @@ function monthlyPartialCount(leaves, empId, label) {
     new Date(l.date).getMonth() + 1 === m && new Date(l.date).getFullYear() === y).length
 }
 
-export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory }) {
+export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory, adminEmail }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
   const [errs, setErrs] = useState({})
   const [locationStatus, setLocationStatus] = useState('')
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
+  // Set right after a successful submit, holding the just-applied leave's details so the
+  // notify-by-email step (P4-6, revised) can build its mailto: link; null the rest of
+  // the time, which is what keeps the modal showing the form instead.
+  const [submitted, setSubmitted] = useState(null)
 
   const myLeaves = leaves.filter(l => l.empId === currentUser.id)
   const avLT = availableLeaveTypes()
@@ -42,7 +47,17 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     setErrs({})
     setLocationStatus('')
     setFile(null)
+    setSubmitted(null)
     setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+    setForm({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
+    setErrs({})
+    setLocationStatus('')
+    setFile(null)
+    setSubmitted(null)
   }
 
   async function submit() {
@@ -77,11 +92,9 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
       return
     }
     if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
-    setModalOpen(false)
-    setForm({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
-    setErrs({})
-    setLocationStatus('')
-    setFile(null)
+    // Stay open one more step — offer to notify the manager + admin by email — instead
+    // of closing immediately (P4-6, revised: nudge, not silent).
+    setSubmitted({ type: form.type, date: form.date, dayPart: form.dayPart, reason: form.reason })
   }
 
   function captureLocation() {
@@ -174,7 +187,38 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         )}
       </Card>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Apply Leave / Status">
+      <Modal open={modalOpen} onClose={closeModal} title={submitted ? 'Application Submitted' : 'Apply Leave / Status'}>
+        {submitted ? (
+          <>
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-emerald-600/15 border border-emerald-500/30">
+              <span className="w-8 h-8 rounded-lg bg-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0">✓</span>
+              <div>
+                <p className="text-white text-sm font-medium">{submitted.type} application submitted</p>
+                <p className="text-white/40 text-xs">{submitted.date} · now Pending with {manager ? 'your manager' : 'admin'}</p>
+              </div>
+            </div>
+            <p className="text-white/40 text-xs mb-3">
+              {manager || adminEmail
+                ? 'Give your manager and admin a heads-up by email — this opens your own mail app with the details already filled in.'
+                : 'No manager or admin email is on file yet, so there\'s nothing to notify — they\'ll still see this in their approval queue.'}
+            </p>
+            <div className="flex gap-2 mt-3">
+              {(manager?.email || adminEmail) && (
+                <a
+                  href={buildLeaveNotifyMailto({
+                    employeeName: currentUser.name, leaveType: submitted.type, date: submitted.date,
+                    dayPart: submitted.dayPart, reason: submitted.reason, managerEmail: manager?.email, adminEmail,
+                  })}
+                  className="flex-1 text-center rounded-xl px-4 py-2.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all active:scale-95"
+                >
+                  Notify via Email
+                </a>
+              )}
+              <Button variant="secondary" onClick={closeModal}>Done</Button>
+            </div>
+          </>
+        ) : (
+        <>
         <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-indigo-600/20 border border-indigo-500/30">
           <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500/40 to-violet-500/40 flex items-center justify-center text-xs font-bold text-white shrink-0">{findLeaveType(form.type)?.icon}</span>
           <span className="text-white text-sm font-medium">{form.type}</span>
@@ -230,8 +274,10 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         {errs.submit && <p className="text-red-400 text-xs mb-2">{errs.submit}</p>}
         <div className="flex gap-2 mt-3">
           <Button className="flex-1" disabled={uploading} onClick={submit}>{uploading ? 'Uploading...' : 'Submit Application'}</Button>
-          <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={closeModal}>Cancel</Button>
         </div>
+        </>
+        )}
       </Modal>
     </>
   )

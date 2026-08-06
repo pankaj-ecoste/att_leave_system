@@ -64,7 +64,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         {tab === 'settings' && (
           <Settings
             employees={admin.employees} attendanceCount={Object.keys(attendanceHook.attendance).length} leaves={admin.leaves} auditLogs={admin.auditLogs}
-            holidays={admin.holidays} stdHours={admin.stdHours} updateSettings={admin.updateSettings} resetLeaveBalancesForNewFY={admin.resetLeaveBalancesForNewFY}
+            holidays={admin.holidays} stdHours={admin.stdHours} adminEmail={admin.adminEmail} updateSettings={admin.updateSettings} resetLeaveBalancesForNewFY={admin.resetLeaveBalancesForNewFY}
             addHoliday={admin.addHoliday} deleteHoliday={admin.deleteHoliday} onAudit={onAudit}
             lastImports={{
               leaveBalance: imports.leaveBalance.sheet?.importedAt,
