@@ -193,6 +193,7 @@ export function rowToLeave(row) {
     dayPart: row.day_part || 'full',
     reason: row.reason,
     location: row.location,
+    documentPath: row.document_path,
     status: row.status,
     appliedAt: row.applied_at,
     updatedAt: row.updated_at,

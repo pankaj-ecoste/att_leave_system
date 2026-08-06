@@ -4,8 +4,11 @@ import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { getLocation } from '../../hooks/useGeolocation'
-import { todayIST } from '../../lib/datetime'
+import { uploadLeaveDocument } from '../../api/documents'
+import { todayIST, daysFromTodayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
+
+const EARNED_LEAVE_ADVANCE_DAYS = 7
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -21,6 +24,8 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   const [form, setForm] = useState({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
   const [errs, setErrs] = useState({})
   const [locationStatus, setLocationStatus] = useState('')
+  const [file, setFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
 
   const myLeaves = leaves.filter(l => l.empId === currentUser.id)
   const avLT = availableLeaveTypes()
@@ -30,9 +35,13 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
-    setForm({ type: label, date: todayIST(), dayPart: 'full', reason: '', location: null })
+    // Earned Leave needs 7 days' notice — default straight to the earliest allowed
+    // date instead of today, so the employee isn't set up to fail the server check.
+    const date = label === 'Earned Leave' ? daysFromTodayIST(EARNED_LEAVE_ADVANCE_DAYS) : todayIST()
+    setForm({ type: label, date, dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
+    setFile(null)
     setModalOpen(true)
   }
 
@@ -42,11 +51,25 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
     const needsLocation = form.type === 'Work From Home' || form.type === 'On Duty'
     if (needsLocation && !form.location) nextErrs.location = `Location is required for ${form.type}`
+    if (form.type === 'Sick Leave' && !file) nextErrs.file = 'A prescription or medical certificate is required for Sick Leave'
     setErrs(nextErrs)
     if (Object.keys(nextErrs).length) return
 
+    let documentPath = null
     try {
-      await applyLeave(currentUser, form)
+      if (file) {
+        setUploading(true)
+        documentPath = await uploadLeaveDocument(file)
+      }
+    } catch (err) {
+      setUploading(false)
+      setErrs({ file: err.message || 'Could not upload the file — please try again' })
+      return
+    }
+    setUploading(false)
+
+    try {
+      await applyLeave(currentUser, { ...form, documentPath })
     } catch (err) {
       // Includes the server's own balance check (P4-9 — "Insufficient X balance"),
       // surfaced plainly rather than as an unhandled error (§8C).
@@ -58,6 +81,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     setForm({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
+    setFile(null)
   }
 
   function captureLocation() {
@@ -157,7 +181,26 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         </div>
         {errs.type && <p className="text-red-400 text-xs mb-2">{errs.type}</p>}
         <Label>Date</Label>
-        <Input type="date" className="mb-3" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+        <Input
+          type="date" className="mb-3" value={form.date}
+          min={form.type === 'Earned Leave' ? daysFromTodayIST(EARNED_LEAVE_ADVANCE_DAYS) : undefined}
+          onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+        />
+        {form.type === 'Earned Leave' && (
+          <p className="text-white/30 text-xs mb-3 -mt-2">Earned Leave can only be availed at least {EARNED_LEAVE_ADVANCE_DAYS} days in advance</p>
+        )}
+        {form.type === 'Sick Leave' && (
+          <div className="mb-3 p-3 rounded-xl border bg-rose-500/10 border-rose-500/20">
+            <p className="text-rose-300 text-xs font-medium mb-2">Prescription / medical certificate is mandatory for Sick Leave</p>
+            <input
+              type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={e => setFile(e.target.files?.[0] || null)}
+              className="block w-full text-xs text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-rose-500/20 file:text-rose-300 hover:file:bg-rose-500/30"
+            />
+            {file && <p className="text-emerald-400 text-xs mt-2">Selected: {file.name}</p>}
+            {errs.file && <p className="text-red-400 text-xs mt-1">{errs.file}</p>}
+          </div>
+        )}
         {HALF_DAY_ELIGIBLE_TYPES.includes(form.type) && (
           <>
             <Label>Duration</Label>
@@ -186,7 +229,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         {errs.location && <p className="text-red-400 text-xs mb-2">{errs.location}</p>}
         {errs.submit && <p className="text-red-400 text-xs mb-2">{errs.submit}</p>}
         <div className="flex gap-2 mt-3">
-          <Button className="flex-1" onClick={submit}>Submit Application</Button>
+          <Button className="flex-1" disabled={uploading} onClick={submit}>{uploading ? 'Uploading...' : 'Submit Application'}</Button>
           <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
         </div>
       </Modal>

@@ -46,6 +46,7 @@ export function useEmployeeLeave(token, empId, onAudit) {
       dayPart: form.dayPart || 'full',
       reason: form.reason,
       location: form.location || null,
+      documentPath: form.documentPath || null,
     })
     if (saved) setLeaves(prev => [saved, ...prev])
     onAudit?.('LEAVE_APPLY', `${currentUser.name} applied ${form.type} on ${form.date}`, currentUser.name)

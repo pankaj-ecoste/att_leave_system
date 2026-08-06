@@ -30,6 +30,14 @@ export function todayIST() {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
 }
 
+// N days from today in IST, as YYYY-MM-DD — used for advance-notice rules (e.g. Earned
+// Leave's 7-day minimum). Same "call at point of use, never cache" rule as todayIST.
+export function daysFromTodayIST(days) {
+  const d = nowIST()
+  d.setUTCDate(d.getUTCDate() + days)
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
+}
+
 // Current time in IST, as HH:MM.
 export function nowTimeIST() {
   const d = nowIST()

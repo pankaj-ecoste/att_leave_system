@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { getLeaveDocumentUrl } from '../../api/documents'
 
 export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, decideRegularization, onAudit }) {
   const [errMsg, setErrMsg] = useState('')
+
+  async function viewDocument(path) {
+    try {
+      const url = await getLeaveDocumentUrl(path)
+      window.open(url, '_blank', 'noopener')
+    } catch (err) { setErrMsg(err.message) }
+  }
 
   async function handleDecideLeave(id, action) {
     const decision = action === 'approve' ? 'Approved' : 'Rejected'
@@ -83,6 +91,11 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
                 </div>
                 <p className="text-white/40 text-xs">{l.date} · {l.company?.split(' ')[0]}</p>
                 <p className="text-white/60 text-xs mt-1 italic">"{l.reason}"</p>
+                {l.documentPath && (
+                  <button onClick={() => viewDocument(l.documentPath)} className="text-indigo-400 hover:text-indigo-300 text-xs mt-1.5 underline underline-offset-2">
+                    View prescription
+                  </button>
+                )}
                 {/* P4-4 — the manager's decision, visible before admin acts on top of it. */}
                 {l.hasManager ? (
                   <p className="text-emerald-400/70 text-xs mt-1.5">✓ Approved by {l.managerName || 'manager'}{l.managerDecidedAt ? ` on ${new Date(l.managerDecidedAt).toLocaleDateString()}` : ''}</p>
@@ -124,7 +137,10 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
               <tr key={l.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <td className="py-2 pr-4 text-white/80">{l.empName}</td>
                 <td className="py-2 pr-4 text-white/30">{l.company?.split(' ')[0]}</td>
-                <td className="py-2 pr-4">{l.leaveType}{l.dayPart !== 'full' && <span className="text-white/30"> ({l.dayPart === 'first_half' ? '1st Half' : '2nd Half'})</span>}</td>
+                <td className="py-2 pr-4">
+                  {l.leaveType}{l.dayPart !== 'full' && <span className="text-white/30"> ({l.dayPart === 'first_half' ? '1st Half' : '2nd Half'})</span>}
+                  {l.documentPath && <button onClick={() => viewDocument(l.documentPath)} className="ml-1.5 text-indigo-400 hover:text-indigo-300 underline underline-offset-2">doc</button>}
+                </td>
                 <td className="py-2 pr-4 font-mono">{l.date}</td>
                 <td className="py-2 pr-4 max-w-[150px] truncate text-white/40">{l.reason}</td>
                 <td className="py-2"><span className={`px-2 py-1 rounded-full text-xs border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span></td>

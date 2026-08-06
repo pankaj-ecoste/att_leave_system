@@ -38,6 +38,7 @@
 ✅ DONE      Day 2 morning through afternoon — Phase 3 (P3-1..P3-15) complete, you confirmed 2026-08-06
 ✅ DONE      Day 2 evening — real two-stage leave approval (P4-1, P4-2, P4-4, P4-8, P4-9), verified live via 13 scripted checks. P4-3/P4-5 UI code-complete but not screen-watched. P4-6 (email) stays blocked on Q-2/Q-3 (hosting URL, DNS access) — not a code task, needs your answer. P4-7 needs nothing — Q-10 already resolved it. **Day 2 is done.**
 ✅ DONE      Day 3 — P4B-1..P4B-15 (half-day leave, accrual, probation/notice caps, 18-month service check, LOP rules), P4C-1..P4C-4 (daily report export), P6 hardening (soft delete, PIN old-PIN check, alert() replacement, indexes, export fix), T-1/T-2 (full end-to-end test, migration checklist). 6 migrations (0013-0018), 2 real security bugs found and fixed along the way (a pre-existing `log_audit` grant gap and a function-overload gap in the new PIN hardening — see below). **Day 3 is done — only T-3 (database password reset) is left, and it's yours.**
+✅ DONE      Post-Day-3 refinements (your live feedback, 2026-08-06): the Apply Leave dialog no longer repeats the full tile grid inside itself (was confusing — looked like a bug where picking Casual Leave could "reopen" as Sick Leave) · **Earned Leave now requires 7 days' advance notice**, with the date field defaulting straight to the earliest allowed date and a clear on-screen note · **Sick Leave now requires a prescription/medical certificate upload** before you can submit, stored in a private Supabase Storage bucket, viewable by managers/admin via a "View prescription" link. `0019_earned_leave_advance_notice.sql`. A real pre-existing bug (unrelated to this session) was also found and fixed during the browser click-through: duplicate React keys in the monthly attendance calendar grid.
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -687,6 +688,57 @@ via direct SQL afterward (soft delete means the RPC alone wouldn't remove them).
 - [ ] All three Excel imports process every row — unchanged from Day 1, not re-tested this session (no import-path code changed)
 - [ ] Old project kept as fallback for one week — a Day-3-end operational note, not a code check
 - [ ] Database password reset — T-3, still yours to do
+
+---
+
+# 📌 Post-Day-3 refinements (2026-08-06)
+
+Your live feedback after a browser click-through of the finished build, actioned the same day.
+
+| ID | What | Status |
+|---|---|:--:|
+| — | Apply Leave dialog no longer repeats the full 12-tile type grid inside itself | ✅ verified live |
+| — | Earned Leave requires 7 days' advance notice | ✅ verified live (script + browser) |
+| — | Sick Leave requires a prescription/medical certificate upload to submit | ✅ verified live (script + browser) |
+| — | Duplicate React keys in the monthly calendar grid (pre-existing, unrelated bug found during click-through) | ✅ fixed |
+
+**Apply Leave dialog:** you flagged that clicking a leave tile (e.g. Casual Leave) opened
+a dialog that *also* showed the full type grid again inside it, letting the selection
+silently change — confusing enough to read as a bug. The dialog now just shows the type
+you tapped as a fixed header; `LeaveApply.jsx`.
+
+**Earned Leave — 7-day advance notice (`0019_earned_leave_advance_notice.sql`):**
+tightens the existing 1-day pre-approval rule (0016) specifically for Earned Leave to 7
+days. The date field now defaults straight to `today + 7` when you open the Earned Leave
+form, with a note explaining why, and the date picker's `min` attribute blocks selecting
+anything earlier — the server is still the real enforcement point, this is just to stop
+you from filling in a date that's guaranteed to be rejected.
+
+**Sick Leave — prescription upload:** `leave_applications.document_path` (nullable) ·
+`employee_apply_leave` now rejects a Sick Leave application with no document attached ·
+a private Supabase Storage bucket (`leave-documents`, not public, 10MB limit, images/PDF
+only) with `anon` INSERT + SELECT policies — **no DELETE policy on purpose**, so a
+submitted document can't be deleted by an employee or admin action once attached.
+**Documented security posture:** this app has no Supabase Auth session (employees log in
+via a custom PIN check, not `auth.users`), so storage access can't be scoped per-employee
+the fine-grained way table RLS is — the practical ceiling here is an unguessable,
+client-generated UUID as the folder name, not full public/private access control. You
+explicitly signed off on this tradeoff before it was built. Viewable via a "View
+prescription" link (admin's Leave Approvals, the manager's Team panel) that generates a
+short-lived signed URL on click, not a permanent public link.
+
+**Verified live** — script (8/8 checks: EL rejected at 3 days out, accepted at exactly 7;
+SL rejected with no document, accepted with one; `admin_get_leaves` surfaces
+`document_path`; the bucket rejects a disallowed mime type and accepts an allowed one;
+a signed URL can be generated for an uploaded file) and a real browser click-through
+(EL's auto-filled +7-day date and note, SL's required-file validation firing correctly,
+and a real file genuinely uploaded to the bucket via the actual file picker — confirmed
+afterward by querying `storage.objects` directly). G-1 clean (73 functions, 19 tables),
+G-2 smoke test 62/62, `npm run build`/`npm run test` (27 tests) both green.
+
+**Not independently verified** — the manager's and admin's "View prescription" links
+open a signed URL correctly per the underlying storage API (proven by script), but
+nobody has clicked the actual link in a browser and confirmed the file opens/displays.
 
 ---
 

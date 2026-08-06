@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/Input'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
+import { getLeaveDocumentUrl } from '../../api/documents'
 
 // The manager view for anyone with direct reports — appears as a tab inside the
 // employee dashboard (one person can be both), not a separate login.
@@ -32,6 +33,13 @@ export function TeamPanel({
     } catch (err) {
       setErrMsg(err.message)
     }
+  }
+
+  async function viewDocument(path) {
+    try {
+      const url = await getLeaveDocumentUrl(path)
+      window.open(url, '_blank', 'noopener')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   const pendingLeaves = teamLeaves.filter(l => l.status === 'Pending')
@@ -71,6 +79,11 @@ export function TeamPanel({
                     <p className="text-white font-medium text-sm">{l.empName}</p>
                     <p className="text-white/50 text-xs">{l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`} · {l.date}</p>
                     <p className="text-white/30 text-xs mt-1 italic">{l.reason}</p>
+                    {l.documentPath && (
+                      <button onClick={() => viewDocument(l.documentPath)} className="text-indigo-400 hover:text-indigo-300 text-xs mt-1 underline underline-offset-2">
+                        View prescription
+                      </button>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
                     <Button className="text-xs py-1 px-3" onClick={() => handleDecide(decideLeave, l.id, 'Approved')}>Approve</Button>

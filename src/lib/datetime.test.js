@@ -2,7 +2,7 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, financialYearFor, monthsOfServiceSince, isWithinCooldown } from './datetime'
+import { calcRawHrs, calcStatus, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
 import { DAY_TYPES } from './constants'
 
 describe('calcRawHrs', () => {
@@ -103,6 +103,20 @@ describe('monthsOfServiceSince', () => {
 
   it('returns 0 when there is no joining date', () => {
     expect(monthsOfServiceSince(null, '2026-04-20')).toBe(0)
+  })
+})
+
+describe('daysFromTodayIST', () => {
+  it('0 days out equals todayIST', () => {
+    expect(daysFromTodayIST(0)).toBe(todayIST())
+  })
+
+  it('advances the calendar date by the given number of days', () => {
+    const today = new Date(todayIST() + 'T00:00:00Z')
+    const expected = new Date(today)
+    expected.setUTCDate(expected.getUTCDate() + 7)
+    const expectedStr = `${expected.getUTCFullYear()}-${String(expected.getUTCMonth() + 1).padStart(2, '0')}-${String(expected.getUTCDate()).padStart(2, '0')}`
+    expect(daysFromTodayIST(7)).toBe(expectedStr)
   })
 })
 

@@ -26,6 +26,7 @@ export async function employeeApplyLeave(token, empId, leave) {
       day_part: leave.dayPart || 'full',
       reason: leave.reason,
       location: leave.location || null,
+      document_path: leave.documentPath || null,
     },
   })
   if (error) throw error
