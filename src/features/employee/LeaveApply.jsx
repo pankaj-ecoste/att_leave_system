@@ -5,7 +5,7 @@ import { Input, Label } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { getLocation } from '../../hooks/useGeolocation'
 import { todayIST } from '../../lib/datetime'
-import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS } from '../../lib/constants'
+import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -151,13 +151,9 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
       </Card>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Apply Leave / Status">
-        <Label>Type <span className="text-red-400">*</span></Label>
-        <div className="grid grid-cols-2 gap-2 mb-3 max-h-52 overflow-y-auto pr-1">
-          {avLT.map(lt => (
-            <button key={lt.label} onClick={() => setForm(p => ({ ...p, type: lt.label, dayPart: HALF_DAY_ELIGIBLE_TYPES.includes(lt.label) ? p.dayPart : 'full' }))} className={`p-2 rounded-xl text-xs text-left border transition-all ${form.type === lt.label ? 'bg-indigo-600/30 border-indigo-500/50 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
-              <p className="text-xs font-bold text-white/40 mb-0.5">{lt.icon}</p>{lt.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-indigo-600/20 border border-indigo-500/30">
+          <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500/40 to-violet-500/40 flex items-center justify-center text-xs font-bold text-white shrink-0">{findLeaveType(form.type)?.icon}</span>
+          <span className="text-white text-sm font-medium">{form.type}</span>
         </div>
         {errs.type && <p className="text-red-400 text-xs mb-2">{errs.type}</p>}
         <Label>Date</Label>
