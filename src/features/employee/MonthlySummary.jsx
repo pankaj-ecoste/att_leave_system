@@ -40,7 +40,7 @@ export function MonthlySummary({ currentUser, attendance, stdHours, holidays }) 
       </div>
       <div className="grid grid-cols-7 gap-1">
         {cells.map((d, i) => {
-          if (!d) return <div key={i} />
+          if (!d) return <div key={`blank-${i}`} />
           const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
           const rec = attendance[`${currentUser.id}_${dateStr}`] || {}
           const isToday = dateStr === today
