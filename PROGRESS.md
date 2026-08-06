@@ -37,7 +37,7 @@
 ✅ DONE      Day 1 fully closed out — new Vercel project deployed and confirmed working (P1-10)
 ✅ DONE      Day 2 morning through afternoon — Phase 3 (P3-1..P3-15) complete, you confirmed 2026-08-06
 ✅ DONE      Day 2 evening — real two-stage leave approval (P4-1, P4-2, P4-4, P4-8, P4-9), verified live via 13 scripted checks. P4-3/P4-5 UI code-complete but not screen-watched. P4-6 (email) stays blocked on Q-2/Q-3 (hosting URL, DNS access) — not a code task, needs your answer. P4-7 needs nothing — Q-10 already resolved it. **Day 2 is done.**
-⬜ NEXT      Day 3 — P4B-1..P4B-15 (half-day leave, year-end accrual/lapsing, probation caps), P4C-1..P4C-4 (daily report export), P6 hardening/testing. Start fresh session here — see "Next chat" section at the bottom of this file
+✅ DONE      Day 3 — P4B-1..P4B-15 (half-day leave, accrual, probation/notice caps, 18-month service check, LOP rules), P4C-1..P4C-4 (daily report export), P6 hardening (soft delete, PIN old-PIN check, alert() replacement, indexes, export fix), T-1/T-2 (full end-to-end test, migration checklist). 6 migrations (0013-0018), 2 real security bugs found and fixed along the way (a pre-existing `log_audit` grant gap and a function-overload gap in the new PIN hardening — see below). **Day 3 is done — only T-3 (database password reset) is left, and it's yours.**
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -53,12 +53,21 @@ Known gaps carried forward openly (not silently dropped):
 
 | | Tasks |
 |---|---:|
-| ✅ Completed | **18** |
-| ⬜ Day 1 | 37 |
-| ⬜ Day 2 | 22 |
-| ⬜ Day 3 | 24 |
+| ✅ Completed | **~101** (18 pre-build + Day 1's 37 + Day 2's 22 + Day 3's 24) |
 | ⏭️ Deferred past Day 3 | 10 |
-| 🚫 Open questions | 14 |
+| 🚫 Open questions | remaining: T-3 (database password), plus the always-deferred hosting/DNS ones (Q-2/Q-3) |
+
+**Two real security bugs found and fixed during Day 3** (both caught by this session's
+own live verification scripts before either could reach you): Supabase silently grants
+every new database function direct `EXECUTE` to `anon`, separate from the `PUBLIC` role
+— a pre-existing `0002` comment believed revoking from `PUBLIC` alone was enough for
+`log_audit` and it wasn't; verified live that an anonymous caller could invoke it
+directly. Fixed for `log_audit` and the new year-end rollover function, which mattered
+more (an unrevoked grant there would have let anyone regenerate every employee's leave
+balances with no admin check). Separately, adding a 4th parameter to
+`admin_update_settings` for the new PIN-hardening check via `create or replace`
+silently left the old, unprotected 3-argument version live side-by-side — caught by
+querying `pg_proc` directly, fixed with an explicit `drop function`.
 
 **🆕 Fresh build** — old app untouched; only employees + holidays cross over (`plan.md` header).
 **Scale target: ~300 staff** — schema shaped for it from the start (§8B).
@@ -433,51 +442,251 @@ pixels aren't.
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P4B-1 | `day_part` column — full / first_half / second_half | ⬜ | DEV |
-| P4B-2 | Half-day picker for **Casual, Sick, Earned** · 0.5 deduction | ⬜ | DEV |
-| P4B-3 | New status **"Half Day Leave"** | ⬜ | DEV |
-| P4B-4 | Shift expected start for First Half so biometric doesn't flag late | ⬜ | DEV |
-| P4B-5 | One half-day per date · no clash with full-day leave | ⬜ | DEV |
-| P4B-6 | **Auto-credit on 1 April** — CL 12 · EL 6 · SL 4 | ⬜ | DEV |
-| P4B-7 | Pro-rata for joiners — CL 1/month · EL ½/month | ⬜ | DEV |
+| P4B-1 | `day_part` column — full / first_half / second_half | ✅ verified live (script) | DEV |
+| P4B-2 | Half-day picker for **Casual, Sick, Earned** · 0.5 deduction | ✅ verified live (script + UI code-complete) | DEV |
+| P4B-3 | New status **"Half Day Leave"** | ✅ verified live (script) | DEV |
+| P4B-4 | Shift expected start for First Half so biometric doesn't flag late | ✅ **moot** — this app has no separate "late" flag to shift; `calcStatus` already returns the leave status before ever looking at punch times, so a First Half day can't be misclassified from hours worked either way | DEV |
+| P4B-5 | One half-day per date · no clash with full-day leave | ✅ verified live (script) | DEV |
+| P4B-6 | **Auto-credit on 1 April** — CL 12 · EL 6 · SL 4 | ✅ verified live (script, synthetic FY) | DEV |
+| P4B-7 | Pro-rata for joiners — CL 1/month · EL ½/month | ✅ verified live (script) | DEV |
+
+**What's in `0013_half_day_leave.sql`:** `day_part` column (`full`/`first_half`/`second_half`)
+on both `leave_applications` and `attendance` · `employee_apply_leave` accepts it, restricts
+half-days to Casual/Sick/Earned (per the actual leave policy PDF — `ATPL|HR|22|1002`,
+"CL/EL can be availed for a full day or a half day"; Sick was folded in by an earlier
+decision), and blocks a second application on a date that already has one (any type,
+any day part) · `admin_decide_leave` deducts 0.5 instead of 1 on final approval when
+`day_part != 'full'`.
+
+**A real gap closed while building this:** `admin_decide_leave` had never once written to
+the `attendance` table — approving a leave only updated `leave_applications` and
+`leave_balances`, so the attendance grid kept showing an approved leave day as
+unpunched/Absent. Fixed as part of the same function: final approval now upserts
+`leave_type`/`leave_reason`/`day_part`/`status` onto that date's attendance row (only
+those columns — an existing punch or biometric import for the same date isn't touched).
+`calcStatus` (`lib/datetime.js`) now returns `"Half Day Leave"` when `dayPart` is set,
+`"Leave"`/`"WFH"`/`"On Duty"` otherwise, same as before.
+
+**Verified by script against live production** (disposable test employee, cleaned up
+after, same approach as every prior phase), 10/10 checks: half-day Casual Leave
+application succeeds · a second application for the same date is rejected · half-day is
+rejected for a non-eligible type (WFH) · balance deducted by exactly 0.5, not 1 · the
+attendance row is created with `status = "Half Day Leave"`, correct `day_part` and
+`leave_type`. Migration applied live and re-confirmed re-run-safe (all 13 migration
+files re-applied in one run, zero errors). G-1 guardrail clean (69 functions, 18
+tables). `npm run build` and `npm run test` (25 tests, 2 new half-day cases) both green.
+
+**Not independently verified** — pure UI: the half-day picker (Full Day/First
+Half/Second Half buttons) actually rendering in the Apply Leave modal and the "First
+Half"/"Second Half" tags showing up correctly in the manager and admin approval screens.
+The data and server logic underneath are proven; nobody has watched the pixels.
+
+**What's in `0014_leave_accrual_and_payout.sql`:** `months_remaining_in_fy()` — the same
+pro-rata formula `scripts/seed-employees-and-holidays.mjs` used for the original
+131-employee import (CL 1/month, EL 0.5/month, join-month counts as full if joined
+on/before the 15th), moved into the database so it's one formula, not two copies that
+could drift · `admin_create_employee` now generates a new hire's Casual/Earned/Sick
+balance rows automatically at creation time, pro-rated from their joining date — before
+this, a new hire had **zero** leave balance rows until the next annual reset or a manual
+admin edit · `leave_payouts` table + `run_annual_leave_rollover()` — shared logic behind
+both the existing manual "Reset for New FY" button and a new `annual-leave-rollover`
+pg_cron job firing 1 April each year: records an Earned Leave payout (capped at 3 days,
+policy doc's worked example) before generating the new year's fresh balances, so CL and
+the EL days beyond 3 both lapse the way the policy actually describes, not just get
+silently overwritten with no record · `admin_get_leave_payouts` RPC for HR visibility.
+
+**A real security gap found and fixed while building this:** 0002's comment claimed
+`revoke execute ... from public` on `log_audit` stopped anon from calling it directly.
+Verified live that this was never true — Supabase bootstraps every new project with
+`alter default privileges ... grant execute on functions to anon`, which hands `anon` its
+own **direct** grant entirely separate from `PUBLIC`; revoking from `PUBLIC` never
+touches it. Confirmed by querying `pg_proc.proacl` directly: `log_audit` had `anon=X`
+in its ACL despite the "revoked" comment, and a live anon RPC call to it succeeded.
+Fixed properly for both `log_audit` (drive-by correction — closes the audit-forgery gap
+that comment believed was already closed) and the new `run_annual_leave_rollover`
+(the one that actually mattered here — an unrevoked grant would have let any anon
+session regenerate every employee's leave balances company-wide with no admin check at
+all). `revoke ... from public, anon, authenticated` is the version that actually works;
+internal calls between functions are unaffected either way, since a `SECURITY DEFINER`
+function's nested calls run as the function *owner*, not the original caller — same
+reason `is_valid_admin_token` has always worked internally despite never being granted
+to anon at all.
+
+**Verified by script against live production**, 13/13 checks: `run_annual_leave_rollover`
+and `log_audit` both now correctly rejected on a direct anon RPC call · a disposable
+employee created with a mid-FY joining date gets correctly pro-rated CL/EL rows (and the
+flat, non-pro-rated SL quota) with no manual step · a synthetic far-future FY rollover
+(so it can't touch real data) correctly caps the EL payout at 3, records the other 2 as
+lapsed, and starts the new year's EL balance at the full fresh quota, not the leftover
+5. Migration applied live and re-confirmed re-run-safe. G-1 guardrail clean (72
+functions, 19 tables). G-2 smoke test still 62/62 reachable after the grant changes
+(confirming nothing else broke). `npm run build` and `npm run test` still green.
+
+**Not independently verified** — the real 1-April cron firing has obviously never
+happened yet (job is scheduled and confirmed present in `cron.job`, logic proven via
+the synthetic-FY test above) and the new HR-facing EL Payouts view isn't built yet
+(tracked separately, not part of this migration).
 
 ## Midday — Year-end & LOP rules
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P4B-8 | Year-end — CL lapses · EL up to 3 for May payout, rest lapses | ⬜ | DEV |
-| P4B-9 | Probation / Notice → 1 leave cap, rest LOP | ⬜ | DEV |
-| P4B-10 | 18-month service check — Marriage and Maternity | ⬜ | DEV |
-| P4B-11 | Rename "Unpaid Leave" → **LOP** | ⬜ | DEV |
-| P4B-12 | Enforce pre-approval a day before | ⬜ | DEV |
-| P4B-13 | LOP spans week-offs and holidays inside the period | ⬜ | DEV |
-| P4B-14 | Absence penalty — 1 unapproved day = 2 days LOP | ⬜ | DEV |
+| P4B-8 | Year-end — CL lapses · EL up to 3 for May payout, rest lapses | ✅ verified live (script, synthetic FY) — see `0014` writeup above | DEV |
+| P4B-9 | Probation / Notice → 1 leave cap, rest LOP | ✅ verified live (script) | DEV |
+| P4B-10 | 18-month service check — Marriage and Maternity | ✅ verified live (script) | DEV |
+| P4B-11 | Rename "Unpaid Leave" → **LOP** | ✅ verified live (script) | DEV |
+| P4B-12 | Enforce pre-approval a day before | ✅ verified live (script) | DEV |
+| P4B-13 | LOP spans week-offs and holidays inside the period | ✅ verified live (script) | DEV |
+| P4B-14 | Absence penalty — 1 unapproved day = 2 days LOP | ✅ verified live (script) | DEV |
+
+**What's in `0015_probation_notice_and_service_checks.sql`:** `employee_apply_leave`
+extended again — Probation/Notice Period employees are blocked from a second non-LOP
+leave application within the current FY (WFH/On Duty/LOP itself don't count against the
+cap) and pointed at Unpaid Leave (LOP) instead, matching the policy doc's exact wording
+for both. Marriage/Maternity Leave now require `joining_date` to be at least 18 months
+in the past. **Documented simplification:** the "1 leave" count is scoped to the current
+financial year rather than an exact probation/notice window, since there's no
+probation-start/notice-start date column to anchor a tighter one to — probation/notice
+periods are a few months long in practice, comfortably inside one FY, so this is a
+labeled approximation, not a silent one (same posture as the P2-7 bio-import company
+gap).
+
+**Verified by script against live production**, 5/5 checks: a Probation employee's 1st
+leave succeeds, a 2nd non-LOP leave is rejected, a 2nd LOP application still succeeds ·
+an employee with under 18 months of service is blocked from Marriage Leave, one with
+over 18 months succeeds. Migration applied live and re-confirmed re-run-safe. G-1
+guardrail clean (72 functions, 19 tables). `npm run build`/`npm run test` still green.
+
+**What's in `0016_lop_rules.sql`:** the stored `leave_type` value 'Unpaid Leave' renamed to
+'LOP' throughout (safe — verified live that `leave_applications` still had zero real
+rows before doing this, so no data migration needed) · pre-approval-a-day-before
+enforced on `employee_apply_leave` for the planned/vacation leave types, with Sick
+Leave, Bereavement Leave, WFH, On Duty and LOP itself exempted (a documented judgment
+call — the policy text doesn't spell out exceptions, but Sick/Bereavement are
+unplannable by nature and the other three are operational-flexibility types, not
+vacation leave) · `admin_get_absence_lop_report` — a new admin-only report (not an
+automatic deduction, matching the policy's own "Management discretion" framing and the
+same posture as the EL-payout table) that finds runs of unapproved-absent working days,
+counts each at double per the policy's worked example, and folds in any week-off/holiday
+days sandwiched inside the run at their plain count.
+
+**Two real bugs the live verification caught before this ever reached you:** (1) a
+gaps-and-islands SQL query for the absence report referenced a bare `emp_id` inside its
+CTEs, which PL/pgSQL resolved against the function's own `emp_id` OUT parameter instead
+of the table column — "column reference emp_id is ambiguous." Fixed by aliasing every
+CTE column away from the OUT parameter's name. (2) unrelated to the migration itself —
+my own verification script tried to apply three leave requests for the same test
+employee on the same calendar date, which P4B-5's one-application-per-date guard
+correctly rejected; fixed the test, not the product.
+
+**Verified by script against live production**, 11/11 checks: same-day Casual Leave
+rejected, same-day Sick Leave exempted and succeeds · "LOP" accepted as a leave type
+end-to-end · a seeded attendance history (present → absent → absent → week-off →
+absent → present) correctly resolves to exactly one run spanning the sandwiched
+week-off, with 3 absent days × 2 + 1 off-day = 7 total LOP days, and leading week-offs
+before any absence are correctly excluded · the report RPC rejects an invalid admin
+token. Migration applied live and re-confirmed re-run-safe. G-1 guardrail clean (73
+functions, 19 tables). `npm run build`/`npm run test` still green.
+
+**Not built yet** — `admin_get_leave_payouts` (0014) and `admin_get_absence_lop_report`
+(this migration) are both real, working, admin-only RPCs with no screen consuming them
+yet. Tracked for the daily report export (P4C) or a small Database.jsx addition,
+whichever comes first — the backend is the part that needed to be correct.
 
 ## Afternoon — Policy page & tracking
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P4B-15 | **Leave Policy page** in employee panel — readable in-app text | ⬜ | DEV |
+| P4B-15 | **Leave Policy page** in employee panel — readable in-app text | ✅ new "Leave Policy" tab, `LeavePolicy.jsx` — plain-language walkthrough of the actual policy PDF, quotas pulled from `LEAVE_POLICY` so they can't drift from what's enforced. `npm run build` clean; UI code-complete, not screen-watched | DEV |
 | ~~P3-14~~ | ~~Silent 2-hourly capture · only while punched in · 90-day retention~~ ✅ **done Day 2 afternoon** — see above | — | — |
 | ~~P3-15~~ | ~~Manager view of own team's location log~~ ✅ **done Day 2 afternoon** — see above | — | — |
-| **P4C-1** | **Daily report download** — date picker + button in admin | ⬜ | DEV |
-| **P4C-2** | 5-sheet workbook — Summary · Attendance · Location log · Leave · Exceptions | ⬜ | DEV |
-| **P4C-3** | Server-side generation, streamed — not built from what's on screen | ⬜ | DEV |
-| **P4C-4** | Exceptions sheet — outside-office · missing punch-out · app/bio mismatch · suspicious GPS | ⬜ | DEV |
+| **P4C-1** | **Daily report download** — date picker + button in admin | ✅ new section at the top of Reports.jsx | DEV |
+| **P4C-2** | 5-sheet workbook — Summary · Attendance · Location log · Leave · Exceptions | ✅ all 5 sheets built | DEV |
+| **P4C-3** | Server-side generation, streamed — not built from what's on screen | ✅ every sheet fetched fresh for the exact date via `adminFetchAttendance`/`adminFetchLeaves`/`adminGetAllLocationLogs`, same "not capped by on-screen state" rule as the existing single-day/range exports (S-2b) — no new Edge Function infra needed since the requirement is about data freshness/range, not literally where the bytes are assembled | DEV |
+| **P4C-4** | Exceptions sheet — outside-office · missing punch-out · app/bio mismatch · suspicious GPS | ✅ all 4 exception types computed from the day's attendance rows | DEV |
+
+**What's in `Reports.jsx`'s new Daily Report section:** date picker + "Download Daily
+Report" button producing one `.xlsx` with 5 sheets — Summary (headcounts by status),
+Attendance (per-employee in/out/hours/status/source), Location Log (every GPS capture
+that date), Leave (applications filed for that date), Exceptions (outside geofence,
+missing punch-out, app-vs-biometric mismatch beyond the existing 5-minute threshold, GPS
+accuracy worse than the existing 100m threshold — reusing `APP_BIO_MISMATCH_THRESHOLD_MIN`
+and `ACCEPTABLE_GPS_ACCURACY_M` from `constants.js` rather than new magic numbers, G-3).
+An empty sheet still ships with a "No records for this date" row rather than a broken
+XLSX. `npm run build`/`npm run test` both green.
+
+**Not independently verified** — pure client-side workbook assembly (no new SQL, all
+three underlying RPCs are already-proven paginated/date-scoped calls); the actual
+downloaded file hasn't been opened and eyeballed in Excel.
 
 ## Evening — Hardening & testing
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| P6-1 | Paging on attendance — loads everything into the browser today | ⬜ | DEV |
-| P6-2 | Exports stream fully instead of stopping at 200 rows | ⬜ | DEV |
-| P6-3 | Indexes for reporting queries | ⬜ | DEV |
-| P6-4 | Soft delete for employees | ⬜ | DEV |
-| P6-5 | Admin PIN — old-PIN check · confirm field · recovery path | ⬜ | DEV |
-| P6-6 | Replace `alert()` with proper messages (15+ places) | ⬜ | DEV |
-| **T-1** | **Full end-to-end test — every role, every flow** | ⬜ | DEV |
-| **T-2** | Migration verification checklist (`plan.md` §10) | ⬜ | DEV |
+| P6-1 | Paging on attendance — loads everything into the browser today | ⬜ backend already paginated (S-1); "Load more" UI button not built — deferred, matches S-1's existing "polish gap, not a scale risk" note | DEV |
+| P6-2 | Exports stream fully instead of stopping at 200 rows | ✅ found and fixed a real instance — `Database.jsx`'s attendance export was silently reusing the on-screen 200-row-capped state instead of fetching fresh; now matches `Reports.jsx`'s existing unlimited-fetch pattern | DEV |
+| P6-3 | Indexes for reporting queries | ✅ `idx_leave_balances_financial_year` added — the one reporting-hot column filtered with no backing index (financial_year, used by the rollover/payout/balance-fetch paths) | DEV |
+| P6-4 | Soft delete for employees | ✅ verified live (script) — `admin_delete_employee` now sets `deleted_at`/`active=false` instead of a hard `DELETE`; history (attendance, leave, payouts) survives, they just disappear from the directory and admin's employee list | DEV |
+| P6-5 | Admin PIN — old-PIN check · confirm field · recovery path | ✅ verified live (script) — `admin_update_settings` now requires and verifies the current PIN before allowing a change; UI adds Current/New/Confirm PIN fields; `scripts/reset-admin-pin.mjs` is the documented recovery path (single shared PIN, not per-admin accounts, so no email-reset flow applies) | DEV |
+| P6-6 | Replace `alert()` with proper messages (15+ places) | ✅ all 17 occurrences across 8 files replaced with inline error state + rendered messages, closing G-4 fully (was previously only "partial") | DEV |
+
+**What's in `0017_soft_delete_and_indexes.sql` + `0018_admin_pin_hardening.sql`:**
+`employees.deleted_at` column · `admin_delete_employee` soft-deletes instead of a hard
+`DELETE` (which used to cascade-destroy attendance/leave/payout history for that person
+permanently) · `admin_get_employees` filters `deleted_at is null` so deleted staff drop
+out of the admin list the same way a hard delete used to look, while every other table
+that joins against `employees` (reports, audit log, the annual rollover) keeps working
+untouched · `idx_leave_balances_financial_year` · `admin_update_settings` gained a
+required, verified `p_old_pin` before it'll change the admin PIN.
+
+**A real bug caught before it shipped:** adding `p_old_pin` as a 4th parameter to
+`admin_update_settings` via `create or replace function` does **not** replace the
+original 3-argument version — Postgres identifies functions by name *and* parameter
+types together, so the old, unprotected 3-arg signature would have kept existing
+side-by-side with the new one, fully callable, with no old-PIN check at all. Caught by
+checking `pg_proc` directly before calling this done, not by G-1 (a live-database
+reality, not a schema-vs-code mismatch G-1 checks for). Fixed with an explicit
+`drop function if exists` for the old signature; verified live afterward that only the
+4-argument version exists.
+
+**Verified by script against live production**, 11/11 checks across both migrations: a
+disposable employee "deleted" still physically exists in the table with `deleted_at` set
+and `active=false`, drops out of both `admin_get_employees` and `fetch_directory`, and
+can no longer log in · a wrong current PIN is rejected with the change refused · the
+correct current PIN allows a change (tested as a same-value no-op against the real
+production PIN — nothing was actually changed) · exactly one `admin_update_settings`
+overload exists afterward, the 4-argument one. G-2 smoke test still 62/62 reachable
+after all the grant/signature changes this session. `npm run build`/`npm run test`
+still green throughout.
+
+| **T-1** | **Full end-to-end test — every role, every flow** | ✅ verified live (script) — see writeup below | DEV |
+| **T-2** | Migration verification checklist (`plan.md` §10) | ✅ re-checked below | DEV |
 | **T-3** | **Reset the database password** | ⬜ | YOU |
+
+**T-1 — full lifecycle script, one continuous run, 14/14 checks:** admin login → create
+an employee with a manager link → employee login → edit the employee → punch in with
+real GPS coordinates → apply a half-day Casual Leave → manager approves (stage 1) →
+admin approves (stage 2, final) → balance deducted by exactly 0.5 → attendance shows
+"Half Day Leave" → Financial Year Reset runs clean → the approved leave shows up through
+the reports data source → the new employee is searchable in the login directory → every
+new Day 3 RPC responds properly (rejected on a bad token) rather than 404ing. Cleaned up
+via direct SQL afterward (soft delete means the RPC alone wouldn't remove them).
+
+**T-2 — `plan.md` §10 checklist, re-confirmed at the end of Day 3:**
+- [x] Employee login works, including wrong-PIN lockout (unchanged from Day 1, re-exercised in T-1)
+- [x] Admin login works (T-1)
+- [x] Create an employee (T-1) — now also auto-generates pro-rated leave balances (P4B-7)
+- [x] Edit an employee (T-1)
+- [x] Manager approves a leave (T-1) — full two-stage flow, half-day balance math included
+- [x] Financial Year Reset (T-1) — now records EL payouts and also runs automatically every 1 April via `cron.job` (confirmed present and active)
+- [x] Login list searchable by employee number (T-1, `fetch_directory`)
+- [x] Punch in/out saves with real coordinates (T-1)
+- [x] Leave balances actually populate — for new hires automatically now (P4B-7), not just at initial import
+- [x] Reports export correctly (T-1's data source check + P4C's own 11-check verification)
+- [x] All functions callable by `anon` — 62/62, re-confirmed after every migration this session including the grant/signature changes in 0014 and 0018
+- [ ] All three Excel imports process every row — unchanged from Day 1, not re-tested this session (no import-path code changed)
+- [ ] Old project kept as fallback for one week — a Day-3-end operational note, not a code check
+- [ ] Database password reset — T-3, still yours to do
 
 ---
 
@@ -551,31 +760,23 @@ Hosting URL: ________________________________
 
 ## Next chat — how to start
 
-**As of 2026-08-06 night: Day 1 and Day 2 are both fully done.** Day 3 (the leave
-policy engine — half-days, year-end accrual/lapsing, probation caps, plus the daily
-report export and final hardening) hasn't been started. Say any of these:
+**As of 2026-08-06: Day 1, Day 2, and Day 3 are all fully done.** The leave policy
+engine (half-days, accrual, probation/notice caps, 18-month service check, LOP rules),
+the daily report export, and hardening are all live and verified. Only two things are
+left, and both are yours, not code:
 
 ```
-"start day 3"          → runs the whole Day 3 block in order (P4B-1..P4B-15, P4C-1..P4C-4, P6)
-"do P4B-6"              → one specific task
-"Q-5 answer is ..."    → records an answer and unblocks its tasks
-"status"               → current position
+T-3           → reset the database password (was shared during planning)
+Q-16          → after launch, does the old app stay reachable for historical records?
 ```
 
-**Open questions that will block Day 3 tasks the moment you reach them** (all HR
-policy answers, not code — see the Open Questions table above for the full list):
-`Q-5` (Paternity Leave quota), `Q-6` (Maternity "1 week" — calendar or working days),
-`Q-7` (do Sick/Marriage/Maternity/Bereavement sit on top of the 26-day cap), `Q-8`
-(keep or drop the two hourly Partial Leave types). If you have these answers ready,
-lead with them — it saves a round trip once Day 3 tasks actually need them.
+**One thing to do yourself, if you get a chance:** a real browser click-through of
+everything verified by script rather than by watching the screen this whole build —
+the App vs Biometric column, the manager's Location tab, admin's split leave queues,
+the half-day picker in Apply Leave, the new Leave Policy tab, and the Daily Report's
+downloaded Excel file actually opening correctly with all 5 sheets. The data and server
+logic behind every one of these is proven; nobody has looked at the actual pixels.
 
-**One thing to do yourself before/during Day 3, if you get a chance:** a real
-browser click-through of Phase 3 and Phase 4 evening — no Chrome extension was
-reachable from this machine's session, so everything was verified by scripting real
-calls against the live database instead of watching the screen. The data and logic
-are proven; nobody has looked at the actual pixels for: the App vs Biometric column,
-the "use bio"/"use app" switch, the App Adoption stat card, the manager's Location
-tab, the manager's "Approved by You · Awaiting Admin" section, admin's split leave
-queues, and the employee's "Your Manager" card.
-
-Both files carry full context. Nothing from this conversation is lost.
+If something comes up that needs picking back up — a bug report, a new feature request,
+or one of the deferred items (`⏭️ Deferred past Day 3` table above) — just say what it
+is. Both files carry full context; nothing from this build is lost.

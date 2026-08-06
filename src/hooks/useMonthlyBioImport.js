@@ -230,7 +230,7 @@ export function useMonthlyBioImport(token, employees, setEmployees, attendance, 
     try {
       await adminClearMonthlySheet(token)
       setSheet(null); setStatus(''); setSyncLog([])
-    } catch (err) { alert(err.message) }
+    } catch (err) { setStatus(`Error: ${err.message}`) }
   }
 
   return { sheet, status, syncLog, handleImport, removeSheet }

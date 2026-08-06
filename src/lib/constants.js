@@ -19,7 +19,7 @@ export const LEAVE_TYPES = [
   { label: 'Sick Leave', deduct: 0, present: false, max: null, icon: 'SL' },
   { label: 'Casual Leave', deduct: 0, present: false, max: null, icon: 'CL' },
   { label: 'Earned Leave', deduct: 0, present: false, max: null, icon: 'EL' },
-  { label: 'Unpaid Leave', deduct: 0, present: false, max: null, icon: 'UL' },
+  { label: 'LOP', deduct: 0, present: false, max: null, icon: 'LOP' },
   { label: 'Bereavement Leave', deduct: 0, present: false, max: null, icon: 'BL' },
   { label: 'Marriage Leave', deduct: 0, present: false, max: null, icon: 'ML' },
   { label: 'Maternity Leave', deduct: 0, present: false, max: null, icon: 'MT' },
@@ -131,7 +131,19 @@ export const ABSENT_STATUS = 'Absent'
 export const PRESENT_STATUS = 'Present'
 export const HALF_DAY_STATUS = 'Half Day'
 export const LEAVE_STATUS = 'Leave'
+export const HALF_DAY_LEAVE_STATUS = 'Half Day Leave'
 export const WFH_STATUS = 'WFH'
 export const ON_DUTY_STATUS = 'On Duty'
 export const WEEK_OFF_STATUS = 'Week Off'
 export const HOLIDAY_STATUS = 'Holiday'
+
+// Half-day leave (plan.md Day 3, P4B-2) — only the three quota-tracked types can be
+// split into a half day; the policy doc only ever says this for CL/EL, Sick Leave was
+// already folded in by an earlier decision (PROGRESS.md P4B-2).
+export const HALF_DAY_ELIGIBLE_TYPES = ['Casual Leave', 'Sick Leave', 'Earned Leave']
+
+export const DAY_PARTS = [
+  { id: 'full', label: 'Full Day' },
+  { id: 'first_half', label: 'First Half' },
+  { id: 'second_half', label: 'Second Half' },
+]

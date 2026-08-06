@@ -5,7 +5,11 @@ import { adminFetchImportedSheet, adminSetImportedSheet, adminClearImportedSheet
 import { gField, findEmpInSnap } from '../lib/bioImport'
 import { COMPANIES } from '../lib/constants'
 
-const LEAVE_FIELDS = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Unpaid Leave', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
+// 'LOP' — renamed from 'Unpaid Leave' (P4B-11) to match the leave_type value the app
+// now stores; an import sheet still using the old "Unpaid Leave" column header won't be
+// picked up here, but LOP was never a balance-tracked type (it's unlimited by
+// definition) so this column was never meaningfully populated either way.
+const LEAVE_FIELDS = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'LOP', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
 
 // Matches a free-text company column against the 3 known companies (case-insensitive,
 // tolerant of "Asma Traexim" vs the full legal name "Asma Traexim Pvt Ltd"). Falls back
@@ -114,7 +118,7 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
       setSheet(null)
       setStatus('')
     } catch (err) {
-      alert(err.message)
+      setStatus(`Error: ${err.message}`)
     }
   }
 

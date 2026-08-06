@@ -43,6 +43,7 @@ export function useEmployeeLeave(token, empId, onAudit) {
       company: currentUser.company,
       leaveType: form.type,
       date: form.date,
+      dayPart: form.dayPart || 'full',
       reason: form.reason,
       location: form.location || null,
     })

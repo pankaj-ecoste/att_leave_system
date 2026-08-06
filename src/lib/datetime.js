@@ -6,7 +6,7 @@
 //
 // Pure functions only — no React, no network — so they're testable alone (plan.md §8C).
 
-import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS } from './constants'
+import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS } from './constants'
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 
@@ -67,7 +67,10 @@ export function timeDiffMinutes(a, b) {
 export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
   if (rec.leaveType) {
     const lt = findLeaveType(rec.leaveType)
-    if (lt && !lt.present) return LEAVE_STATUS
+    if (lt && !lt.present) {
+      if (rec.dayPart === 'first_half' || rec.dayPart === 'second_half') return HALF_DAY_LEAVE_STATUS
+      return LEAVE_STATUS
+    }
     if (lt?.label === 'Work From Home') return WFH_STATUS
     if (lt?.label === 'On Duty') return ON_DUTY_STATUS
   }

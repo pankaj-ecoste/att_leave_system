@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button'
 import { PunchPanel } from './PunchPanel'
 import { AttendanceHistory } from './AttendanceHistory'
 import { LeaveApply } from './LeaveApply'
+import { LeavePolicy } from './LeavePolicy'
 import { MonthlySummary } from './MonthlySummary'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
@@ -20,6 +21,7 @@ export function EmployeeDashboard({
     { id: 'leaves', label: 'Apply For' },
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },
+    { id: 'policy', label: 'Leave Policy' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
   ]
   const status = todayRecord.status || 'Absent'
@@ -74,6 +76,7 @@ export function EmployeeDashboard({
         {empTab === 'summary' && (
           <MonthlySummary currentUser={currentUser} attendance={attendance} stdHours={stdHours} holidays={holidays} />
         )}
+        {empTab === 'policy' && <LeavePolicy />}
         {empTab === 'team' && (
           <TeamPanel {...team} />
         )}

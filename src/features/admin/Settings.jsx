@@ -6,40 +6,48 @@ import { Input, Label, Select } from '../../components/ui/Input'
 const HOLIDAY_TYPES = ['Public', 'Optional', 'Restricted', 'Company']
 
 export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
+  const [oldPin, setOldPin] = useState('')
   const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
   const [pinMsg, setPinMsg] = useState('')
   const [newStd, setNewStd] = useState('')
+  const [stdMsg, setStdMsg] = useState('')
   const [showHolidayForm, setShowHolidayForm] = useState(false)
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', type: 'Public' })
   const [holidayMsg, setHolidayMsg] = useState('')
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
 
   async function changePin() {
-    if (newPin.length < 4) { setPinMsg('PIN must be at least 4 characters'); setTimeout(() => setPinMsg(''), 3000); return }
+    if (!oldPin) { setPinMsg('Enter your current PIN'); setTimeout(() => setPinMsg(''), 3000); return }
+    if (newPin.length < 4) { setPinMsg('New PIN must be at least 4 characters'); setTimeout(() => setPinMsg(''), 3000); return }
+    if (newPin !== confirmPin) { setPinMsg("New PIN and confirmation don't match"); setTimeout(() => setPinMsg(''), 3000); return }
     try {
-      await updateSettings(stdHours, newPin)
-      setNewPin(''); setPinMsg('PIN updated successfully')
+      await updateSettings(stdHours, newPin, oldPin)
+      setOldPin(''); setNewPin(''); setConfirmPin(''); setPinMsg('PIN updated successfully')
       onAudit?.('SETTINGS', 'Admin PIN changed', 'admin')
-    } catch (err) { setPinMsg(`Error: ${err.message}`) }
+    } catch (err) { setPinMsg(err.message?.includes('Current PIN is incorrect') ? 'Current PIN is incorrect' : `Error: ${err.message}`) }
     setTimeout(() => setPinMsg(''), 3000)
   }
 
   async function saveStdHours() {
     const v = Number(newStd)
-    if (!v || v < 1) return
+    if (!v || v < 1) { setStdMsg('Enter a valid number of hours'); return }
     try {
       await updateSettings(v)
-      setNewStd('')
+      setNewStd(''); setStdMsg('')
       onAudit?.('SETTINGS', `Std hours set to ${v}`, 'admin')
-    } catch (err) { alert(err.message) }
+    } catch (err) { setStdMsg(err.message) }
   }
 
   async function resetFY() {
-    if (!window.confirm('Create new financial year leave balances for all employees? This should only be done on 1st April.')) return
+    setResetMsg('')
     try {
       const count = await resetLeaveBalancesForNewFY()
-      alert(`Done. ${count} employee-leave records created for new FY.`)
+      setResetMsg(`Done — ${count} employee-leave records created for the new financial year.`)
       onAudit?.('SETTINGS', 'Financial year leave balances reset', 'admin')
-    } catch (err) { alert(`Error: ${err.message}`) }
+    } catch (err) { setResetMsg(`Error: ${err.message}`) }
+    setResetConfirmOpen(false)
   }
 
   async function saveHoliday() {
@@ -57,33 +65,48 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
     try {
       await deleteHoliday(h.id)
       onAudit?.('SETTINGS', `Holiday removed: ${h.name}`, 'admin')
-    } catch (err) { alert(err.message) }
+    } catch (err) { setHolidayMsg(`Error: ${err.message}`) }
   }
 
   return (
     <div className="space-y-4">
       <Card>
         <h3 className="text-white font-semibold mb-4">Change Admin PIN</h3>
+        <Label>Current PIN</Label>
+        <Input type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" className="mb-2 tracking-widest" value={oldPin} onChange={e => setOldPin(e.target.value)} placeholder="Enter current PIN" />
         <Label>New PIN (min 4 characters)</Label>
         <Input type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" className="mb-2 tracking-widest" value={newPin} onChange={e => setNewPin(e.target.value)} placeholder="Enter new PIN" />
+        <Label>Confirm New PIN</Label>
+        <Input type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" className="mb-2 tracking-widest" value={confirmPin} onChange={e => setConfirmPin(e.target.value)} placeholder="Re-enter new PIN" />
         {pinMsg && <div className={`rounded-xl p-2.5 mb-3 text-sm ${pinMsg.startsWith('PIN updated') ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>{pinMsg}</div>}
         <Button className="text-xs" onClick={changePin}>Update PIN</Button>
+        <p className="text-white/20 text-xs mt-3">Forgotten the PIN entirely? Ask your developer to run <code className="text-white/40">scripts/reset-admin-pin.mjs</code> against the database directly — it's the documented recovery path since there's a single shared admin PIN, not individual admin accounts.</p>
       </Card>
 
       <Card>
         <h3 className="text-white font-semibold mb-4">Standard Hours / Day</h3>
         <Input type="number" min="1" max="24" className="mb-1" value={newStd || stdHours} onChange={e => setNewStd(e.target.value)} />
         <p className="text-white/30 text-xs mb-3">Half-day threshold: below {((Number(newStd) || stdHours) / 2).toFixed(1)} hours</p>
+        {stdMsg && <p className="text-red-400 text-xs mb-2">{stdMsg}</p>}
         <Button className="text-xs" onClick={saveStdHours}>Save</Button>
       </Card>
 
       <Card>
         <h3 className="text-white font-semibold mb-1">Financial Year Reset</h3>
-        <p className="text-white/30 text-xs mb-4">Resets leave balances for the new financial year (1st April). Previous year data is preserved — only the interface resets. Each employee gets a fresh balance equal to their quota.</p>
+        <p className="text-white/30 text-xs mb-4">Resets leave balances for the new financial year (1st April). Previous year data is preserved — only the interface resets. Each employee gets a fresh balance equal to their quota. This now also happens automatically every 1 April.</p>
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 mb-4">
           <p className="text-amber-300 text-xs font-medium">This action creates new FY records for all employees. Run only on 1st April.</p>
         </div>
-        <Button variant="danger" className="text-xs" onClick={resetFY}>Reset for New Financial Year</Button>
+        {resetMsg && <p className={`text-xs mb-3 ${resetMsg.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>{resetMsg}</p>}
+        {resetConfirmOpen ? (
+          <div className="flex gap-2 items-center">
+            <p className="text-white/60 text-xs flex-1">Create new financial year leave balances for all employees?</p>
+            <Button variant="danger" className="text-xs" onClick={resetFY}>Confirm</Button>
+            <Button variant="secondary" className="text-xs" onClick={() => setResetConfirmOpen(false)}>Cancel</Button>
+          </div>
+        ) : (
+          <Button variant="danger" className="text-xs" onClick={() => setResetConfirmOpen(true)}>Reset for New Financial Year</Button>
+        )}
       </Card>
 
       <Card>

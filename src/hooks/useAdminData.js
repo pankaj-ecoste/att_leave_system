@@ -111,8 +111,8 @@ export function useAdminData(token, stdHours, onStdHoursChange) {
   }
 
   // --- Settings / holidays ---
-  async function updateSettings(newStdHours, newAdminPin) {
-    await apiUpdateSettings(token, newStdHours, newAdminPin || null)
+  async function updateSettings(newStdHours, newAdminPin, oldPin) {
+    await apiUpdateSettings(token, newStdHours, newAdminPin || null, oldPin || null)
     onStdHoursChange?.(newStdHours)
   }
   async function addHoliday(date, name, type) {

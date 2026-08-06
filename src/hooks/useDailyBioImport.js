@@ -179,7 +179,7 @@ export function useDailyBioImport(token, employees, setEmployees, attendance, bu
     try {
       await adminClearBioSheet(token)
       setSheet(null); setStatus(''); setSyncLog([])
-    } catch (err) { alert(err.message) }
+    } catch (err) { setStatus(`Error: ${err.message}`) }
   }
 
   function exportSheet() {

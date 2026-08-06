@@ -17,6 +17,7 @@ const STATUS_STYLES = {
   Present: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40', dot: 'bg-emerald-400' },
   'Half Day': { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/40', dot: 'bg-yellow-400' },
   Leave: { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/40', dot: 'bg-amber-400' },
+  'Half Day Leave': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/40', dot: 'bg-orange-400' },
   Absent: { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/40', dot: 'bg-red-400' },
   WFH: { bg: 'bg-indigo-500/20', text: 'text-indigo-300', border: 'border-indigo-500/40', dot: 'bg-indigo-400' },
   'On Duty': { bg: 'bg-purple-500/20', text: 'text-purple-300', border: 'border-purple-500/40', dot: 'bg-purple-400' },

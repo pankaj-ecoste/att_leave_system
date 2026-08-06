@@ -15,6 +15,7 @@ export function TeamPanel({
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
   const [locDate, setLocDate] = useState(todayIST())
+  const [errMsg, setErrMsg] = useState('')
 
   function selectTab(t) {
     setTab(t)
@@ -27,8 +28,9 @@ export function TeamPanel({
   async function handleDecide(fn, id, status) {
     try {
       await fn(id, status)
+      setErrMsg('')
     } catch (err) {
-      alert(err.message)
+      setErrMsg(err.message)
     }
   }
 
@@ -50,6 +52,7 @@ export function TeamPanel({
           <h2 className="text-white font-semibold">My Team <span className="text-white/30 text-sm font-normal">({myTeam.length} direct reports)</span></h2>
           {teamLoading && <span className="text-white/30 text-xs">Loading...</span>}
         </div>
+        {errMsg && <p className="text-red-400 text-xs mb-3">{errMsg}</p>}
         <div className="flex gap-2 mb-4 flex-wrap">
           {[['requests', 'Requests'], ['attendance', 'Attendance'], ['location', 'Location'], ['members', 'Members']].map(([t, l]) => (
             <button key={t} onClick={() => selectTab(t)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${tab === t ? 'bg-indigo-600/30 border-indigo-500/40 text-white' : 'bg-white/5 border-white/10 text-white/50'}`}>{l}</button>
@@ -66,7 +69,7 @@ export function TeamPanel({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-white font-medium text-sm">{l.empName}</p>
-                    <p className="text-white/50 text-xs">{l.leaveType} · {l.date}</p>
+                    <p className="text-white/50 text-xs">{l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`} · {l.date}</p>
                     <p className="text-white/30 text-xs mt-1 italic">{l.reason}</p>
                   </div>
                   <div className="flex flex-col gap-1 shrink-0">
@@ -84,7 +87,7 @@ export function TeamPanel({
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-white font-medium text-sm">{l.empName}</p>
-                        <p className="text-white/50 text-xs">{l.leaveType} · {l.date}</p>
+                        <p className="text-white/50 text-xs">{l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`} · {l.date}</p>
                       </div>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 shrink-0">Sent to Admin</span>
                     </div>

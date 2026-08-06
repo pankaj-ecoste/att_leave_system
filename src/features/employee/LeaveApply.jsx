@@ -5,6 +5,7 @@ import { Input, Label } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { getLocation } from '../../hooks/useGeolocation'
 import { todayIST } from '../../lib/datetime'
+import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS } from '../../lib/constants'
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -17,7 +18,7 @@ function monthlyPartialCount(leaves, empId, label) {
 
 export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory }) {
   const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState({ type: '', date: todayIST(), reason: '', location: null })
+  const [form, setForm] = useState({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
   const [errs, setErrs] = useState({})
   const [locationStatus, setLocationStatus] = useState('')
 
@@ -29,7 +30,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
-    setForm({ type: label, date: todayIST(), reason: '', location: null })
+    setForm({ type: label, date: todayIST(), dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
     setModalOpen(true)
@@ -54,7 +55,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     }
     if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
     setModalOpen(false)
-    setForm({ type: '', date: todayIST(), reason: '', location: null })
+    setForm({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
   }
@@ -139,7 +140,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
             {myLeaves.slice(0, 10).map(l => (
               <div key={l.id} className="bg-white/5 rounded-xl p-3 flex items-center justify-between border border-white/5">
                 <div>
-                  <p className="text-white text-sm font-medium">{l.leaveType}</p>
+                  <p className="text-white text-sm font-medium">{l.leaveType}{l.dayPart !== 'full' && <span className="text-white/40 font-normal"> · {l.dayPart === 'first_half' ? 'First Half' : 'Second Half'}</span>}</p>
                   <p className="text-white/30 text-xs">{l.date} · {l.reason?.slice(0, 35)}{l.reason?.length > 35 ? '...' : ''}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span>
@@ -153,7 +154,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         <Label>Type <span className="text-red-400">*</span></Label>
         <div className="grid grid-cols-2 gap-2 mb-3 max-h-52 overflow-y-auto pr-1">
           {avLT.map(lt => (
-            <button key={lt.label} onClick={() => setForm(p => ({ ...p, type: lt.label }))} className={`p-2 rounded-xl text-xs text-left border transition-all ${form.type === lt.label ? 'bg-indigo-600/30 border-indigo-500/50 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
+            <button key={lt.label} onClick={() => setForm(p => ({ ...p, type: lt.label, dayPart: HALF_DAY_ELIGIBLE_TYPES.includes(lt.label) ? p.dayPart : 'full' }))} className={`p-2 rounded-xl text-xs text-left border transition-all ${form.type === lt.label ? 'bg-indigo-600/30 border-indigo-500/50 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
               <p className="text-xs font-bold text-white/40 mb-0.5">{lt.icon}</p>{lt.label}
             </button>
           ))}
@@ -161,6 +162,19 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         {errs.type && <p className="text-red-400 text-xs mb-2">{errs.type}</p>}
         <Label>Date</Label>
         <Input type="date" className="mb-3" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+        {HALF_DAY_ELIGIBLE_TYPES.includes(form.type) && (
+          <>
+            <Label>Duration</Label>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {DAY_PARTS.map(dp => (
+                <button key={dp.id} onClick={() => setForm(p => ({ ...p, dayPart: dp.id }))} className={`p-2 rounded-xl text-xs border transition-all ${form.dayPart === dp.id ? 'bg-indigo-600/30 border-indigo-500/50 text-white' : 'bg-white/5 border-white/10 text-white/60 hover:bg-white/10'}`}>
+                  {dp.label}
+                </button>
+              ))}
+            </div>
+            {form.dayPart !== 'full' && <p className="text-white/30 text-xs mb-2 -mt-2">Deducts 0.5 day from your {form.type} balance</p>}
+          </>
+        )}
         <Label>Reason <span className="text-red-400">*</span></Label>
         <textarea rows={3} className={`w-full bg-white/5 border rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-400 focus:bg-white/10 transition-all placeholder-white/20 resize-none mb-1 ${errs.reason ? 'border-red-500' : 'border-white/15'}`} value={form.reason} onChange={e => setForm(p => ({ ...p, reason: e.target.value }))} placeholder="Enter reason for leave..." />
         {errs.reason && <p className="text-red-400 text-xs mb-2">{errs.reason}</p>}

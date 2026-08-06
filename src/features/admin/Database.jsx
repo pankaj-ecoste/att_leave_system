@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { adminGetAllLocationLogs } from '../../api/location'
+import { adminFetchAttendance } from '../../api/attendance'
 import { todayIST } from '../../lib/datetime'
 
 const SUB_TABS = [['employees', 'Employees'], ['attendance', 'Attendance'], ['balances', 'Balances'], ['leaves', 'Leave Apps'], ['audit', 'Audit Logs'], ['locations', 'Location Logs']]
@@ -46,10 +47,18 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
   }, [subTab, locDate, token])
 
   const q = search.toLowerCase()
-  const exportRows = () => {
+  // Exports must never be capped by whatever's on screen (plan.md §8B S-2b, PROGRESS.md
+  // P6-2) — the attendance sub-tab's on-screen table is deliberately capped to 200 rows
+  // for a quick browse, but that same capped array used to be reused for the export
+  // button too. Attendance now re-fetches fresh from the server for the full month
+  // range at export time instead, same pattern Reports.jsx already uses.
+  const exportRows = async () => {
     let rows = []
     if (subTab === 'employees') rows = employees
-    if (subTab === 'attendance') rows = Object.values(attendance).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 200)
+    if (subTab === 'attendance') {
+      const fresh = await adminFetchAttendance(token, { from: `${locDate.slice(0, 7)}-01`, to: locDate, limit: 100000 })
+      rows = Object.values(fresh).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    }
     if (subTab === 'leaves') rows = [...leaves].sort((a, b) => b.date.localeCompare(a.date))
     if (subTab === 'balances') Object.entries(leaveBalances).forEach(([eid, types]) => { const emp = employees.find(e => e.id === eid); Object.entries(types).forEach(([lt, v]) => rows.push({ Employee: emp?.name || eid, 'Leave Type': lt, ...v })) })
     if (subTab === 'audit') rows = auditLogs
@@ -66,8 +75,8 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
       </div>
       <div className="flex gap-2 mb-3 flex-wrap">
         <Input className="flex-1" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
-        <Button className="text-xs" onClick={() => downloadRows(exportRows(), 'xlsx', subTab)}>Export XLSX</Button>
-        <Button variant="secondary" className="text-xs" onClick={() => downloadRows(exportRows(), 'csv', subTab)}>Export CSV</Button>
+        <Button className="text-xs" onClick={async () => downloadRows(await exportRows(), 'xlsx', subTab)}>Export XLSX</Button>
+        <Button variant="secondary" className="text-xs" onClick={async () => downloadRows(await exportRows(), 'csv', subTab)}>Export CSV</Button>
       </div>
       <div className="overflow-x-auto border border-white/10 rounded-xl" style={{ maxHeight: '500px', overflowY: 'auto' }}>
         {subTab === 'employees' && (() => {
@@ -112,7 +121,7 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
           )
         })()}
         {subTab === 'balances' && (() => {
-          const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Unpaid Leave', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
+          const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'LOP', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
           const rows = employees.filter(e => leaveBalances[e.id]).filter(e => !q || e.name.toLowerCase().includes(q))
           return rows.length === 0 ? <p className="text-white/30 text-center py-10">No records</p> : (
             <table className="w-full text-xs text-white/60 min-w-max">

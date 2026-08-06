@@ -23,6 +23,7 @@ export async function employeeApplyLeave(token, empId, leave) {
       company: leave.company,
       leave_type: leave.leaveType,
       date: leave.date,
+      day_part: leave.dayPart || 'full',
       reason: leave.reason,
       location: leave.location || null,
     },

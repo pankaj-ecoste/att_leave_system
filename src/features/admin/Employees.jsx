@@ -25,6 +25,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
   const [search, setSearch] = useState('')
   const [form, setForm] = useState(null)
   const [balEditor, setBalEditor] = useState(null)
+  const [errMsg, setErrMsg] = useState('')
 
   const q = search.trim().toLowerCase()
   const filtered = employees.filter(e =>
@@ -44,7 +45,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
 
   async function save() {
     if (!form.name || !form.company) return
-    if (!form.id && !form.pin) { alert('PIN is required for a new employee.'); return }
+    if (!form.id && !form.pin) { setErrMsg('PIN is required for a new employee.'); return }
     try {
       if (form.id) {
         const before = employees.find(e => e.id === form.id)
@@ -67,29 +68,35 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
         }
       }
       setForm(null)
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   async function confirmEmployee(e) {
     try {
       await setEmploymentStatus(e.id, 'Confirmed')
       onAudit?.('EMPLOYMENT_STATUS', `${e.name} -> Confirmed`, 'admin')
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   async function toggle(id) {
     try {
       const updated = await toggleEmployeeStatus(id)
       onAudit?.('EMP_STATUS', `Toggled ${updated.name}`, 'admin')
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   async function del(id) {
-    if (!window.confirm('Delete employee?')) return
+    // P6-4 — this is a soft delete server-side now (deleted_at set, active=false):
+    // history is preserved, they just disappear from the directory and this list.
+    if (!window.confirm('Remove this employee? They’ll disappear from the directory and can no longer log in — their attendance and leave history is kept, not erased.')) return
     try {
       await deleteEmployee(id)
       onAudit?.('EMP_DELETE', `Deleted ${id}`, 'admin')
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   function openBalanceEditor(e) {
@@ -109,7 +116,8 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
       await bulkUpsertLeaveBalances(records)
       onAudit?.('LEAVE_BAL_UPDATE', `Updated leave balances for ${balEditor.empName}`, 'admin')
       setBalEditor(null)
-    } catch (err) { alert(`Error: ${err.message}`) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(`Error: ${err.message}`) }
   }
 
   return (
@@ -127,6 +135,8 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
           <Button className="text-xs" onClick={() => setForm({ ...EMPTY_FORM })}>+ Add Employee</Button>
         </div>
       </div>
+
+      {errMsg && <p className="text-red-400 text-sm mb-3">{errMsg}</p>}
 
       {probationEnding.length > 0 && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4">
@@ -255,6 +265,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                 </div>
               ))}
             </div>
+            {errMsg && <p className="text-red-400 text-xs mb-3">{errMsg}</p>}
             <Button className="w-full" onClick={saveBalances}>Save Leave Balances</Button>
           </>
         )}

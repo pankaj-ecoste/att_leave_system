@@ -66,6 +66,15 @@ describe('calcStatus', () => {
     expect(calcStatus({ leaveType: 'Work From Home' }, stdHours)).toBe('WFH')
     expect(calcStatus({ leaveType: 'On Duty' }, stdHours)).toBe('On Duty')
   })
+
+  it('a half-day leave yields Half Day Leave, not plain Leave', () => {
+    expect(calcStatus({ leaveType: 'Casual Leave', dayPart: 'first_half' }, stdHours)).toBe('Half Day Leave')
+    expect(calcStatus({ leaveType: 'Sick Leave', dayPart: 'second_half' }, stdHours)).toBe('Half Day Leave')
+  })
+
+  it('a full-day leave still yields plain Leave even with dayPart="full"', () => {
+    expect(calcStatus({ leaveType: 'Casual Leave', dayPart: 'full' }, stdHours)).toBe('Leave')
+  })
 })
 
 describe('financialYearFor', () => {

@@ -12,6 +12,7 @@ const EMPTY_FORM = { name: '', latitude: '', longitude: '', radiusM: 100, active
 export function Sites({ sites, createSite, updateSite, deleteSite, onAudit }) {
   const [form, setForm] = useState(null)
   const [msg, setMsg] = useState('')
+  const [listMsg, setListMsg] = useState('')
 
   function startCreate() {
     setForm(EMPTY_FORM)
@@ -50,8 +51,9 @@ export function Sites({ sites, createSite, updateSite, deleteSite, onAudit }) {
     try {
       await deleteSite(site.id)
       onAudit?.('SITE_DELETE', `Site removed: ${site.name}`, 'admin')
+      setListMsg('')
     } catch (err) {
-      alert(err.message)
+      setListMsg(err.message)
     }
   }
 
@@ -67,6 +69,7 @@ export function Sites({ sites, createSite, updateSite, deleteSite, onAudit }) {
           </div>
           {!form && <Button className="text-xs whitespace-nowrap" onClick={startCreate}>+ Add Site</Button>}
         </div>
+        {listMsg && <p className="text-red-400 text-xs mb-3">{listMsg}</p>}
 
         {form && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 p-3 bg-white/5 rounded-xl border border-white/10">

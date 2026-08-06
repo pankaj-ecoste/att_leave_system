@@ -1,19 +1,24 @@
+import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 
 export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, decideRegularization, onAudit }) {
+  const [errMsg, setErrMsg] = useState('')
+
   async function handleDecideLeave(id, action) {
     const decision = action === 'approve' ? 'Approved' : 'Rejected'
     try {
       const updated = await decideLeave(id, decision)
       onAudit?.(action === 'approve' ? 'LEAVE_APPROVED' : 'LEAVE_REJECTED', `${updated.empName} ${updated.leaveType} ${action}d`, 'admin')
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
   async function handleDecideReg(id, status) {
     try {
       await decideRegularization(id, status)
       onAudit?.('REGULARIZATION', `Regularization ${status} for request ${id}`, 'admin')
-    } catch (err) { alert(err.message) }
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   const pendingRegs = adminRegs.filter(r => r.status === 'Pending')
@@ -27,6 +32,7 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
 
   return (
     <>
+      {errMsg && <Card><p className="text-red-400 text-sm">{errMsg}</p></Card>}
       <Card>
         <h3 className="text-white font-semibold mb-3">
           Attendance Correction Requests
@@ -73,6 +79,7 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
                   <span className="text-white font-semibold">{l.empName}</span>
                   <span className="text-white/30">·</span>
                   <span className="text-indigo-300 text-sm">{l.leaveType}</span>
+                  {l.dayPart !== 'full' && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/30">{l.dayPart === 'first_half' ? 'First Half' : 'Second Half'}</span>}
                 </div>
                 <p className="text-white/40 text-xs">{l.date} · {l.company?.split(' ')[0]}</p>
                 <p className="text-white/60 text-xs mt-1 italic">"{l.reason}"</p>
@@ -99,7 +106,7 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
           {awaitingManager.map(l => (
             <div key={l.id} className="flex items-center justify-between py-2 border-b border-white/5">
               <div>
-                <p className="text-white/60 text-sm">{l.empName} · {l.leaveType}</p>
+                <p className="text-white/60 text-sm">{l.empName} · {l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`}</p>
                 <p className="text-white/30 text-xs">{l.date}</p>
               </div>
               <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">Pending manager</span>
@@ -117,7 +124,7 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
               <tr key={l.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <td className="py-2 pr-4 text-white/80">{l.empName}</td>
                 <td className="py-2 pr-4 text-white/30">{l.company?.split(' ')[0]}</td>
-                <td className="py-2 pr-4">{l.leaveType}</td>
+                <td className="py-2 pr-4">{l.leaveType}{l.dayPart !== 'full' && <span className="text-white/30"> ({l.dayPart === 'first_half' ? '1st Half' : '2nd Half'})</span>}</td>
                 <td className="py-2 pr-4 font-mono">{l.date}</td>
                 <td className="py-2 pr-4 max-w-[150px] truncate text-white/40">{l.reason}</td>
                 <td className="py-2"><span className={`px-2 py-1 rounded-full text-xs border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span></td>
