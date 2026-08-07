@@ -51,9 +51,9 @@ export function EmployeeDashboard({
             </div>
           </div>
         </div>
-        <div className="flex gap-2 bg-white/5 rounded-2xl p-1 border border-white/10">
+        <div className="flex gap-2 bg-white/5 rounded-2xl p-1 border border-white/10 overflow-x-auto">
           {tabs.map(t => (
-            <button key={t.id} onClick={() => setEmpTab(t.id)} className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${empTab === t.id ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg' : 'text-white/50 hover:text-white/80'}`}>
+            <button key={t.id} onClick={() => setEmpTab(t.id)} className={`flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all ${empTab === t.id ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg' : 'text-white/50 hover:text-white/80'}`}>
               {t.label}
             </button>
           ))}
