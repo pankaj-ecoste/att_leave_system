@@ -127,6 +127,16 @@ export const LEAVE_POLICY = {
 // Leave year runs 1 April -> 31 March.
 export const FINANCIAL_YEAR_START_MONTH = 4
 
+// Flexible-shift work window (Day Shift / no-shift staff only — Night Shift punches
+// in well outside this window and is deliberately left on the plain calcRawHrs
+// calculation, see calcStatus). Staff can punch in any time, but stdHours must be
+// completed inside this window: a 9:00 punch-in still has the full window to reach
+// stdHours (9:00-18:00 already gets there); a 10:00 punch-in's window ends exactly at
+// stdHours later; any later than that and stdHours can no longer fit before the window
+// closes.
+export const WORK_WINDOW_START = '09:00'
+export const WORK_WINDOW_END = '19:00'
+
 export const ABSENT_STATUS = 'Absent'
 export const PRESENT_STATUS = 'Present'
 export const HALF_DAY_STATUS = 'Half Day'

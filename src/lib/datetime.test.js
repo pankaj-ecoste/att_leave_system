@@ -2,7 +2,7 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
+import { calcRawHrs, calcStatus, hasIncompleteHoursFlag, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
 import { DAY_TYPES } from './constants'
 
 describe('calcRawHrs', () => {
@@ -74,6 +74,62 @@ describe('calcStatus', () => {
 
   it('a full-day leave still yields plain Leave even with dayPart="full"', () => {
     expect(calcStatus({ leaveType: 'Casual Leave', dayPart: 'full' }, stdHours)).toBe('Leave')
+  })
+
+  describe('flexible work window (9:00-19:00)', () => {
+    it('a 10:00 punch-in exactly reaching stdHours at the window close is Present', () => {
+      // 10:00 -> 19:00 is exactly stdHours=9, the latest on-time punch-in.
+      expect(calcStatus({ inTime: '10:00', outTime: '19:00' }, stdHours)).toBe('Present')
+    })
+
+    it('hours worked past the window close are not counted, but do not demote an on-time punch-in', () => {
+      // 9:00 -> 20:00 = 11h raw, but only 9:00-19:00 (10h) is inside the window, and
+      // that already clears stdHours=9 — still Present.
+      expect(calcStatus({ inTime: '09:00', outTime: '20:00' }, stdHours)).toBe('Present')
+    })
+
+    it('a late punch-in that stays through the window close is Present despite falling short of stdHours', () => {
+      // 15:00 -> 22:00 = 7h raw, but only 15:00-19:00 (4h) is inside the window. Old
+      // logic would call 7h a Half Day; capped to 4h it would be Absent. Since they
+      // stayed through 19:00 (used every minute available), it's forgiven to Present.
+      expect(calcStatus({ inTime: '15:00', outTime: '22:00' }, stdHours)).toBe('Present')
+    })
+
+    it('a late punch-in that also leaves early (before the window closes) still falls to Absent', () => {
+      // 15:00 -> 17:00 = 2h, and they left 2h before the 19:00 window close — the
+      // shortfall isn't purely the window's fault, so the normal threshold applies.
+      expect(calcStatus({ inTime: '15:00', outTime: '17:00' }, stdHours)).toBe('Absent')
+    })
+
+    it('Night Shift punch-ins (at/after the window close) are unaffected by the window rule', () => {
+      // Already covered by the "night shift worked in full" test above (21:00-06:00 ->
+      // Present); this checks a Night Shift shortfall still uses the plain calculation.
+      expect(calcStatus({ inTime: '21:00', outTime: '23:00' }, stdHours)).toBe('Absent')
+    })
+  })
+})
+
+describe('hasIncompleteHoursFlag', () => {
+  const stdHours = 9
+
+  it('flags a late punch-in that stayed through the window close but still fell short', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '15:00', outTime: '22:00' }, stdHours)).toBe(true)
+  })
+
+  it('does not flag an on-time punch-in that reached stdHours', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '09:00', outTime: '18:00' }, stdHours)).toBe(false)
+  })
+
+  it('does not flag a late punch-in that also left early — that case is Absent, not a flag', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '15:00', outTime: '17:00' }, stdHours)).toBe(false)
+  })
+
+  it('does not flag Night Shift punches', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '21:00', outTime: '23:00' }, stdHours)).toBe(false)
+  })
+
+  it('does not flag a leave day', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '15:00', outTime: '22:00', leaveType: 'Casual Leave' }, stdHours)).toBe(false)
   })
 })
 

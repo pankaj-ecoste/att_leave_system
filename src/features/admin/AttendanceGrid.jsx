@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { COMPANIES, MONTHS, APP_BIO_MISMATCH_THRESHOLD_MIN, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, timeDiffMinutes, todayIST } from '../../lib/datetime'
+import { calcRawHrs, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmtHrs, fmt2 } from '../../lib/format'
 
 function monthRange(month, year) {
@@ -206,7 +206,12 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                     </td>
                     <td className="py-2 pr-3 font-medium text-white/80 whitespace-nowrap">{fmtHrs(net)}</td>
                     <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{net > stdHours ? fmtHrs(net - stdHours) : '--'}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap"><Badge status={r.status || 'Absent'} /></td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <Badge status={r.status || 'Absent'} />
+                      {hasIncompleteHoursFlag(r, stdHours) && (
+                        <span className="block mt-0.5 text-[10px] text-amber-400" title="Late punch-in — stdHours wasn't reached within the 9:00-19:00 work window">⚠ incomplete hrs</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-white/30 text-xs whitespace-nowrap">{r.leaveType || ''}</td>
                     <td className="py-2 pr-3 max-w-[220px]">
                       {isField && (

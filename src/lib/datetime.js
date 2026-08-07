@@ -6,7 +6,7 @@
 //
 // Pure functions only — no React, no network — so they're testable alone (plan.md §8C).
 
-import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS } from './constants'
+import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS, WORK_WINDOW_END } from './constants'
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 
@@ -20,6 +20,22 @@ function nowIST() {
 
 function pad2(n) {
   return String(n).padStart(2, '0')
+}
+
+function minutesOfDay(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number)
+  return h * 60 + m
+}
+
+// Hours available inside the flexible work window (WORK_WINDOW_END) for a given
+// punch-in, or null if this punch-in falls outside the window entirely (Night Shift and
+// similar — see calcStatus/hasIncompleteHoursFlag, both of which treat null as "the
+// window rule doesn't apply here, fall back to the plain calculation").
+function windowAvailableHours(inTime) {
+  const inMin = minutesOfDay(inTime)
+  const windowEndMin = minutesOfDay(WORK_WINDOW_END)
+  if (inMin >= windowEndMin) return null
+  return (windowEndMin - inMin) / 60
 }
 
 // Today's date in IST, as YYYY-MM-DD. Call this at the point of use — never cache it
@@ -86,8 +102,21 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
   if (rec.inTime) {
     const raw = calcRawHrs(rec.inTime, rec.outTime)
     const deduct = rec.leaveType ? findLeaveType(rec.leaveType)?.deduct || 0 : 0
-    const eff = Math.max(0, raw - deduct)
+    const available = windowAvailableHours(rec.inTime)
+    const cappedRaw = available == null ? raw : Math.min(raw, available)
+    const eff = Math.max(0, cappedRaw - deduct)
     const halfDayThreshold = stdHours / 2
+
+    // Punched in too late to ever reach stdHours before the work window closes (e.g.
+    // stdHours=9, window 9:00-19:00 -> must punch in by 10:00 to have a chance). If they
+    // still stayed through to the window's close — used every minute they had — don't
+    // punish that with Half Day/Absent; mark Present and let hasIncompleteHoursFlag
+    // surface it separately for admin visibility. Leaving early on top of a late start
+    // still falls through to the normal thresholds below.
+    if (available != null && available < stdHours && rec.outTime && raw >= available) {
+      return PRESENT_STATUS
+    }
+
     if (eff < halfDayThreshold) return ABSENT_STATUS
     if (eff < stdHours) return HALF_DAY_STATUS
     return PRESENT_STATUS
@@ -106,6 +135,19 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
     if (b === 'L') return LEAVE_STATUS
   }
   return ABSENT_STATUS
+}
+
+// True when a Day Shift/no-shift punch was too late to ever complete stdHours before
+// the work window closes, even though the employee stayed through to the window's
+// close — the exact case calcStatus above deliberately keeps as Present rather than
+// demoting to Half Day/Absent. Surfaced separately (Reports.jsx Exceptions sheet,
+// AttendanceGrid) so admin/HR can still see it without it affecting the stored status.
+export function hasIncompleteHoursFlag(rec, stdHours) {
+  if (!rec.inTime || !rec.outTime || rec.leaveType) return false
+  const available = windowAvailableHours(rec.inTime)
+  if (available == null || available >= stdHours) return false
+  const raw = calcRawHrs(rec.inTime, rec.outTime)
+  return raw >= available
 }
 
 // Financial year for a given date (or today, IST) — 1 April to 31 March, matching
