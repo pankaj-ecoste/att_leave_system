@@ -14,14 +14,18 @@ const STAT_CARD_COLORS = {
   green: 'from-green-600/30 to-green-800/10 border-green-500/30 text-green-300',
 }
 
-export function StatCard({ label, value, color, sub }) {
+export function StatCard({ label, value, color, sub, onClick, active }) {
   const classes = STAT_CARD_COLORS[color] || STAT_CARD_COLORS.indigo
   const textCol = classes.split(' ')[3]
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className={`bg-gradient-to-br ${classes} border rounded-2xl p-4 flex flex-col gap-1 hover:scale-[1.02] transition-transform`}>
+    <Tag
+      onClick={onClick}
+      className={`text-left bg-gradient-to-br ${classes} border rounded-2xl p-4 flex flex-col gap-1 hover:scale-[1.02] transition-transform ${onClick ? 'cursor-pointer' : ''} ${active ? 'ring-2 ring-white/60' : ''}`}
+    >
       <span className="text-white/30 text-xs uppercase tracking-widest">{label}</span>
       <p className={`text-4xl font-bold mt-1 ${textCol}`}>{value}</p>
       {sub && <p className="text-white/30 text-xs">{sub}</p>}
-    </div>
+    </Tag>
   )
 }

@@ -40,6 +40,7 @@
 ✅ DONE      Day 3 — P4B-1..P4B-15 (half-day leave, accrual, probation/notice caps, 18-month service check, LOP rules), P4C-1..P4C-4 (daily report export), P6 hardening (soft delete, PIN old-PIN check, alert() replacement, indexes, export fix), T-1/T-2 (full end-to-end test, migration checklist). 6 migrations (0013-0018), 2 real security bugs found and fixed along the way (a pre-existing `log_audit` grant gap and a function-overload gap in the new PIN hardening — see below). **Day 3 is done — only T-3 (database password reset) is left, and it's yours.**
 ✅ DONE      Post-Day-3 refinements (your live feedback, 2026-08-06): the Apply Leave dialog no longer repeats the full tile grid inside itself (was confusing — looked like a bug where picking Casual Leave could "reopen" as Sick Leave) · **Earned Leave now requires 7 days' advance notice**, with the date field defaulting straight to the earliest allowed date and a clear on-screen note · **Sick Leave now requires a prescription/medical certificate upload** before you can submit, stored in a private Supabase Storage bucket, viewable by managers/admin via a "View prescription" link. `0019_earned_leave_advance_notice.sql`. A real pre-existing bug (unrelated to this session) was also found and fixed during the browser click-through: duplicate React keys in the monthly attendance calendar grid.
 ✅ DONE      Real leave balance data loaded (2026-08-06): HR's `Leave Balance Sheet.xlsx` applied via `scripts/apply-leave-balance-corrections.mjs` — **53 employees, 125 Sick/Casual/Earned balance rows corrected**, verified live. Not the in-app importer — see the "Post-Day-3 refinements" section for why. 19 sheet rows left untouched, flagged for HR (unknown names or a code that points at a different employee).
+✅ DONE      Admin Dashboard tiles made clickable (2026-08-07, your live feedback): clicking a tile (Present/Absent/On Leave/Half Day/WFH/On Duty) filters the attendance table below it to just those employees, same page, no navigation; clicking Pending shows the actual pending leave requests (employee, type, date, reason); Total Active clears the filter. **App Adoption tile removed** — the team decided staff won't upload biometric data through the app, so the app-vs-biometric comparison no longer applies (biometric import tools and the per-day override switch elsewhere were deliberately left in place, not removed). Browser-verified live, including a real bug caught and fixed along the way: the Pending drill-down initially looked up employee names via `employees.find(e => e.id === l.empId)`, which returned nothing (leave records already carry the employee's name directly as `l.empName` from a joined view — LeaveApprovals.jsx already knew this, Dashboard.jsx didn't).
 
 **Verified live, end-to-end** (headless-browser check against the real HRMS project, not just the smoke test): login screen renders with zero console errors, admin login works, dashboard renders all 8 stat cards correctly — including the WFH card, the exact one the Tailwind safelist bug used to leave unstyled. Caught and fixed one real bug this way that the smoke test couldn't have: `app_settings` had no seed row, so `admin_login` could never succeed (nothing to check the PIN against). Added `0004_seed_defaults.sql` for that plus the three sheet-cache singleton rows, and fixed `0002`'s policy/trigger statements to actually be re-run-safe (`CREATE POLICY` has no `IF NOT EXISTS` in Postgres — a second apply was failing before this).
 
@@ -859,7 +860,7 @@ Real, but not needed for a working system.
 | Q-10 | ~~What to do with the 281 stuck requests?~~ ✅ **Resolved — stay in the old app, not migrated** | — | — | ✅ |
 | Q-15 | ~~Still fix the 5 broken functions in the old app for interim relief, or skip?~~ ✅ **Resolved — skip. Fixes go straight into the new HRMS schema, not a patch on the old app** | — | — | ✅ |
 | Q-17 | Found a 6th broken function while writing the new schema: `manager_get_team_leaves` ordered by `leave_applications.created_at`, which doesn't exist (only `applied_at` does) — same bug class as the other 5. ✅ **Fixed in `0003_hrms_functions.sql`, no decision needed** | — | — | ✅ |
-| **Q-16** | After launch, does the old app stay reachable for historical records? | YOU | — | Day 3 |
+| **Q-16** | After launch, does the old app stay reachable for historical records? **Deferred by you (2026-08-07) — decide after some real-world use of the new system, not urgent** | YOU | — | later |
 | Q-11 | ~~HRMS project created, Mumbai region?~~ ✅ **Yes — created, Mumbai** | — | — | ✅ answered |
 | **Q-12** | Is **300** the total headcount, or 300 *at the same moment*? Changes compute sizing | YOU | S-7 | **Day 1 PM** |
 | **Q-13** | Keep 5-minute OD tracking, or is the agreed 2-hourly enough? **Cuts ~1.2M rows/year** | YOU | S-5, P3-14 | **Day 1 PM** |
@@ -891,6 +892,23 @@ Hosting URL: ________________________________
 
 ---
 
+## 🔑 Admin FAQ — employee forgot their PIN
+
+Admin team feedback (2026-08-07): labor staff sometimes forget their PIN and come to
+admin asking to be told it again. **PINs can't be looked up or shown to anyone** —
+they're stored as a one-way hash (bcrypt via pgcrypto), not plaintext, a deliberate
+security fix from planning (`plan.md` §4.3 #1). Nobody, including admin or a developer
+querying the database directly, can ever recover the original PIN — same as any normal
+password.
+
+**The fix is already built, no code needed:** on the **Employees** screen, admin clicks
+**Edit** on that staff member, types a **new** PIN into the PIN field, and **Save**. That
+sets a working PIN immediately — the employee doesn't need their old one. Confirmed
+sufficient for the admin team's need as of 2026-08-07; no dedicated "Reset PIN" button
+requested.
+
+---
+
 ## Next chat — how to start
 
 **As of 2026-08-06: Day 1, Day 2, and Day 3 are all fully done**, plus a same-day P4-6
@@ -901,9 +919,10 @@ verified. What's left:
 
 ```
 T-3           → reset the database password (was shared during planning) — yours, not code
-Q-16          → after launch, does the old app stay reachable for historical records? — yours
-Settings      → set the real Admin Notification Email from Admin → Settings — the
-                "Notify via Email" button falls back to manager-only until this is filled in
+Q-16          → after launch, does the old app stay reachable for historical records?
+                — you're deciding this later, not urgent, revisit after some real-world use
+Settings      → Admin Notification Email field already exists and is editable
+                (Admin → Settings) — you're filling it in yourself, no code needed
 ```
 
 **Browser click-through done 2026-08-06 (post-Day 3):** the half-day picker in Apply
