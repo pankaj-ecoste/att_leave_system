@@ -1101,6 +1101,26 @@ re-applied twice (genuine no-op second time), a disposable new hire confirmed to
 at accrued=0/balance=0 with quota still correctly set, G-1 clean (23 tables, 87
 functions), build/tests green (46 tests).
 
+**Round 4, same day — HR-supplied balance sheet applied (`Leave Balance Sheet
+Updated.xlsx`).** After the arrears correction (Round 3) left 105 CL/EL rows negative
+by design, HR supplied a fresh balance sheet reflecting the real current numbers.
+`scripts/apply-leave-balance-corrections.mjs` (originally built 2026-08-06) needed a
+real update, not just a re-run: the model it was written against no longer holds — it
+used to derive `consumed = quota - balance` because `quota` *was* the pool a balance
+drew from. Under the new arrears model `accrued` is the pool (a smaller, monthly-built
+number; `quota` is just the fixed annual entitlement, unrelated to what's actually been
+credited so far), so the script now derives `consumed = accrued - balance` instead —
+`accrued`/`quota` still both left untouched, exactly like before, just against the
+correct pool. Dry run first (112 rows across 57 employees, 16 sheet rows unmatched —
+same known gap as the original 2026-08-06 import, names with no matching employee in
+the app), then applied. **Zero CL/EL balance rows are negative afterward** — this sheet
+was HR's own correction for exactly the negative numbers Round 3 produced. `Manish
+Kumar` correctly resolved to two separate real employees (a known pre-existing
+ambiguity, same disambiguation-by-company logic as the original 2026-08-06 import).
+`npm run build`/`npm run test` (46 tests) still green — this was a data-only change, no
+schema/function migration involved, same posture as the original 2026-08-06 sheet
+import.
+
 **Not yet done:** committing/pushing this session's changes, and deploying to Vercel
 (Phase B is still sitting committed-but-undeployed too — see the V2 next-chat note
 below).

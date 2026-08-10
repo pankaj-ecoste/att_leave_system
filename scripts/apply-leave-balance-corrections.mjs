@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// One-off correction: HR supplied a real "Leave Balance Sheet.xlsx" with the actual
-// current Sick/Casual/Earned balance for 83 employees (the rest of the 131 keep
-// whatever they already have — this sheet is a partial correction, not a full resync).
+// One-off correction: HR supplies a real "Leave Balance Sheet.xlsx" with the actual
+// current Sick/Casual/Earned balance for however many employees are on the sheet (the
+// rest keep whatever they already have — this is a partial correction, not a full
+// resync).
 //
 // Why not the existing in-app importer (useLeaveBalanceImport.js)? Two problems that
 // only matter for a *correction* import, not the original master-data import it was
@@ -15,13 +16,19 @@
 //      whatever their current balance happens to be, breaking the balance/quota
 //      progress bar everywhere it's shown (LeaveApply.jsx, Employees.jsx, Database.jsx).
 //
-// This script instead reads each employee's EXISTING quota/accrued from the database
-// and only overwrites balance + consumed (consumed = quota - balance), leaving quota
-// and accrued exactly as they already are.
+// V2 Phase C (2026-08-10) changed what the "pool" a balance is drawn from actually
+// means: CL/EL now accrue monthly in arrears (0024-0026) instead of being front-loaded
+// as the full annual `quota` on day one, so `accrued` — not `quota` — is now the
+// correct pool a sheet-supplied balance should be reconciled against. `quota` stays the
+// fixed annual entitlement (still used for display/caps elsewhere) and `accrued` stays
+// exactly what the system's own monthly-accrual math already computed from each
+// employee's joining date — this script never touches either. It only overwrites
+// balance + consumed (consumed = accrued - balance), so the next monthly credit or any
+// future correction still sees a self-consistent accrued/consumed/balance triple.
 //
 // Usage (dry run by default — prints the diff, writes nothing):
 //   DATABASE_URL="postgresql://postgres.xxxx:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:5432/postgres" \
-//     node scripts/apply-leave-balance-corrections.mjs "C:/Users/aisup/Downloads/Leave Balance Sheet.xlsx"
+//     node scripts/apply-leave-balance-corrections.mjs "C:/Users/aisup/Downloads/Leave Balance Sheet Updated.xlsx"
 //
 // Add --apply to actually write:
 //   ... node scripts/apply-leave-balance-corrections.mjs "<path>" --apply
@@ -157,13 +164,18 @@ async function main() {
         skippedNoQuota.push({ emp, leaveType, newBalance })
         continue
       }
-      const newConsumed = Math.max(0, Number(existing.quota) - newBalance)
+      // Pool is `accrued` now (V2 Phase C), not `quota` — see header note. Not floored
+      // at 0: a negative result means the sheet's balance is higher than what the
+      // system's own monthly-accrual math has credited so far for this employee, which
+      // is worth seeing in the dry run rather than silently clamping away.
+      const newConsumed = Number(existing.accrued) - newBalance
       if (Number(existing.balance) === newBalance && Number(existing.consumed) === newConsumed) continue // no change
 
       updates.push({
         emp, leaveType,
         oldBalance: Number(existing.balance), newBalance,
         oldConsumed: Number(existing.consumed), newConsumed,
+        accrued: Number(existing.accrued),
         quota: Number(existing.quota),
       })
     }
@@ -172,9 +184,10 @@ async function main() {
   console.log(`\nMatched rows with at least one real change: ${new Set(updates.map(u => u.emp.id)).size}`)
   console.log(`Total balance rows to update: ${updates.length}`)
   for (const u of updates) {
+    const flag = u.newConsumed < 0 ? '  ⚠ consumed would go negative — sheet balance exceeds accrued' : ''
     console.log(
       `  ${u.emp.name.padEnd(24)} ${u.leaveType.padEnd(14)} balance ${u.oldBalance} -> ${u.newBalance}` +
-      `  consumed ${u.oldConsumed} -> ${u.newConsumed}  (quota ${u.quota} unchanged)`
+      `  consumed ${u.oldConsumed} -> ${u.newConsumed}  (accrued ${u.accrued}, quota ${u.quota}, both unchanged)${flag}`
     )
   }
 
