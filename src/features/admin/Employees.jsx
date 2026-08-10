@@ -296,15 +296,18 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                     {[['Quota', 'quota'], ['Accrued', 'accrued'], ['Consumed', 'consumed'], ['Balance', 'balance']].map(([label, field]) => (
                       <div key={field}>
                         <Label>{label}</Label>
-                        <Input type="number" min="0" className="text-xs" value={v[field] || 0} onChange={e => {
+                        <Input type="number" className="text-xs" value={v[field] || 0} onChange={e => {
                           const val = parseFloat(e.target.value) || 0
                           setBalEditor(prev => {
                             const updated = { ...prev, balances: { ...prev.balances } }
+                            // V2 Phase C (0024-0026): accrued builds up monthly now, it's
+                            // no longer always equal to quota, so it can't be auto-derived
+                            // from quota/consumed the way it used to be. All four fields
+                            // are independently editable and saved exactly as typed —
+                            // same explicit shape admin_upsert_leave_balance already
+                            // expects, no formula assumption baked into the UI to go
+                            // stale the next time the accrual model changes.
                             updated.balances[lt] = { ...updated.balances[lt], [field]: val }
-                            if (field === 'quota' || field === 'consumed') {
-                              updated.balances[lt].balance = Math.max(0, updated.balances[lt].quota - updated.balances[lt].consumed)
-                              updated.balances[lt].accrued = updated.balances[lt].quota
-                            }
                             return updated
                           })
                         }} />

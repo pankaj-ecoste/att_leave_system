@@ -1121,6 +1121,42 @@ ambiguity, same disambiguation-by-company logic as the original 2026-08-06 impor
 schema/function migration involved, same posture as the original 2026-08-06 sheet
 import.
 
+**Round 5, same day — a real bug found in the existing per-employee balance editor, plus
+a new direct-editing view for the backend engineer's own convenience.**
+
+**Bug found:** `Employees.jsx`'s "Leave Balances" edit modal auto-forced `accrued =
+quota` and recalculated `balance = quota - consumed` the instant Quota or Consumed was
+touched — correct under the old annual model (quota *was* the pool) but a live landmine
+under arrears: the next time anyone edited a balance through that screen, it would have
+silently reset that employee's `accrued` back to the full annual quota, undoing this
+session's arrears correction for them. Nothing had triggered it yet (nobody used that
+editor since the model changed) — fixed before it could. All four fields (Quota,
+Accrued, Consumed, Balance) are now independently editable with no auto-derivation,
+matching the explicit shape `admin_upsert_leave_balance` already expects — no formula
+baked into the UI to go stale again the next time the accrual model changes.
+
+**New: `leave_balance_editor` view (`0027_leave_balance_editor_view.sql`).** One row per
+employee — name, email, emp number, company, Casual/Earned/Sick/Compensatory Leave
+balance — directly editable from the Supabase table editor or a raw SQL `UPDATE`,
+for exactly the pain point described: matching and correcting balances for everyone
+without hunting through `leave_balances`'s one-row-per-leave-type shape or a UUID with
+no name attached. Deliberately a VIEW with an `INSTEAD OF UPDATE` trigger, not a second
+table — `leave_balances` stays the only real source of truth the app itself reads or
+writes; editing a cell here routes straight through to the real row via the trigger,
+using the same "accrued minus what you typed = consumed" math the arrears correction and
+the balance-sheet import script both use, and auto-creates the underlying
+`leave_balances` row on first edit if one doesn't exist yet (e.g. Compensatory Leave for
+someone who's never earned any). No grant to `anon`/`authenticated` — reachable only via
+direct Postgres access, never through the app's own public API.
+
+**Verified:** view read confirmed correct against a real employee · a real `UPDATE`
+through the view (casual_leave 4 → 3.5) confirmed to land in the actual `leave_balances`
+row (`accrued` unchanged at 4, `consumed` became 0.5, `balance` became 3.5), then
+reverted with no trace · a Compensatory Leave edit for an employee with no existing row
+correctly created one and was cleaned up after · migration re-applied twice, genuinely
+re-run-safe · G-1 clean (23 tables, 88 functions) · `npm run build`/`npm run test` (46
+tests) both green.
+
 **Not yet done:** committing/pushing this session's changes, and deploying to Vercel
 (Phase B is still sitting committed-but-undeployed too — see the V2 next-chat note
 below).
