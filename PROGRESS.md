@@ -921,14 +921,29 @@ actually rendering, and the Assets modal/My Assets tab actually working end-to-e
 browser. The data and server-side logic underneath are all proven; nobody has watched
 the pixels yet.
 
-## Phase B — Overtime
+## Phase B — Overtime — ✅ done and browser-verified (2026-08-10)
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| VB-1 | OT calculation — hours beyond `stdHours`, reuses the existing overnight-safe hours calc (no new punch logic) | ⬜ | DEV |
-| VB-2 | Staff "My Overtime" view | ⬜ | DEV |
-| VB-3 | Admin OT report (by employee / date range) | ⬜ | DEV |
-| VB-4 | Daily Report export — new OT column (daily log) + summary total | ⬜ | DEV |
+| VB-1 | OT calculation — hours beyond `stdHours`, reuses the existing overnight-safe hours calc (no new punch logic) | ✅ verified live (`calcOvertimeHours`, `datetime.js`) | DEV |
+| VB-2 | Staff "My Overtime" view | ✅ verified live in browser (`MyOvertime.jsx`, new Overtime tab) | DEV |
+| VB-3 | Admin OT report (by employee / date range) | ✅ verified live in browser (Reports → Overtime Report) | DEV |
+| VB-4 | Daily Report export — new OT column (daily log) + summary total | ✅ verified — downloaded xlsx inspected directly | DEV |
+
+No DB migration — OT is tracking-only and computed live from existing attendance rows,
+same as it already was ad hoc in 5 different places before this phase. Those 5 inline
+copies (`Reports.jsx`, `PunchPanel.jsx`, `Dashboard.jsx`, `AttendanceGrid.jsx`) were
+consolidated into one pure function; two of them had been silently skipping the
+half-day-leave deduction that the other three applied, so overtime on a half-day-leave
+day could have been over-counted before this — the single-source-of-truth function is
+now the only place that math happens. 46/46 tests green (4 new `calcOvertimeHours`
+cases), `npm run build` clean. Verified end-to-end with a disposable test employee
+("OT Test Employee", `#OTTEST`) punched 09:00–22:00 (stdHours=9) via the admin
+Attendance grid's inline time editor — 4h00m OT showed correctly and identically in the
+Dashboard OT column, the AttendanceGrid summary, the new Overtime Report (1 day, 4.00h),
+the My Overtime employee tab, and the downloaded Daily Report xlsx (`Overtime` column +
+`Total Overtime Hours: 4.00` in Summary). Test employee deleted afterward.
+**Frontend not committed/pushed yet** — verified against `localhost:5173` only.
 
 ## Phase C — Comp-off + accrual rework (built together, share one ledger)
 
@@ -1091,8 +1106,18 @@ Migration `0023_v2_phase_a.sql` applied to production, confirmed re-run-safe, G-
 both clean (81 functions, 21 tables, 70/70 reachable), build/tests green, and every
 screen clicked through live via a disposable test employee (see the Phase A writeup
 above). Two pre-existing bugs (unrelated to V2) were found and fixed along the way.
-**Frontend code is not deployed to Vercel yet** — verified against the local dev server,
-nothing committed/pushed. Next: commit + deploy when ready, then move to **Phase B**
-(Overtime) and **Phase C** (Compensatory Leave + the CL/EL accrual rework — deliberately
-last, since it's the one part of V2 that changes real, already-live leave balances for
-131 people).
+**Correction (2026-08-10, later same day):** Phase A's frontend was in fact committed
+and pushed (`705b953`) — the "not committed/pushed" note above was stale by the time the
+next session started; `origin/main` already had it. Worth double-checking `git log`
+against notes like this rather than trusting them at face value.
+
+**Update 2026-08-10 (later same day) — Phase B (Overtime) is built and browser-verified**
+(`VB-1`..`VB-4`). No migration needed — OT is derived live from existing attendance,
+same as it always was ad hoc; this phase consolidated 5 duplicate inline calculations
+into one pure function (`calcOvertimeHours` in `lib/datetime.js`) and fixed a real
+inconsistency where 2 of those 5 copies forgot to subtract the half-day-leave deduction.
+Full details in the Phase B section above. **Not committed/pushed yet** — sitting locally
+verified only against `localhost:5173`.
+Next: commit + push Phase B, deploy to Vercel, then **Phase C** (Compensatory Leave + the
+CL/EL accrual rework — deliberately last, since it's the one part of V2 that changes
+real, already-live leave balances for 131 people).

@@ -137,6 +137,24 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
   return ABSENT_STATUS
 }
 
+// Hours worked beyond `stdHours` for one attendance row (plan.md §11 Decision 13 — V2
+// Phase B, tracking only, no payroll integration). Net hours mirrors calcStatus's own
+// effective-hours calc (raw minus any half-day-leave deduction) so OT and status math
+// never disagree about what "hours worked" means for the same row. This single function
+// replaces what used to be five separate inline copies (Reports.jsx, PunchPanel.jsx,
+// Dashboard.jsx, AttendanceGrid.jsx) — two of which forgot the leave deduction, so a
+// half-day-leave day could over-count OT. Deliberately does not apply calcStatus's
+// window-availability cap — that cap exists only to keep a late punch-in from being
+// marked Half Day/Absent despite staying to close, it was never part of how OT was
+// computed anywhere in the app.
+export function calcOvertimeHours(rec, stdHours) {
+  if (!rec.inTime || !rec.outTime) return 0
+  const raw = calcRawHrs(rec.inTime, rec.outTime)
+  const deduct = rec.leaveType ? findLeaveType(rec.leaveType)?.deduct || 0 : 0
+  const net = Math.max(0, raw - deduct)
+  return Math.max(0, net - stdHours)
+}
+
 // True when a Day Shift/no-shift punch was too late to ever complete stdHours before
 // the work window closes, even though the employee stayed through to the window's
 // close — the exact case calcStatus above deliberately keeps as Present rather than

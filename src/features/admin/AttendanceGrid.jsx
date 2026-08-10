@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { COMPANIES, MONTHS, APP_BIO_MISMATCH_THRESHOLD_MIN, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmtHrs, fmt2 } from '../../lib/format'
 
 function monthRange(month, year) {
@@ -75,7 +75,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
       if (r.onDuty) map[r.empId].onDuty++
       const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
       map[r.empId].hrs += net
-      map[r.empId].ot += Math.max(0, net - stdHours)
+      map[r.empId].ot += calcOvertimeHours(r, stdHours)
     })
     return Object.values(map)
   })()
@@ -186,6 +186,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
               <tbody>{rows.map(r => {
                 const emp = employees.find(e => e.id === r.empId) || {}
                 const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
+                const ot = calcOvertimeHours(r, stdHours)
                 const aKey = `${r.empId}_${r.date}`
                 const isField = emp.workMode === 'field' || emp.workMode === 'both'
                 return (
@@ -205,7 +206,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                         : <span className="cursor-pointer text-red-400 hover:text-red-300 font-mono" onClick={() => { setEditingCell(`${aKey}_out`); setEditVal(r.outTime || '') }}>{r.outTime || '--'}</span>}
                     </td>
                     <td className="py-2 pr-3 font-medium text-white/80 whitespace-nowrap">{fmtHrs(net)}</td>
-                    <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{net > stdHours ? fmtHrs(net - stdHours) : '--'}</td>
+                    <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{ot > 0 ? fmtHrs(ot) : '--'}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">
                       <Badge status={r.status || 'Absent'} />
                       {hasIncompleteHoursFlag(r, stdHours) && (

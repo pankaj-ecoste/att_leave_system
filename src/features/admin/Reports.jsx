@@ -7,7 +7,7 @@ import { adminFetchAttendance } from '../../api/attendance'
 import { adminFetchLeaves } from '../../api/leave'
 import { adminGetAllLocationLogs } from '../../api/location'
 import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M, APP_BIO_MISMATCH_THRESHOLD_MIN } from '../../lib/constants'
-import { calcRawHrs, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
@@ -21,6 +21,11 @@ export function Reports({ token, employees, stdHours, onAudit }) {
   const [dailyDate, setDailyDate] = useState(todayIST())
   const [dailyBusy, setDailyBusy] = useState(false)
   const [dailyMsg, setDailyMsg] = useState('')
+  const [otFrom, setOtFrom] = useState(todayIST())
+  const [otTo, setOtTo] = useState(todayIST())
+  const [otRows, setOtRows] = useState(null)
+  const [otBusy, setOtBusy] = useState(false)
+  const [otMsg, setOtMsg] = useState('')
 
   async function exportReport(type, from, to) {
     const map = await adminFetchAttendance(token, { from, to, limit: 100000 })
@@ -32,7 +37,7 @@ export function Reports({ token, employees, stdHours, onAudit }) {
       return {
         Date: v.date, 'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '',
         Designation: emp.jobTitle || '', Company: emp.company || '', 'Login Time': v.inTime || '', 'Logout Time': v.outTime || '',
-        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: Math.max(0, net - stdHours).toFixed(2),
+        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: calcOvertimeHours(v, stdHours).toFixed(2),
         Status: v.status || '', 'Leave Type': v.leaveType || '', 'Leave Reason': v.leaveReason || '',
         WFH: v.wfh ? 'Yes' : 'No', 'On Duty': v.onDuty ? 'Yes' : 'No', Location: v.inLocation || '', Remarks: '',
       }
@@ -87,18 +92,22 @@ export function Reports({ token, employees, stdHours, onAudit }) {
       ]
 
       // --- Attendance ---
+      let totalOt = 0
       const attendanceRows = attRows.map(v => {
         const emp = empOf(v.empId)
         const raw = calcRawHrs(v.inTime, v.outTime)
         const deduct = v.leaveType ? findLeaveType(v.leaveType)?.deduct || 0 : 0
         const net = Math.max(0, raw - deduct)
+        const ot = calcOvertimeHours(v, stdHours)
+        totalOt += ot
         return {
           'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '', Company: emp.company || '',
-          'In Time': v.inTime || '', 'Out Time': v.outTime || '', 'Raw Hours': raw.toFixed(2), 'Net Hours': net.toFixed(2),
+          'In Time': v.inTime || '', 'Out Time': v.outTime || '', 'Raw Hours': raw.toFixed(2), 'Net Hours': net.toFixed(2), Overtime: ot.toFixed(2),
           Status: v.status || '', 'Day Part': v.dayPart !== 'full' ? v.dayPart : '', 'Leave Type': v.leaveType || '',
           Source: v.officialSource || v.source || '', 'App In': v.appInTime || '', 'Bio In': v.bioInTime || '',
         }
       })
+      if (totalOt > 0) summaryRows.push({ Metric: 'Total Overtime Hours', Value: totalOt.toFixed(2) })
 
       // --- Location Log ---
       const locationRows = locLogs.map(l => ({
@@ -144,6 +153,48 @@ export function Reports({ token, employees, stdHours, onAudit }) {
     }
   }
 
+  // VB-3 (plan.md §11 Decision 15) — overtime, one of the 3 places OT surfaces. Fetches
+  // fresh for the exact range every time, same S-2b rule as every other report here, and
+  // reuses calcOvertimeHours so this always agrees with what staff see on My Overtime and
+  // what the Daily Report export shows.
+  async function generateOvertimeReport(from, to) {
+    setOtBusy(true)
+    setOtMsg('')
+    setOtRows(null)
+    try {
+      const attMap = await adminFetchAttendance(token, { from, to, limit: 100000 })
+      const byEmp = {}
+      for (const rec of Object.values(attMap)) {
+        const ot = calcOvertimeHours(rec, stdHours)
+        if (ot <= 0) continue
+        if (!byEmp[rec.empId]) byEmp[rec.empId] = { empId: rec.empId, days: 0, totalOt: 0 }
+        byEmp[rec.empId].days += 1
+        byEmp[rec.empId].totalOt += ot
+      }
+      const rows = Object.values(byEmp)
+        .map(r => {
+          const emp = employees.find(e => e.id === r.empId) || {}
+          return { ...r, empNum: emp.empNum || '', name: emp.name || '', dept: emp.dept || '', company: emp.company || '' }
+        })
+        .sort((a, b) => b.totalOt - a.totalOt)
+      setOtRows(rows)
+      onAudit?.('REPORT', `Overtime report ${from} to ${to}`, 'admin')
+    } catch (err) {
+      setOtMsg(err.message || 'Could not generate the overtime report — please try again')
+    } finally {
+      setOtBusy(false)
+    }
+  }
+
+  function exportOvertimeReport(type) {
+    if (!otRows?.length) return
+    const rows = otRows.map(r => ({
+      'Employee ID': r.empNum, 'Employee Name': r.name, Department: r.dept, Company: r.company,
+      'Days With Overtime': r.days, 'Total Overtime (hrs)': r.totalOt.toFixed(2),
+    }))
+    downloadRows(rows, type, `overtime_${otFrom}_${otTo}`)
+  }
+
   return (
     <Card className="space-y-5">
       <h3 className="text-white font-semibold text-lg">Reports</h3>
@@ -157,6 +208,42 @@ export function Reports({ token, employees, stdHours, onAudit }) {
           <Button className="text-xs" disabled={dailyBusy} onClick={() => exportDailyReport(dailyDate)}>{dailyBusy ? 'Generating...' : 'Download Daily Report'}</Button>
         </div>
         {dailyMsg && <p className="text-red-400 text-xs">{dailyMsg}</p>}
+      </div>
+
+      <div className="border border-emerald-500/30 bg-emerald-500/5 rounded-2xl p-4 space-y-3">
+        <h4 className="text-white font-medium text-sm">Overtime Report</h4>
+        <p className="text-white/40 text-xs">Per-employee overtime (hours beyond stdHours) for the selected range — tracking only, not part of payroll.</p>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="flex-1 min-w-[140px]"><Label>From</Label><Input type="date" value={otFrom} onChange={e => setOtFrom(e.target.value)} /></div>
+          <div className="flex-1 min-w-[140px]"><Label>To</Label><Input type="date" value={otTo} onChange={e => setOtTo(e.target.value)} /></div>
+          <Button className="text-xs" disabled={otBusy} onClick={() => generateOvertimeReport(otFrom, otTo)}>{otBusy ? 'Generating...' : 'Generate'}</Button>
+          {otRows?.length > 0 && (
+            <>
+              <Button variant="secondary" className="text-xs" onClick={() => exportOvertimeReport('xlsx')}>Export XLSX</Button>
+              <Button variant="secondary" className="text-xs" onClick={() => exportOvertimeReport('csv')}>Export CSV</Button>
+            </>
+          )}
+        </div>
+        {otMsg && <p className="text-red-400 text-xs">{otMsg}</p>}
+        {otRows && (
+          otRows.length === 0 ? (
+            <p className="text-white/30 text-sm text-center py-3">No overtime in this range</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-white/70 min-w-[500px]">
+                <thead><tr className="border-b border-white/10">{['Employee', 'Company', 'Days With OT', 'Total OT'].map(h => <th key={h} className="text-left py-2 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}</tr></thead>
+                <tbody>{otRows.map(r => (
+                  <tr key={r.empId} className="border-b border-white/5">
+                    <td className="py-2 pr-4 text-white/80 font-medium">{r.name}</td>
+                    <td className="py-2 pr-4 text-white/30">{r.company?.split(' ')[0]}</td>
+                    <td className="py-2 pr-4">{r.days}</td>
+                    <td className="py-2 pr-4 text-emerald-400 font-medium">{r.totalOt.toFixed(2)}h</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )
+        )}
       </div>
 
       <div className="border border-white/10 rounded-2xl p-4 space-y-3">

@@ -2,7 +2,7 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, hasIncompleteHoursFlag, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
+import { calcRawHrs, calcStatus, calcOvertimeHours, hasIncompleteHoursFlag, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
 import { DAY_TYPES } from './constants'
 
 describe('calcRawHrs', () => {
@@ -106,6 +106,35 @@ describe('calcStatus', () => {
       // Present); this checks a Night Shift shortfall still uses the plain calculation.
       expect(calcStatus({ inTime: '21:00', outTime: '23:00' }, stdHours)).toBe('Absent')
     })
+  })
+})
+
+describe('calcOvertimeHours', () => {
+  const stdHours = 9
+
+  it('is 0 when hours worked do not exceed stdHours', () => {
+    expect(calcOvertimeHours({ inTime: '09:00', outTime: '18:00' }, stdHours)).toBe(0)
+  })
+
+  it('returns the hours worked past stdHours', () => {
+    expect(calcOvertimeHours({ inTime: '09:00', outTime: '20:00' }, stdHours)).toBe(2)
+  })
+
+  it('handles an overnight shift the same as calcRawHrs (wraps past midnight)', () => {
+    expect(calcOvertimeHours({ inTime: '21:00', outTime: '09:00' }, stdHours)).toBe(3)
+  })
+
+  it('is 0 when either punch is missing', () => {
+    expect(calcOvertimeHours({ inTime: '09:00', outTime: null }, stdHours)).toBe(0)
+    expect(calcOvertimeHours({ inTime: null, outTime: '20:00' }, stdHours)).toBe(0)
+  })
+
+  it('subtracts a partial-leave deduction before comparing to stdHours, matching calcStatus', () => {
+    // Partial Leave - 1 Hour has deduct: 1 (plan.md constants.js). 9:00-19:00 is 10h
+    // raw, minus 1h deduction = 9h net = exactly stdHours, so no OT yet.
+    expect(calcOvertimeHours({ inTime: '09:00', outTime: '19:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe(0)
+    // One more hour worked now clears stdHours after the deduction.
+    expect(calcOvertimeHours({ inTime: '09:00', outTime: '20:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe(1)
   })
 })
 

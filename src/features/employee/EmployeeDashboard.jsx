@@ -5,6 +5,7 @@ import { AttendanceHistory } from './AttendanceHistory'
 import { LeaveApply } from './LeaveApply'
 import { LeavePolicy } from './LeavePolicy'
 import { MonthlySummary } from './MonthlySummary'
+import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
@@ -24,6 +25,7 @@ export function EmployeeDashboard({
     { id: 'leaves', label: 'Apply For' },
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },
+    { id: 'overtime', label: 'Overtime' },
     { id: 'policy', label: 'Leave Policy' },
     { id: 'assets', label: 'My Assets' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
@@ -89,6 +91,9 @@ export function EmployeeDashboard({
         )}
         {empTab === 'summary' && (
           <MonthlySummary currentUser={currentUser} attendance={attendance} stdHours={stdHours} holidays={holidays} />
+        )}
+        {empTab === 'overtime' && (
+          <MyOvertime currentUser={currentUser} attendance={attendance} stdHours={stdHours} />
         )}
         {empTab === 'policy' && <LeavePolicy />}
         {empTab === 'assets' && <MyAssets assets={myAssets} />}

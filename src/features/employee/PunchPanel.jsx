@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../../components/ui/Card'
 import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
-import { calcRawHrs, todayIST } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { haversineMeters, nearestSite } from '../../lib/geo'
 import { getLocation } from '../../hooks/useGeolocation'
@@ -64,8 +64,8 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
   const noteMissing = needsNote && !note.trim()
 
   const raw = calcRawHrs(record.inTime, record.outTime)
-  const net = Math.max(0, raw) // deduction for partial leave applied elsewhere; kept simple here since this is "today" only
-  const ot = Math.max(0, net - stdHours)
+  const net = Math.max(0, raw)
+  const ot = calcOvertimeHours(record, stdHours)
   const shift = getShiftInfo(record, currentUser)
   const today = todayIST()
   const upcomingHolidays = holidays.filter(h => h.date >= today).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 5)

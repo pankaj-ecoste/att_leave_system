@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, todayIST } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 
 // Predicate per attendance-based tile — 'pending' is handled separately below since it
@@ -133,6 +133,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
                 <tbody>{shownEmps.map(e => {
                   const r = attendance[`${e.id}_${today}`] || {}
                   const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
+                  const ot = calcOvertimeHours(r, stdHours)
                   const sh = getShiftInfo(r, e)
                   return (
                     <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
@@ -144,7 +145,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
                       <td className="py-2.5 pr-4 font-mono text-emerald-400">{r.inTime || '--'}</td>
                       <td className="py-2.5 pr-4 font-mono text-red-400">{r.outTime || '--'}</td>
                       <td className="py-2.5 pr-4">{fmtHrs(net)}</td>
-                      <td className="py-2.5 pr-4 text-indigo-300">{net > stdHours ? fmtHrs(net - stdHours) : '--'}</td>
+                      <td className="py-2.5 pr-4 text-indigo-300">{ot > 0 ? fmtHrs(ot) : '--'}</td>
                       <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
                     </tr>
                   )
