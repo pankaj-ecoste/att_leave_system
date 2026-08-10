@@ -243,6 +243,34 @@ export function rowToLeaveBalance(row) {
   }
 }
 
+export function rowToLeaveAccrual(row) {
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    empName: row.emp_name,
+    empNum: row.emp_num,
+    leaveType: row.leave_type,
+    period: row.period,
+    credited: Number(row.credited),
+    used: Number(row.used),
+    runningBalance: Number(row.running_balance),
+    note: row.note,
+    createdAt: row.created_at,
+  }
+}
+
+export function rowToCompOffPayout(row) {
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    empName: row.emp_name,
+    empNum: row.emp_num,
+    period: row.period,
+    daysLapsed: Number(row.days_lapsed),
+    createdAt: row.created_at,
+  }
+}
+
 export function rowToAuditLog(row) {
   if (!row) return null
   return {

@@ -23,7 +23,7 @@ export function LeavePolicy() {
       <p className="text-white/30 text-xs mb-5">ATPL|HR|22|1002 — plain-language summary. The official document is the final word.</p>
 
       <Section title="Leave year">
-        <p>Runs 1 April to 31 March. Leave is credited on 1 April each year. If you joined partway through the year, your first year's leave is pro-rated from your joining month.</p>
+        <p>Runs 1 April to 31 March. Casual and Earned Leave are credited monthly (see below), not all at once — if you joined partway through the year, your first year's leave is pro-rated from your joining month, same as everyone else's monthly credit.</p>
       </Section>
 
       <Section title={`Casual Leave — ${LEAVE_POLICY.CASUAL.perYear} days/year`}>
@@ -61,6 +61,11 @@ export function LeavePolicy() {
 
       <Section title="Half-day leave">
         <p>Casual, Sick and Earned Leave can each be taken as a half day (morning or afternoon) — deducts half a day from your balance instead of a full day.</p>
+      </Section>
+
+      <Section title="Compensatory Leave (Comp-Off)">
+        <p>Earned automatically — working a full day on a Sunday or a listed holiday credits 1 Compensatory Leave day, no request needed. Applied through the portal exactly like Casual Leave (manager, then admin approval).</p>
+        <p>Unused Compensatory Leave doesn't carry forward — any balance left at the end of a month is recorded as a payout for HR, not carried into the next month.</p>
       </Section>
 
       <Section title="Applying for leave">

@@ -41,6 +41,11 @@ export const LEAVE_TYPES = [
   { label: 'Partial Leave - 2 Hours', deduct: 2, present: true, max: 1, icon: 'P2' },
   { label: 'Work From Home', deduct: 0, present: true, max: null, icon: 'WH' },
   { label: 'On Duty', deduct: 0, present: true, max: null, icon: 'OD' },
+  // V2 Phase C (plan.md §11 decisions 10-12) — earned 1-day-per-full-day worked on a
+  // Sunday/holiday (server-side daily cron, not user-triggered), applied exactly like
+  // Casual Leave. Deliberately not in HALF_DAY_ELIGIBLE_TYPES below — full-day only,
+  // nothing in the locked decisions asks for half-day comp-off.
+  { label: 'Compensatory Leave', deduct: 0, present: false, max: null, icon: 'CO' },
 ]
 
 export function findLeaveType(label) {

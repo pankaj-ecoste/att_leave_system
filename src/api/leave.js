@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { rowToLeave, rowToLeaveBalance } from './mappers'
+import { rowToLeave, rowToLeaveBalance, rowToLeaveAccrual, rowToCompOffPayout } from './mappers'
 
 // ---------------------------------------------------------------------------
 // Employee
@@ -150,4 +150,28 @@ export async function adminResetLeaveBalances(token) {
   const { data, error } = await supabase.rpc('admin_reset_leave_balances', { p_token: token })
   if (error) throw error
   return data // number of rows created
+}
+
+// V2 Phase C — read-only ledger visibility (plan.md §11 decision 1, PROGRESS.md VC-1/VC-8).
+// The crediting/expiry itself runs server-side on a cron, never from the client.
+
+export async function adminFetchLeaveAccruals(token, { empId, leaveType, limit = 500, offset = 0 } = {}) {
+  const { data, error } = await supabase.rpc('admin_get_leave_accruals', {
+    p_token: token,
+    p_emp_id: empId || null,
+    p_leave_type: leaveType || null,
+    p_limit: limit,
+    p_offset: offset,
+  })
+  if (error) throw error
+  return (data || []).map(rowToLeaveAccrual)
+}
+
+export async function adminFetchCompOffPayouts(token, { period } = {}) {
+  const { data, error } = await supabase.rpc('admin_get_comp_off_payouts', {
+    p_token: token,
+    p_period: period || null,
+  })
+  if (error) throw error
+  return (data || []).map(rowToCompOffPayout)
 }

@@ -116,6 +116,13 @@ const CALLS = [
   ['admin_upsert_employee_asset', { p_token: FAKE_UUID, p_asset_id: null, p_emp_id: FAKE_UUID, p_asset_type: 'test' }],
   ['admin_delete_employee_asset', { p_token: FAKE_UUID, p_asset_id: FAKE_UUID }],
   ['admin_mark_assets_returned', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  // V2 Phase C (0024_v2_phase_c_comp_off_and_accrual.sql) — monthly CL/EL accrual
+  // ledger + Compensatory Leave. The run_* crediting/expiry functions (monthly
+  // accrual, annual rollover, comp-off accrual/expiry) are deliberately NOT anon-
+  // callable (cron/internal-only, same posture as run_annual_leave_rollover already
+  // excluded from this list) — only the two read-only admin RPCs are smoke-tested here.
+  ['admin_get_leave_accruals', { p_token: FAKE_UUID }],
+  ['admin_get_comp_off_payouts', { p_token: FAKE_UUID }],
 ]
 
 async function main() {

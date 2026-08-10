@@ -121,7 +121,7 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
           )
         })()}
         {subTab === 'balances' && (() => {
-          const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'LOP', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
+          const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Compensatory Leave', 'LOP', 'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave']
           const rows = employees.filter(e => leaveBalances[e.id]).filter(e => !q || e.name.toLowerCase().includes(q))
           return rows.length === 0 ? <p className="text-white/30 text-center py-10">No records</p> : (
             <table className="w-full text-xs text-white/60 min-w-max">
@@ -134,7 +134,7 @@ export function Database({ token, employees, attendanceHook, leaves, leaveBalanc
                 return (
                   <tr key={i} className="border-b border-white/5 hover:bg-white/5">
                     <td className="px-3 py-2 whitespace-nowrap font-medium text-white/80">{e.name}</td>
-                    {leaveTypes.map(lt => <td key={lt} className="px-3 py-2 whitespace-nowrap">{bal[lt] ? `${bal[lt].balance}/${bal[lt].quota}` : '--'}</td>)}
+                    {leaveTypes.map(lt => <td key={lt} className="px-3 py-2 whitespace-nowrap">{bal[lt] ? (bal[lt].quota > 0 ? `${bal[lt].balance}/${bal[lt].quota}` : bal[lt].balance) : '--'}</td>)}
                   </tr>
                 )
               })}</tbody>

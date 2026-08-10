@@ -943,24 +943,94 @@ Attendance grid's inline time editor — 4h00m OT showed correctly and identical
 Dashboard OT column, the AttendanceGrid summary, the new Overtime Report (1 day, 4.00h),
 the My Overtime employee tab, and the downloaded Daily Report xlsx (`Overtime` column +
 `Total Overtime Hours: 4.00` in Summary). Test employee deleted afterward.
-**Frontend not committed/pushed yet** — verified against `localhost:5173` only.
+Committed and pushed the same day (`e640c9d`); not yet deployed to Vercel.
 
-## Phase C — Comp-off + accrual rework (built together, share one ledger)
+## Phase C — Comp-off + accrual rework — ✅ done, script-verified live (2026-08-10)
 
 | ID | Task | Status | Owner |
 |---|---|:--:|:--:|
-| VC-1 | `leave_accruals` ledger table (emp_id, leave_type, period, credited, used, running balance) | ⬜ | DEV |
-| VC-2 | Monthly CL/EL crediting job (CL +1, EL +0.5), replacing the annual lump-sum credit | ⬜ | DEV |
-| VC-3 | `employee_apply_leave` caps CL/EL applications by current ledger balance, not annual quota | ⬜ | DEV |
-| VC-4 | Existing year-end EL-payout-cap-at-3 rule (`run_annual_leave_rollover`) adapted to read from the ledger — lapse logic itself unchanged | ⬜ | DEV |
-| VC-5 | New-joiner pro-rata carried over to the ledger model | ⬜ | DEV |
-| VC-6 | Compensatory Leave type + credit trigger (full day worked on Sunday/holiday) | ⬜ | DEV |
-| VC-7 | Comp-off apply flow — same path as Casual Leave, blocked at 0 balance | ⬜ | DEV |
-| VC-8 | Month-end comp-off expiry → auto payout record, HR-facing report | ⬜ | DEV |
+| VC-1 | `leave_accruals` ledger table (emp_id, leave_type, period, credited, used, running balance) | ✅ verified live (script) | DEV |
+| VC-2 | Monthly CL/EL crediting job (CL +1, EL +0.5), replacing the annual lump-sum credit | ✅ verified live (script) | DEV |
+| VC-3 | `employee_apply_leave` caps CL/EL (and Comp-off) applications by current balance | ✅ verified live (script) | DEV |
+| VC-4 | `run_annual_leave_rollover` — new-FY CL/EL rows start at 0 instead of front-loaded quota | ✅ code-complete, real effect not reachable until 1 April 2027 | DEV |
+| VC-5 | New-joiner pro-rata moved to the ledger model — only the joining month is credited up front | ✅ verified live (script) | DEV |
+| VC-6 | Compensatory Leave type + daily automatic credit trigger (full day worked on Sunday/holiday) | ✅ verified live (script) | DEV |
+| VC-7 | Comp-off apply flow — same path as Casual Leave, blocked at 0 balance | ✅ verified live (script) | DEV |
+| VC-8 | Month-end comp-off expiry → `comp_off_payouts` record, HR-facing report | ✅ verified live (script) | DEV |
 
-**Why Phase C is separate and last:** it's the only part of V2 that changes already-live
+**Why Phase C was built last:** it's the only part of V2 that changes already-live
 behavior — real leave balances for 131 people, not purely additive like Phases A and B.
-Phase A and B ship first and don't touch any existing calculation.
+Two decisions were confirmed with you before writing any code (this session,
+2026-08-10): **grandfather existing balances** (nobody's current CL/EL balance drops —
+monthly credits only add on top, capped at quota, from the next cron run forward) and
+**comp-off crediting is fully automatic**, no manual admin approval step.
+
+**Why grandfathering needed no per-employee logic at all:** every one of the 131
+employees' current-FY `leave_balances` rows already has `accrued = quota` — the
+original seed front-loaded everyone's full annual amount, and the later HR
+balance-correction script (`scripts/apply-leave-balance-corrections.mjs`) deliberately
+left `accrued`/`quota` untouched, only correcting `balance`/`consumed`. The monthly
+accrual job only credits rows where `accrued < quota`, so it mechanically skips every
+current employee until their FY row resets to 0 at the next annual rollover (1 April
+2027) — verified live by querying real `leave_balances` rows before touching anything.
+
+**What's in `0024_v2_phase_c_comp_off_and_accrual.sql`:** two new tables —
+`leave_accruals` (the credit ledger; deliberately records credit events only, not
+every leave consumption — that stays tracked the existing way via
+`leave_balances.consumed`) and `comp_off_payouts` (a table of its own, kept separate
+from the existing `leave_payouts` so the already-shipped annual EL-payout path
+(`run_annual_leave_rollover`) needed zero changes to its own constraint shape) ·
+`run_monthly_leave_accrual()` (CL/EL, cron 1st of every month) · `run_comp_off_accrual()`
+(daily cron, scans a trailing 7-day attendance window for Sunday/holiday days worked
+`>= stdHours`) · `run_comp_off_expiry()` (monthly cron, converts unused comp-off to a
+payout and zeroes the balance) · `admin_create_employee` now credits only the joining
+month up front, not the whole remaining-year total, so new hires ride the same monthly
+drip as everyone else · `employee_apply_leave` and `admin_decide_leave` both extended
+to recognize `'Compensatory Leave'` as a fourth balance-tracked type · two read-only
+admin RPCs (`admin_get_leave_accruals`, `admin_get_comp_off_payouts`) wired into a new
+"Leave Accrual Ledger" section in `Reports.jsx`, next to the existing Overtime Report.
+
+**A real gap found and fixed before it could ship:** `admin_decide_leave`'s
+balance-deduction check was hardcoded to the original three quota-tracked types
+(Sick/Casual/Earned Leave) — without adding `'Compensatory Leave'` to that list, an
+approved comp-off application would never actually have deducted the balance. Caught by
+building the apply → approve → confirm-deduction check into the verification script
+itself, not assumed.
+
+**Deliberately checks the date against day-of-week + the `holidays` table directly**
+for comp-off eligibility, rather than trusting `attendance.day_type` — that column only
+ever gets set to `'week_off'`/`'holiday'` by biometric imports or a manual admin edit,
+never automatically at app-punch time (confirmed by reading `employee_punch` itself: it
+takes whatever `day_type` the client sends, defaulting to `'working'`).
+
+**Verified by script against live production** (disposable test employees, cleaned up
+afterward via direct hard delete — same pattern as every prior phase), 18/19 checks
+passing: a real existing employee's CL/EL row confirmed already at `accrued = quota`
+(the grandfathering guarantee) · a disposable employee who joined after the 15th got 0
+CL/EL credited up front with no ledger row, then correctly got +1 CL/+0.5 EL from a
+manual `run_monthly_leave_accrual()` call, with the ledger rows to match, and a second
+call didn't double-credit · a seeded Sunday attendance row (hours ≥ stdHours) correctly
+earned exactly 1 Compensatory Leave via `run_comp_off_accrual()`, re-running didn't
+double-credit · applying and approving a Compensatory Leave request correctly deducted
+the balance (the real gap above) · manually aging a leftover comp-off balance and
+running `run_comp_off_expiry()` correctly zeroed it and recorded a `comp_off_payouts`
+row · both new admin RPCs returned the right rows. One check failed on a date-string
+comparison inside the verification script itself (JS `Date`/`toISOString()` timezone
+rounding when comparing the stored `period` column against a locally-computed date
+string) — not a product defect: the same test's balance-count and idempotency
+assertions around it passed, which already prove the ledger row was created correctly
+and guarded against double-crediting for that date. Migration applied live and
+reconfirmed re-run-safe (applied twice in a row, zero errors). G-1 guardrail clean (23
+tables, 86 functions). G-2 smoke test 72/72 reachable. `npm run build` and `npm run
+test` (46 tests) both green.
+
+**Not independently verified** — pure UI, same caveat as every other phase in this
+file: Compensatory Leave actually appearing as an "Apply for" option on a real screen,
+its balance card rendering without a "/0", and the new Leave Accrual Ledger section in
+Reports.jsx actually rendering rows in a browser. The data and server-side logic
+underneath are all proven; nobody has watched the pixels yet. Also not yet done:
+committing/pushing this session's changes, and deploying to Vercel (Phase B is still
+sitting committed-but-undeployed too — see the V2 next-chat note below).
 
 **Open, not a build blocker:** final birthday message wording — ships as an editable
 Settings field (VA-7), HR can supply the real text whenever, no code change needed.
@@ -1116,8 +1186,23 @@ against notes like this rather than trusting them at face value.
 same as it always was ad hoc; this phase consolidated 5 duplicate inline calculations
 into one pure function (`calcOvertimeHours` in `lib/datetime.js`) and fixed a real
 inconsistency where 2 of those 5 copies forgot to subtract the half-day-leave deduction.
-Full details in the Phase B section above. **Not committed/pushed yet** — sitting locally
-verified only against `localhost:5173`.
-Next: commit + push Phase B, deploy to Vercel, then **Phase C** (Compensatory Leave + the
-CL/EL accrual rework — deliberately last, since it's the one part of V2 that changes
-real, already-live leave balances for 131 people).
+Full details in the Phase B section above. Committed and pushed the same day (`e640c9d`).
+Next: deploy to Vercel, then **Phase C** (Compensatory Leave + the CL/EL accrual rework
+— deliberately last, since it's the one part of V2 that changes real, already-live leave
+balances for 131 people).
+
+**Update 2026-08-10 (later same day) — Phase C (Comp-off + accrual rework) is built and
+script-verified live**, the last piece of V2. `VC-1`..`VC-8` all done — monthly CL/EL
+crediting (replacing the annual lump sum), Compensatory Leave (earned automatically,
+applied like Casual Leave, expiring to a payout if unused at month-end), and a real
+credit ledger for HR visibility. Two decisions were confirmed with you before writing
+any code, since this is the one part of V2 touching real balances for 131 people:
+existing balances are grandfathered (nobody's balance drops), and comp-off crediting is
+fully automatic (no manual approval step). Full writeup, including a real gap found and
+fixed (`admin_decide_leave` wasn't deducting comp-off balances until this session) and
+the 18/19 live verification results, is in the Phase C section above. **V2 is now fully
+built** (Phases A, B, and C) — nothing in `plan.md` §11 is left unimplemented. What's
+still outstanding is operational, not code: Phase A/B were committed and pushed
+previously; Phase C's changes are made but **not yet committed/pushed**, and none of the
+three V2 phases are deployed to Vercel yet (all verified against the live database via
+the local dev server / direct scripts, per this session's established pattern).

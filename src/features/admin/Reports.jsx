@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { adminFetchAttendance } from '../../api/attendance'
-import { adminFetchLeaves } from '../../api/leave'
+import { adminFetchLeaves, adminFetchLeaveAccruals, adminFetchCompOffPayouts } from '../../api/leave'
 import { adminGetAllLocationLogs } from '../../api/location'
 import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M, APP_BIO_MISMATCH_THRESHOLD_MIN } from '../../lib/constants'
 import { calcRawHrs, calcOvertimeHours, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
@@ -26,6 +26,10 @@ export function Reports({ token, employees, stdHours, onAudit }) {
   const [otRows, setOtRows] = useState(null)
   const [otBusy, setOtBusy] = useState(false)
   const [otMsg, setOtMsg] = useState('')
+  const [ledgerRows, setLedgerRows] = useState(null)
+  const [payoutRows, setPayoutRows] = useState(null)
+  const [ledgerBusy, setLedgerBusy] = useState(false)
+  const [ledgerMsg, setLedgerMsg] = useState('')
 
   async function exportReport(type, from, to) {
     const map = await adminFetchAttendance(token, { from, to, limit: 100000 })
@@ -195,6 +199,35 @@ export function Reports({ token, employees, stdHours, onAudit }) {
     downloadRows(rows, type, `overtime_${otFrom}_${otTo}`)
   }
 
+  // V2 Phase C (plan.md §11, VC-1/VC-8) — HR visibility into the monthly CL/EL accrual
+  // ledger and comp-off month-end expiry payouts. The crediting/expiry itself runs
+  // server-side on a cron with no manual step (decision 12/2) — this is read-only.
+  async function loadLeaveLedger() {
+    setLedgerBusy(true)
+    setLedgerMsg('')
+    try {
+      const [accruals, payouts] = await Promise.all([
+        adminFetchLeaveAccruals(token, { limit: 500 }),
+        adminFetchCompOffPayouts(token),
+      ])
+      setLedgerRows(accruals)
+      setPayoutRows(payouts)
+    } catch (err) {
+      setLedgerMsg(err.message || 'Could not load the leave ledger — please try again')
+    } finally {
+      setLedgerBusy(false)
+    }
+  }
+
+  function exportLeaveLedger(type) {
+    if (!ledgerRows?.length) return
+    const rows = ledgerRows.map(r => ({
+      'Employee ID': r.empNum, 'Employee Name': r.empName, 'Leave Type': r.leaveType,
+      Period: r.period, Credited: r.credited, Used: r.used, 'Running Balance': r.runningBalance, Note: r.note,
+    }))
+    downloadRows(rows, type, `leave_ledger_${todayIST()}`)
+  }
+
   return (
     <Card className="space-y-5">
       <h3 className="text-white font-semibold text-lg">Reports</h3>
@@ -243,6 +276,59 @@ export function Reports({ token, employees, stdHours, onAudit }) {
               </table>
             </div>
           )
+        )}
+      </div>
+
+      <div className="border border-cyan-500/30 bg-cyan-500/5 rounded-2xl p-4 space-y-3">
+        <h4 className="text-white font-medium text-sm">Leave Accrual Ledger</h4>
+        <p className="text-white/40 text-xs">Every monthly Casual/Earned Leave credit, comp-off day-worked credit, and comp-off month-end expiry — most recent 500 events, and any comp-off payout records.</p>
+        <div className="flex gap-2 flex-wrap items-end">
+          <Button className="text-xs" disabled={ledgerBusy} onClick={loadLeaveLedger}>{ledgerBusy ? 'Loading...' : 'Load Recent Activity'}</Button>
+          {ledgerRows?.length > 0 && (
+            <>
+              <Button variant="secondary" className="text-xs" onClick={() => exportLeaveLedger('xlsx')}>Export XLSX</Button>
+              <Button variant="secondary" className="text-xs" onClick={() => exportLeaveLedger('csv')}>Export CSV</Button>
+            </>
+          )}
+        </div>
+        {ledgerMsg && <p className="text-red-400 text-xs">{ledgerMsg}</p>}
+        {ledgerRows && (
+          ledgerRows.length === 0 ? (
+            <p className="text-white/30 text-sm text-center py-3">No accrual activity yet</p>
+          ) : (
+            <div className="overflow-x-auto max-h-72">
+              <table className="w-full text-xs text-white/70 min-w-[560px]">
+                <thead><tr className="border-b border-white/10">{['Employee', 'Type', 'Period', 'Credited', 'Used', 'Balance'].map(h => <th key={h} className="text-left py-2 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}</tr></thead>
+                <tbody>{ledgerRows.map(r => (
+                  <tr key={r.id} className="border-b border-white/5">
+                    <td className="py-2 pr-4 text-white/80 font-medium">{r.empName}</td>
+                    <td className="py-2 pr-4 text-white/50">{r.leaveType}</td>
+                    <td className="py-2 pr-4 text-white/30 font-mono">{r.period}</td>
+                    <td className="py-2 pr-4 text-emerald-400">{r.credited > 0 ? `+${r.credited}` : ''}</td>
+                    <td className="py-2 pr-4 text-red-400">{r.used > 0 ? `-${r.used}` : ''}</td>
+                    <td className="py-2 pr-4">{r.runningBalance}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )
+        )}
+        {payoutRows?.length > 0 && (
+          <div className="pt-3 border-t border-white/10">
+            <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-2">Comp-Off Payouts (unused, expired at month-end)</p>
+            <div className="overflow-x-auto max-h-48">
+              <table className="w-full text-xs text-white/70 min-w-[400px]">
+                <thead><tr className="border-b border-white/10">{['Employee', 'Month', 'Days Lapsed'].map(h => <th key={h} className="text-left py-2 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}</tr></thead>
+                <tbody>{payoutRows.map(r => (
+                  <tr key={r.id} className="border-b border-white/5">
+                    <td className="py-2 pr-4 text-white/80 font-medium">{r.empName}</td>
+                    <td className="py-2 pr-4 text-white/30 font-mono">{r.period}</td>
+                    <td className="py-2 pr-4 text-amber-400">{r.daysLapsed}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
