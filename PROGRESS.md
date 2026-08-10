@@ -1083,6 +1083,24 @@ correctly blocked from applying for more (tested against the actual `employee_ap
 RPC, not assumed) · G-1 guardrail clean (23 tables, 87 functions) · `npm run build` and
 `npm run test` (46 tests) both green.
 
+**Round 3, same day — arrears timing fix (`0026_v2_phase_c_arrears_accrual_correction.sql`).**
+Round 2's `months_elapsed_in_fy()` counted the current, still-in-progress month as
+already earned (credit landed the moment a month *started*). The user clarified the
+intended model is arrears — a month's credit only lands once that month is actually
+over, on the 1st of the next month (e.g. joined in July: during August you should see
+only July's 0.5 EL; only once September starts does August's 0.5 land too, for 1.0
+total). `run_monthly_leave_accrual` (0024) already fires this way mechanically (once a
+month, on the 1st) — the bug was entirely in the *starting point*: `months_elapsed_in_fy`
+had an extra `+1` (removed) and `admin_create_employee` was still crediting 1 CL/0.5 EL
+immediately at hire for anyone joining on/before the 15th (removed — new hires now
+always start at 0, `quota` unchanged, first credit arrives via the normal monthly cron
+once their first eligible month completes). Same one-time-correction pattern as 0025,
+same ledger period key on purpose (updates that entry rather than leaving a stale
+duplicate) — all 276 CL/EL rows dropped by exactly one more month's worth. Verified:
+re-applied twice (genuine no-op second time), a disposable new hire confirmed to start
+at accrued=0/balance=0 with quota still correctly set, G-1 clean (23 tables, 87
+functions), build/tests green (46 tests).
+
 **Not yet done:** committing/pushing this session's changes, and deploying to Vercel
 (Phase B is still sitting committed-but-undeployed too — see the V2 next-chat note
 below).
