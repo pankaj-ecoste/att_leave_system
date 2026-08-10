@@ -16,13 +16,14 @@ export async function adminFetchAuditLogs(token, limit = 500) {
   return (data || []).map(rowToAuditLog)
 }
 
-export async function adminUpdateSettings(token, stdHours, newAdminPin, oldPin, adminEmail) {
+export async function adminUpdateSettings(token, stdHours, newAdminPin, oldPin, adminEmail, birthdayMessage) {
   const { error } = await supabase.rpc('admin_update_settings', {
     p_token: token,
     p_std_hours: stdHours,
     p_new_admin_pin: newAdminPin || null,
     p_old_pin: oldPin || null,
     p_admin_email: adminEmail || null,
+    p_birthday_message: birthdayMessage || null,
   })
   if (error) throw error
 }

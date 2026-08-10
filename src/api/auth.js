@@ -19,12 +19,12 @@ export async function fetchDirectory() {
 }
 
 export async function fetchAppSettings() {
-  const { data, error } = await supabase.from('app_settings_public').select('std_hours, admin_email').single()
+  const { data, error } = await supabase.from('app_settings_public').select('std_hours, admin_email, birthday_message').single()
   if (error) {
     console.error(error)
-    return { stdHours: 9, adminEmail: null }
+    return { stdHours: 9, adminEmail: null, birthdayMessage: null }
   }
-  return { stdHours: Number(data.std_hours) || 9, adminEmail: data.admin_email || null }
+  return { stdHours: Number(data.std_hours) || 9, adminEmail: data.admin_email || null, birthdayMessage: data.birthday_message || null }
 }
 
 // ---------------------------------------------------------------------------

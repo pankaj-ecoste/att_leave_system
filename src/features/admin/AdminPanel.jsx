@@ -49,7 +49,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         </div>
       </div>
       <div className="max-w-7xl mx-auto p-4 space-y-4">
-        {tab === 'dashboard' && <Dashboard employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} />}
+        {tab === 'dashboard' && <Dashboard employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
         {tab === 'attendance' && (
           <>
             <Imports leaveBalanceImport={imports.leaveBalance} dailyBioImport={imports.dailyBio} monthlyBioImport={imports.monthlyBio} />
@@ -57,14 +57,14 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
           </>
         )}
         {tab === 'leaves' && <LeaveApprovals employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
-        {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} onAudit={onAudit} />}
+        {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} onAudit={onAudit} />}
         {tab === 'sites' && <Sites sites={admin.sites} createSite={admin.createSite} updateSite={admin.updateSite} deleteSite={admin.deleteSite} onAudit={onAudit} />}
         {tab === 'reports' && <Reports token={token} employees={admin.employees} stdHours={admin.stdHours} onAudit={onAudit} />}
         {tab === 'database' && <Database token={token} employees={admin.employees} attendanceHook={attendanceHook} leaves={admin.leaves} leaveBalances={admin.leaveBalances} auditLogs={admin.auditLogs} />}
         {tab === 'settings' && (
           <Settings
             employees={admin.employees} attendanceCount={Object.keys(attendanceHook.attendance).length} leaves={admin.leaves} auditLogs={admin.auditLogs}
-            holidays={admin.holidays} stdHours={admin.stdHours} adminEmail={admin.adminEmail} updateSettings={admin.updateSettings} resetLeaveBalancesForNewFY={admin.resetLeaveBalancesForNewFY}
+            holidays={admin.holidays} stdHours={admin.stdHours} adminEmail={admin.adminEmail} birthdayMessage={admin.birthdayMessage} updateSettings={admin.updateSettings} resetLeaveBalancesForNewFY={admin.resetLeaveBalancesForNewFY}
             addHoliday={admin.addHoliday} deleteHoliday={admin.deleteHoliday} onAudit={onAudit}
             lastImports={{
               leaveBalance: imports.leaveBalance.sheet?.importedAt,

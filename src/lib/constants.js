@@ -7,13 +7,26 @@ export const COMPANIES = [
   'Asma Traexim Pvt Ltd',
   'Metamask Design Solutions LLP',
   'Lamora Buildtech Pvt Ltd',
+  'Asma + Production Plant',
 ]
 export const COMPANY_COLORS = [
   'from-violet-600 to-indigo-600',
   'from-cyan-600 to-blue-600',
   'from-emerald-600 to-teal-600',
+  'from-orange-600 to-red-600',
 ]
-export const COMPANY_ICONS = ['A', 'M', 'L']
+export const COMPANY_ICONS = ['A', 'M', 'L', 'P']
+
+// V2 decision 1/3 (plan.md §11) — Plant is a 4th company value, not a new entity.
+// These 8 types are hidden from Plant employees' Apply Leave screen AND blocked
+// server-side in employee_apply_leave (keyed off the employee's real `company` column,
+// not client input) — mirrored here only for the UI filter, same duplication pattern
+// this codebase already accepts for HALF_DAY_ELIGIBLE_TYPES vs the SQL half-day check.
+export const PLANT_COMPANY = 'Asma + Production Plant'
+export const PLANT_RESTRICTED_LEAVE_TYPES = [
+  'Bereavement Leave', 'Marriage Leave', 'Maternity Leave', 'Paternity Leave',
+  'Partial Leave - 1 Hour', 'Partial Leave - 2 Hours', 'Work From Home', 'On Duty',
+]
 
 export const LEAVE_TYPES = [
   { label: 'Sick Leave', deduct: 0, present: false, max: null, icon: 'SL' },

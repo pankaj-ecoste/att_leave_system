@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { employeeFetchLeaves, employeeApplyLeave, employeeFetchLeaveBalances } from '../api/leave'
 import { employeeSubmitRegularization, employeeGetRegularizations } from '../api/attendance'
-import { LEAVE_TYPES } from '../lib/constants'
+import { LEAVE_TYPES, PLANT_COMPANY, PLANT_RESTRICTED_LEAVE_TYPES } from '../lib/constants'
 import { todayIST } from '../lib/datetime'
 
 export function useEmployeeLeave(token, empId, onAudit) {
@@ -26,15 +26,22 @@ export function useEmployeeLeave(token, empId, onAudit) {
   }, [token, empId])
 
   // A leave type is only offered while its monthly usage (Partial 1hr/2hr, capped per
-  // policy) hasn't hit its cap yet — plan.md §6A / Appendix leave types list.
-  function availableLeaveTypes() {
+  // policy) hasn't hit its cap yet — plan.md §6A / Appendix leave types list. Plant
+  // employees (plan.md §11, V2 decision 3) also lose the 8 restricted types entirely —
+  // hidden here for the UI, and blocked again server-side in employee_apply_leave since
+  // hiding a button was never enough of a guardrail on its own in this app.
+  function availableLeaveTypes(company) {
     const m = new Date().getMonth() + 1
     const y = new Date().getFullYear()
     const usedThisMonth = type => leaves.filter(l =>
       l.empId === empId && l.leaveType === type && l.status !== 'Rejected' &&
       new Date(l.date).getMonth() + 1 === m && new Date(l.date).getFullYear() === y
     ).length
-    return LEAVE_TYPES.filter(lt => !lt.max || usedThisMonth(lt.label) < lt.max)
+    const isPlant = company === PLANT_COMPANY
+    return LEAVE_TYPES.filter(lt =>
+      (!lt.max || usedThisMonth(lt.label) < lt.max) &&
+      (!isPlant || !PLANT_RESTRICTED_LEAVE_TYPES.includes(lt.label))
+    )
   }
 
   async function applyLeave(currentUser, form) {

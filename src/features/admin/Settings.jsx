@@ -5,7 +5,9 @@ import { Input, Label, Select } from '../../components/ui/Input'
 
 const HOLIDAY_TYPES = ['Public', 'Optional', 'Restricted', 'Company']
 
-export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, adminEmail, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
+const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! May Supreme Energy bless you. We are thankful to have you in our workspace. — By Ankur Hora and Team'
+
+export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, adminEmail, birthdayMessage, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
   const [oldPin, setOldPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -14,6 +16,8 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
   const [stdMsg, setStdMsg] = useState('')
   const [newAdminEmail, setNewAdminEmail] = useState('')
   const [adminEmailMsg, setAdminEmailMsg] = useState('')
+  const [newBirthdayMessage, setNewBirthdayMessage] = useState('')
+  const [birthdayMsgMsg, setBirthdayMsgMsg] = useState('')
   const [showHolidayForm, setShowHolidayForm] = useState(false)
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', type: 'Public' })
   const [holidayMsg, setHolidayMsg] = useState('')
@@ -51,6 +55,17 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
       onAudit?.('SETTINGS', `Admin notification email set to ${v}`, 'admin')
     } catch (err) { setAdminEmailMsg(err.message) }
     setTimeout(() => setAdminEmailMsg(''), 3000)
+  }
+
+  async function saveBirthdayMessage() {
+    const v = newBirthdayMessage.trim()
+    if (!v) { setBirthdayMsgMsg('Enter a message'); return }
+    try {
+      await updateSettings(stdHours, null, null, null, v)
+      setNewBirthdayMessage(''); setBirthdayMsgMsg('Saved')
+      onAudit?.('SETTINGS', 'Birthday message updated', 'admin')
+    } catch (err) { setBirthdayMsgMsg(err.message) }
+    setTimeout(() => setBirthdayMsgMsg(''), 3000)
   }
 
   async function resetFY() {
@@ -110,6 +125,14 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         <Input type="email" className="mb-1" value={newAdminEmail || adminEmail || ''} onChange={e => setNewAdminEmail(e.target.value)} placeholder="admin@ecoste.in" />
         {adminEmailMsg && <p className={`text-xs mb-2 ${adminEmailMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}>{adminEmailMsg}</p>}
         <Button className="text-xs" onClick={saveAdminEmail}>Save</Button>
+      </Card>
+
+      <Card>
+        <h3 className="text-white font-semibold mb-1">Birthday Message</h3>
+        <p className="text-white/30 text-xs mb-3">Shown as a banner on an employee's dashboard on their birthday. Use <code className="text-white/50">{'{name}'}</code> where their name should appear.</p>
+        <textarea rows={3} className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-400 focus:bg-white/10 transition-all placeholder-white/20 resize-none mb-1" value={newBirthdayMessage || birthdayMessage || DEFAULT_BIRTHDAY_MESSAGE} onChange={e => setNewBirthdayMessage(e.target.value)} />
+        {birthdayMsgMsg && <p className={`text-xs mb-2 ${birthdayMsgMsg === 'Saved' ? 'text-emerald-400' : 'text-red-400'}`}>{birthdayMsgMsg}</p>}
+        <Button className="text-xs" onClick={saveBirthdayMessage}>Save</Button>
       </Card>
 
       <Card>

@@ -12,6 +12,11 @@ import {
 import { adminGetRegularizations, adminDecideRegularization as apiDecideRegularization } from '../api/attendance'
 import { adminFetchAuditLogs, adminUpdateSettings as apiUpdateSettings, fetchHolidays, adminAddHoliday as apiAddHoliday, adminDeleteHoliday as apiDeleteHoliday } from '../api/admin'
 import { fetchSites, adminCreateSite as apiCreateSite, adminUpdateSite as apiUpdateSite, adminDeleteSite as apiDeleteSite } from '../api/sites'
+import { adminGetTodaysBirthdays, adminMarkBirthdayWished as apiMarkBirthdayWished } from '../api/birthday'
+import {
+  adminFetchEmployeeAssets as apiFetchEmployeeAssets, adminUpsertEmployeeAsset as apiUpsertEmployeeAsset,
+  adminDeleteEmployeeAsset as apiDeleteEmployeeAsset, adminMarkAssetsReturned as apiMarkAssetsReturned,
+} from '../api/assets'
 
 // Everything an admin session needs that ISN'T attendance (see useAdminAttendance for
 // why that one is separate) — employees, leave applications + balances, audit log,
@@ -22,7 +27,7 @@ import { fetchSites, adminCreateSite as apiCreateSite, adminUpdateSite as apiUpd
 // (app_settings.std_hours / .admin_email) that useAuth already loads once at bootstrap
 // for both roles. Keeping a second copy here would be exactly the "one name, two things"
 // duplication that broke the old app.
-export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAdminEmailChange) {
+export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAdminEmailChange, birthdayMessage, onBirthdayMessageChange) {
   const [employees, setEmployees] = useState([])
   const [leaves, setLeaves] = useState([])
   const [leaveBalances, setLeaveBalances] = useState({})
@@ -30,15 +35,16 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
   const [adminRegs, setAdminRegs] = useState([])
   const [holidays, setHolidays] = useState([])
   const [sites, setSites] = useState([])
+  const [todaysBirthdays, setTodaysBirthdays] = useState([])
 
   useEffect(() => {
     if (!token) {
-      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([]); setSites([])
+      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([]); setSites([]); setTodaysBirthdays([])
       return
     }
     ;(async () => {
       try {
-        const [emps, lvs, lb, logs, regs, hols, sts] = await Promise.all([
+        const [emps, lvs, lb, logs, regs, hols, sts, bdays] = await Promise.all([
           adminFetchEmployees(token),
           adminFetchLeaves(token, { limit: 2000 }),
           adminFetchLeaveBalances(token, { limit: 3000 }),
@@ -46,8 +52,9 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
           adminGetRegularizations(token),
           fetchHolidays(),
           fetchSites(),
+          adminGetTodaysBirthdays(token),
         ])
-        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols); setSites(sts)
+        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols); setSites(sts); setTodaysBirthdays(bdays)
       } catch (err) {
         console.error(err)
       }
@@ -112,10 +119,34 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
   }
 
   // --- Settings / holidays ---
-  async function updateSettings(newStdHours, newAdminPin, oldPin, newAdminEmail) {
-    await apiUpdateSettings(token, newStdHours, newAdminPin || null, oldPin || null, newAdminEmail || null)
+  async function updateSettings(newStdHours, newAdminPin, oldPin, newAdminEmail, newBirthdayMessage) {
+    await apiUpdateSettings(token, newStdHours, newAdminPin || null, oldPin || null, newAdminEmail || null, newBirthdayMessage || null)
     onStdHoursChange?.(newStdHours)
     if (newAdminEmail) onAdminEmailChange?.(newAdminEmail)
+    if (newBirthdayMessage) onBirthdayMessageChange?.(newBirthdayMessage)
+  }
+
+  // --- Birthdays (VA-5/6) ---
+  async function markBirthdayWished(empId) {
+    await apiMarkBirthdayWished(token, empId)
+    setTodaysBirthdays(prev => prev.map(b => (b.empId === empId ? { ...b, acked: true } : b)))
+  }
+
+  // --- Assets (VA-8..VA-11) — per-employee, fetched on demand when the admin opens an
+  // employee's Assets panel rather than bulk-loaded with everything else above.
+  async function fetchEmployeeAssets(empId) {
+    return apiFetchEmployeeAssets(token, empId)
+  }
+  async function upsertEmployeeAsset(empId, asset) {
+    return apiUpsertEmployeeAsset(token, empId, asset)
+  }
+  async function deleteEmployeeAsset(assetId) {
+    await apiDeleteEmployeeAsset(token, assetId)
+  }
+  async function markAssetsReturned(empId) {
+    const updated = await apiMarkAssetsReturned(token, empId)
+    setEmployees(prev => prev.map(e => (e.id === empId ? updated : e)))
+    return updated
   }
   async function addHoliday(date, name, type) {
     const h = await apiAddHoliday(token, date, name, type)
@@ -144,10 +175,12 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
   }
 
   return {
-    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours, adminEmail,
+    employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours, adminEmail, birthdayMessage,
     createEmployee, updateEmployee, setEmploymentStatus, toggleEmployeeStatus, deleteEmployee,
     decideLeave, upsertLeaveBalance, bulkUpsertLeaveBalances, resetLeaveBalancesForNewFY, refreshLeaveBalances,
     decideRegularization, updateSettings, addHoliday, deleteHoliday,
     createSite, updateSite, deleteSite,
+    todaysBirthdays, markBirthdayWished,
+    fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned,
   }
 }

@@ -828,6 +828,130 @@ nobody has clicked the actual link in a browser and confirmed the file opens/dis
 
 ---
 
+# 📅 V2 — HR Enhancement Phase (scoped 2026-08-10)
+
+> **Outcome:** Plant company tile with restricted leave types · birthday notifications ·
+> asset tracking · overtime tracking · monthly-accrual leave balances · Compensatory
+> Leave. Full requirements and every locked decision are in `plan.md` → **§11 V2 — HR
+> Enhancement Requirements** — read that first, this is just the task breakdown.
+> **Nothing below is built yet.** Brainstormed and scoped with you across several rounds
+> of questions before writing any code, same discipline as the original 19 decisions.
+
+## Phase A — ✅ done and browser-verified (2026-08-10)
+
+| ID | Task | Status | Owner |
+|---|---|:--:|:--:|
+| VA-1 | 4th company tile — "Asma + Production Plant" in `COMPANIES` (+ color/icon) | ✅ verified live in browser | DEV |
+| VA-2 | Leave-type restriction map — hide the 8 restricted types on the Plant Apply Leave screen | ✅ verified live in browser | DEV |
+| VA-3 | Server-side enforcement — `employee_apply_leave` blocks the 8 restricted types for Plant, not just UI hiding | ✅ verified live (smoke test) | DEV |
+| VA-4 | Date of Birth column on `employees` + Add/Edit Staff form field | ✅ verified live in browser | DEV |
+| VA-5 | Birthday banner — live-computed on dashboard load, all companies including Plant | ✅ verified live in browser | DEV |
+| VA-6 | Admin birthday alert + "mark as done" action | ✅ verified live in browser (mark-as-done flips to "Wished ✓") | DEV |
+| VA-7 | Birthday message text — editable Settings field, placeholder wording until HR confirms | ✅ verified live in browser | DEV |
+| VA-8 | `employee_assets` table (free-text type/serial/date/status/assigned-by) | ✅ verified live (table confirmed present) | DEV |
+| VA-9 | Admin asset CRUD on employee profile | ✅ verified live in browser (add + remove both round-tripped) | DEV |
+| VA-10 | Staff read-only "My Assets" view | ✅ verified live in browser | DEV |
+| VA-11 | "All assets returned" confirmation, tied to Exited status | ✅ verified live (blocked correctly unless employee is Exited) — button visibility not separately screen-watched | DEV |
+
+**Browser click-through (2026-08-10, via the local dev server against the live database
+— the deployed Vercel build doesn't have this code yet, see below):** a disposable test
+employee ("V2 Test Employee", `#V2TEST`, company Asma + Production Plant, DOB set to
+today) was created via the real `admin_create_employee`/`admin_upsert_employee_asset`
+RPCs, then actually clicked through — Plant tile renders with the correct headcount ·
+Apply Leave screen for that employee shows only Sick/Casual/Earned/LOP, none of the 8
+restricted types · birthday banner renders with the exact placeholder text, `{name}`
+correctly substituted · admin Dashboard shows the "🎂 1 birthday today" card, "Mark as
+done" flips it to "Wished ✓" · Employees screen's Edit form shows the Date of Birth field
+correctly populated · Assets modal shows the pre-seeded Laptop, a new "ID Card" asset was
+added through the actual form and appeared immediately, then removed through the actual
+Remove button and disappeared immediately · Settings screen's new Birthday Message card
+shows the stored placeholder text with the `{name}` usage note. Test employee deleted
+afterward via direct SQL (hard delete, not the soft-delete RPC, to leave zero trace —
+same disposable-test pattern used throughout this project's earlier verification).
+
+**Not deployed to production yet** — this session's code lives in the working tree and
+was verified against `localhost:5173` (Vite dev server) pointed at the live database, not
+against `att-leave-system.vercel.app`. Nothing has been committed or pushed. Deploying is
+a separate step, do it when you're ready.
+
+**What's in `0023_v2_phase_a.sql`:** server-side Plant leave restriction added to
+`employee_apply_leave` (keyed off the employee's real `employees.company`, not
+client-supplied input) · `employees.date_of_birth` · `employee_assets` table +
+`assets_returned`/`assets_returned_at`/`assets_returned_by` on `employees` ·
+`birthday_wish_acks` table · `employee_get_birthday_today` (returns a boolean only, never
+the date itself — date of birth deliberately stays out of the public pre-login
+directory) · `admin_get_todays_birthdays` / `admin_mark_birthday_wished` ·
+`admin_get_employee_assets` / `employee_get_own_assets` / `admin_upsert_employee_asset` /
+`admin_delete_employee_asset` / `admin_mark_assets_returned` · `admin_update_settings`
+extended to a 6th parameter (`p_birthday_message`), old 5-argument signature explicitly
+dropped first (same overload gotcha as `0018`/`0020`) · `app_settings_public` widened to
+include `birthday_message`.
+
+**Two real bugs found and fixed while building this, unrelated to V2 itself:**
+(1) `admin_create_employee` was last redefined in `0014` (to add pro-rata leave balance
+generation) and that redefinition silently dropped two things `0005` had added —
+the `work_mode` column (every new hire since `0014` shipped has silently defaulted to
+`office` regardless of what admin picked in the form) and the
+`log_audit('EMPLOYEE_CREATE', ...)` call (new-employee creation stopped being
+audit-logged). Both restored in this migration. (2) `apply-migrations.mjs`'s "replay
+every file from scratch" model broke on `0002`'s `app_settings_public` view: once `0020`
+widened that view with `admin_email`, any later full replay tried to re-run `0002`'s
+original narrower `create or replace view` first — which Postgres rejects
+("cannot drop columns from view"). Fixed with a `drop view if exists` guard added to
+`0002` itself, the same re-run-safety fix already applied to `fetch_directory` (`0005`)
+and `0003` (`0008`) for the identical reason. Neither bug was introduced this session —
+both were pre-existing and surfaced only because this was the first time either code
+path was touched again.
+
+**Verified by script against live production:** migration applied clean, and confirmed
+genuinely re-run-safe (applied twice in a row, zero errors) · G-1 guardrail clean (81
+functions, 21 tables, no missing-column references) · G-2 smoke test extended with the 8
+new functions, **70/70 reachable** · direct `pg_proc` query confirmed exactly one
+`admin_update_settings` overload exists (6-argument) — the same check this project uses
+every time a function signature changes, after being bitten by silent duplicate
+overloads twice before (`0014`, `0018`) · direct queries confirmed `date_of_birth`,
+`assets_returned*` columns and both new tables exist, and that `app_settings_public`
+correctly returns the placeholder birthday message · `npm run build` and `npm run test`
+(41 tests) both green.
+
+**Not independently verified** — pure UI, same caveat as every other phase in this file:
+the Plant tile actually rendering on the login screen, the 8 leave types actually being
+absent from a Plant employee's Apply Leave screen, the birthday banner/admin alert
+actually rendering, and the Assets modal/My Assets tab actually working end-to-end in a
+browser. The data and server-side logic underneath are all proven; nobody has watched
+the pixels yet.
+
+## Phase B — Overtime
+
+| ID | Task | Status | Owner |
+|---|---|:--:|:--:|
+| VB-1 | OT calculation — hours beyond `stdHours`, reuses the existing overnight-safe hours calc (no new punch logic) | ⬜ | DEV |
+| VB-2 | Staff "My Overtime" view | ⬜ | DEV |
+| VB-3 | Admin OT report (by employee / date range) | ⬜ | DEV |
+| VB-4 | Daily Report export — new OT column (daily log) + summary total | ⬜ | DEV |
+
+## Phase C — Comp-off + accrual rework (built together, share one ledger)
+
+| ID | Task | Status | Owner |
+|---|---|:--:|:--:|
+| VC-1 | `leave_accruals` ledger table (emp_id, leave_type, period, credited, used, running balance) | ⬜ | DEV |
+| VC-2 | Monthly CL/EL crediting job (CL +1, EL +0.5), replacing the annual lump-sum credit | ⬜ | DEV |
+| VC-3 | `employee_apply_leave` caps CL/EL applications by current ledger balance, not annual quota | ⬜ | DEV |
+| VC-4 | Existing year-end EL-payout-cap-at-3 rule (`run_annual_leave_rollover`) adapted to read from the ledger — lapse logic itself unchanged | ⬜ | DEV |
+| VC-5 | New-joiner pro-rata carried over to the ledger model | ⬜ | DEV |
+| VC-6 | Compensatory Leave type + credit trigger (full day worked on Sunday/holiday) | ⬜ | DEV |
+| VC-7 | Comp-off apply flow — same path as Casual Leave, blocked at 0 balance | ⬜ | DEV |
+| VC-8 | Month-end comp-off expiry → auto payout record, HR-facing report | ⬜ | DEV |
+
+**Why Phase C is separate and last:** it's the only part of V2 that changes already-live
+behavior — real leave balances for 131 people, not purely additive like Phases A and B.
+Phase A and B ship first and don't touch any existing calculation.
+
+**Open, not a build blocker:** final birthday message wording — ships as an editable
+Settings field (VA-7), HR can supply the real text whenever, no code change needed.
+
+---
+
 # ⏭️ Deferred past Day 3
 
 Real, but not needed for a working system.
@@ -950,3 +1074,25 @@ admin's split leave queues (these predate Day 3, carried over from the Day 2 not
 If something comes up that needs picking back up — a bug report, a new feature request,
 or one of the deferred items (`⏭️ Deferred past Day 3` table above) — just say what it
 is. Both files carry full context; nothing from this build is lost.
+
+---
+
+## 🆕 Next chat — V2 (added 2026-08-10)
+
+HR submitted 6 new requirements on 2026-08-10 (company structure, leave balance logic, a
+new leave type, overtime, birthday notifications, asset management). Fully brainstormed
+and scoped across several rounds of decisions before any code — **`plan.md` §11** has
+every locked decision and the reasoning behind each; the **`📅 V2 — HR Enhancement
+Phase`** section above (right before `⏭️ Deferred past Day 3`) has the task breakdown.
+
+**Update 2026-08-10 — Phase A is built, deployed to the database, and browser-verified**
+(`VA-1`..`VA-11`: Plant company tile + leave restriction, birthdays, asset management).
+Migration `0023_v2_phase_a.sql` applied to production, confirmed re-run-safe, G-1/G-2
+both clean (81 functions, 21 tables, 70/70 reachable), build/tests green, and every
+screen clicked through live via a disposable test employee (see the Phase A writeup
+above). Two pre-existing bugs (unrelated to V2) were found and fixed along the way.
+**Frontend code is not deployed to Vercel yet** — verified against the local dev server,
+nothing committed/pushed. Next: commit + deploy when ready, then move to **Phase B**
+(Overtime) and **Phase C** (Compensatory Leave + the CL/EL accrual rework — deliberately
+last, since it's the one part of V2 that changes real, already-live leave balances for
+131 people).

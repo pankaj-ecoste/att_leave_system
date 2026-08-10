@@ -26,6 +26,9 @@ export function rowToEmployee(row) {
     employmentStatus: row.employment_status || 'Probation',
     probationEndDate: row.probation_end_date,
     confirmedOn: row.confirmed_on,
+    dateOfBirth: row.date_of_birth || null,
+    assetsReturned: !!row.assets_returned,
+    assetsReturnedAt: row.assets_returned_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -52,6 +55,22 @@ export function employeeToPayload(emp) {
     joiningDate: emp.joiningDate || null,
     shiftType: emp.shiftType || 'none',
     workMode: emp.workMode || 'office',
+    dateOfBirth: emp.dateOfBirth || null,
+  }
+}
+
+export function rowToAsset(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    assetType: row.asset_type,
+    serialNumber: row.serial_number,
+    assignedDate: row.assigned_date,
+    status: row.status,
+    assignedBy: row.assigned_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 

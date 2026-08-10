@@ -15,6 +15,7 @@ export function useAuth() {
   const [directory, setDirectory] = useState([])
   const [stdHours, setStdHours] = useState(9)
   const [adminEmail, setAdminEmail] = useState(null)
+  const [birthdayMessage, setBirthdayMessage] = useState(null)
   const [holidays, setHolidays] = useState([])
   const [sites, setSites] = useState([])
 
@@ -31,6 +32,7 @@ export function useAuth() {
         setDirectory(dir)
         setStdHours(settings.stdHours)
         setAdminEmail(settings.adminEmail)
+        setBirthdayMessage(settings.birthdayMessage)
         setHolidays(hols)
         setSites(sts)
         try {
@@ -98,7 +100,7 @@ export function useAuth() {
 
   return {
     loading, view, setView,
-    directory, stdHours, setStdHours, adminEmail, setAdminEmail, holidays, setHolidays, sites, setSites,
+    directory, stdHours, setStdHours, adminEmail, setAdminEmail, birthdayMessage, setBirthdayMessage, holidays, setHolidays, sites, setSites,
     currentUser, setCurrentUser, employeeToken, adminToken,
     restoredSession, clearRestoredSession: () => setRestoredSession(null), loginAsEmployee,
     employeeLogin, employeeLogout, adminLogin, adminLogout,

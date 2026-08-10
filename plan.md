@@ -1023,6 +1023,59 @@ Run after cutting over to HRMS:
 
 ---
 
+## 11. V2 — HR Enhancement Requirements (added 2026-08-10)
+
+**Status:** scoped and locked in, per `PROGRESS.md` → **📅 V2**. Nothing built yet.
+
+The app has been live and stable since 2026-08-07 (see the Day 3 build above). On
+2026-08-10 HR submitted 6 new requirements — company structure, leave balance logic, a
+new leave type, overtime tracking, birthday notifications, and asset management. Each
+was brainstormed and scoped against the *live* system, item by item, before any code —
+same rule as the rest of this project: settle the *why* and the edge cases first.
+
+### V2 decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | **"Asma + Production Plant" is a 4th value in the existing `COMPANIES` list**, not a new entity — `employees.company` is already free text, so the tile itself needs no schema change |
+| 2 | Plant employees are moved into the new tile **manually, one at a time**, via the existing Edit Employee screen — no bulk-migration tool |
+| 3 | The 8 restricted leave types for Plant (BL, ML, MT, PT, P1, P2, WH, OD) are hidden **and blocked server-side** in `employee_apply_leave` — hiding in the UI alone isn't the pattern this app uses; every other guardrail (probation cap, pre-approval, half-day rules) is enforced at the database layer, not just the screen |
+| 4 | Plant history involving those 8 types, if any exists before the policy lands, is **left untouched** — the restriction is forward-only |
+| 5 | CL/EL move from the current **annual lump-sum-on-1-April** model to **monthly crediting** (CL +1/month, EL +0.5/month), carried forward, with applications capped by the employee's **current ledger balance**, not the annual quota |
+| 6 | The existing year-end **EL-payout-cap-at-3** rule (§6A — "Balance 5 EL at year end → 3 carried for payment, 2 lapse") **stays exactly as-is**. Only the crediting *cadence* changes, from once-a-year to monthly — the year-end lapse logic itself is untouched |
+| 7 | Sick Leave is **not** touched by this change — stays a flat 4/year, no ledger |
+| 8 | New joiners are **pro-rated in their first month**, same rule already live (`months_remaining_in_fy()`, P4B-7) — the ledger model doesn't change this |
+| 9 | The ledger/balance-cap logic applies **uniformly to Plant employees too** — Plant only loses the 8 named leave types (Decision 3), nothing else about how CL/EL/Sick work for them changes |
+| 10 | New leave type **Compensatory Leave (Comp-Off)**: 1 credit per full day (≥ `stdHours`) worked on a Sunday or a listed holiday |
+| 11 | Comp-off is **applied exactly like Casual Leave** — normal apply → manager → admin approval flow — but blocked if the employee's comp-off balance is 0 |
+| 12 | Comp-off unused at month-end **auto-converts to a payout record**, same posture as the existing `leave_payouts` table (P4B-6 / `0014`) — the system records it, HR still does the actual payroll entry manually. **No separate "choose leave or payout" screen** — the employee's only real choice is *when during the month* to use it as leave |
+| 13 | **Overtime = hours worked beyond `stdHours`** (Settings-driven, same threshold for everyone including Plant — no per-company override) |
+| 14 | OT is **tracking only** in this phase — no payroll integration, matching every other money-adjacent feature already in this app (EL payout, the LOP/absence report) |
+| 15 | OT surfaces in three places: the staff's own "My Overtime" view, an admin report, and a **new column + summary total in the existing Daily Report export** (`Reports.jsx`, the 5-sheet workbook from P4C) — not a standalone feature disconnected from reporting |
+| 16 | **Date of Birth** is a new nullable `employees` column, added to the Add/Edit Staff form |
+| 17 | The birthday banner and admin alert are **computed live** off today's date whenever a dashboard loads — no cron job, no stored "shown today" flag, nothing that can silently fail overnight the way a missed cron run would |
+| 18 | The birthday banner shows for **all companies, including Plant** |
+| 19 | The birthday message text lives in **Settings** (editable), same pattern as the existing Admin Notification Email field — ships with a placeholder until HR confirms final wording, no code change needed when they do |
+| 20 | The admin's birthday alert gets a **"mark as done"** action, per employee per day |
+| 21 | New `employee_assets` table — **free-text** entries (type, serial, date assigned, status, assigned-by), deliberately not a predefined dropdown (your call, overriding the recommended default) |
+| 22 | Assets are **editable by admin/HR** from the employee profile; **staff can view their own, read-only** |
+| 23 | Exit/offboarding ties in as **one confirmation flag** — admin marks "all assets returned" when an employee's status is set to Exited, not per-item return dates |
+
+### Open, not a build blocker
+
+| Item | Status |
+|---|---|
+| Final birthday message wording (placeholder: *"Happy Birthday [Name]! May Supreme Energy bless you. We are thankful to have you in our workspace. — By Ankur Hora and Team"*) | Ships as an editable Settings field — HR can update the text any time, no code change needed |
+
+### How this interacts with the existing leave policy (§6A)
+
+The only rule in §6A that V2 changes is the **crediting cadence** for CL/EL — front-loaded
+once a year becomes monthly. Every other rule in that section — the 1-day pre-approval
+requirement, probation/notice caps, LOP spanning week-offs, the 18-month service check,
+the 3-consecutive-day and >5-day absence rules — is untouched.
+
+---
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

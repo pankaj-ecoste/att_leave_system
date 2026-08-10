@@ -107,6 +107,15 @@ const CALLS = [
   // Geofence helpers (P3-2) — no token; a real point near the seeded ECOSTE site so a
   // live run also proves haversine_m/nearest_active_site actually execute.
   ['nearest_active_site', { p_lat: 28.702994, p_lon: 77.156833 }],
+  // V2 Phase A (0023_v2_phase_a.sql) — birthdays + asset management.
+  ['employee_get_birthday_today', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_get_todays_birthdays', { p_token: FAKE_UUID }],
+  ['admin_mark_birthday_wished', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_get_employee_assets', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['employee_get_own_assets', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_upsert_employee_asset', { p_token: FAKE_UUID, p_asset_id: null, p_emp_id: FAKE_UUID, p_asset_type: 'test' }],
+  ['admin_delete_employee_asset', { p_token: FAKE_UUID, p_asset_id: FAKE_UUID }],
+  ['admin_mark_assets_returned', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
 ]
 
 async function main() {

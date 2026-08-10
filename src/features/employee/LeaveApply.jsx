@@ -33,7 +33,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   const [submitted, setSubmitted] = useState(null)
 
   const myLeaves = leaves.filter(l => l.empId === currentUser.id)
-  const avLT = availableLeaveTypes()
+  const avLT = availableLeaveTypes(currentUser.company)
   // P4-5 — manager name + email visible to the employee, and where their pending
   // requests currently stand (Pending = with manager, Manager Approved = with admin).
   const manager = currentUser.managerEmpId ? (directory || []).find(e => e.id === currentUser.managerEmpId) : null

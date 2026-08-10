@@ -5,16 +5,19 @@ import { AttendanceHistory } from './AttendanceHistory'
 import { LeaveApply } from './LeaveApply'
 import { LeavePolicy } from './LeavePolicy'
 import { MonthlySummary } from './MonthlySummary'
+import { MyAssets } from './MyAssets'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
 import { todayIST } from '../../lib/datetime'
+
+const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
 export function EmployeeDashboard({
   currentUser, empTab, setEmpTab, onLogout,
   attendance, todayRecord, stdHours, adminEmail, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
   holidays, sites, directory, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
-  team,
+  team, isBirthdayToday, birthdayMessage, myAssets,
 }) {
   const tabs = [
     { id: 'today', label: 'Work Status' },
@@ -22,6 +25,7 @@ export function EmployeeDashboard({
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },
     { id: 'policy', label: 'Leave Policy' },
+    { id: 'assets', label: 'My Assets' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
   ]
   const status = todayRecord.status || 'Absent'
@@ -43,6 +47,16 @@ export function EmployeeDashboard({
         </div>
       </div>
       <div className="max-w-2xl mx-auto p-4 space-y-4">
+        {isBirthdayToday && (
+          // VA-5 (plan.md §11) — persists across every tab for the whole day, not a
+          // one-time dismissible popup, so it reads as a "watermark" per HR's request.
+          <div className="rounded-2xl p-4 border bg-gradient-to-r from-pink-500/20 via-fuchsia-500/20 to-amber-500/20 border-pink-400/30 text-center">
+            <p className="text-2xl mb-1">🎉</p>
+            <p className="text-white font-semibold text-sm">
+              {(birthdayMessage || DEFAULT_BIRTHDAY_MESSAGE).replace('{name}', currentUser.name)}
+            </p>
+          </div>
+        )}
         <div className={`rounded-2xl p-4 border ${statusStyle(status).bg} ${statusStyle(status).border}`}>
           <div className="flex items-center justify-between">
             <div>
@@ -77,6 +91,7 @@ export function EmployeeDashboard({
           <MonthlySummary currentUser={currentUser} attendance={attendance} stdHours={stdHours} holidays={holidays} />
         )}
         {empTab === 'policy' && <LeavePolicy />}
+        {empTab === 'assets' && <MyAssets assets={myAssets} />}
         {empTab === 'team' && (
           <TeamPanel {...team} />
         )}

@@ -8,6 +8,8 @@ import { AdminPanel } from './features/admin/AdminPanel'
 import { useAuth } from './hooks/useAuth'
 import { useEmployeeAttendance } from './hooks/useEmployeeAttendance'
 import { useEmployeeLeave } from './hooks/useEmployeeLeave'
+import { useEmployeeBirthday } from './hooks/useEmployeeBirthday'
+import { useEmployeeAssets } from './hooks/useEmployeeAssets'
 import { useTeam } from './hooks/useTeam'
 import { useAdminAttendance } from './hooks/useAdminAttendance'
 import { useAdminData } from './hooks/useAdminData'
@@ -31,10 +33,12 @@ export default function App() {
 
   const empAttendance = useEmployeeAttendance(auth.employeeToken, auth.currentUser?.id, auth.stdHours)
   const empLeave = useEmployeeLeave(auth.employeeToken, auth.currentUser?.id)
+  const isBirthdayToday = useEmployeeBirthday(auth.employeeToken, auth.currentUser?.id)
+  const myAssets = useEmployeeAssets(auth.employeeToken, auth.currentUser?.id)
   const team = useTeam(auth.employeeToken, auth.currentUser?.id)
 
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
-  const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail)
+  const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail, auth.birthdayMessage, auth.setBirthdayMessage)
   const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
   const dailyBioImport = useDailyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
   const monthlyBioImport = useMonthlyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
@@ -83,6 +87,9 @@ export default function App() {
           todayRecord={empAttendance.todayRecord}
           stdHours={auth.stdHours}
           adminEmail={auth.adminEmail}
+          isBirthdayToday={isBirthdayToday}
+          birthdayMessage={auth.birthdayMessage}
+          myAssets={myAssets}
           punch={(type, currentUser, opts) => empAttendance.punch(type, currentUser, opts)}
           sites={auth.sites}
           isPunching={empAttendance.isPunching}

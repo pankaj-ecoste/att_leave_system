@@ -297,6 +297,14 @@ create or replace view public.employees_directory as
   where active = true
   order by name;
 
+-- Later migrations (0020, 0023) widen this view with more columns (admin_email,
+-- birthday_message). CREATE OR REPLACE VIEW can only append columns, never drop them —
+-- so replaying this file's original narrow definition against an already-widened live
+-- view fails with "cannot drop columns from view". Same re-run-safety class of fix
+-- already applied to fetch_directory (0005) and 0003 itself (0008) for the same reason —
+-- drop first so this file stays safe to replay at any point in the migration history,
+-- not just on a brand-new database.
+drop view if exists public.app_settings_public;
 create or replace view public.app_settings_public as
   select std_hours from app_settings where id = 1;
 

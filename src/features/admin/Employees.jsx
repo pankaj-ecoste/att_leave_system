@@ -15,16 +15,19 @@ const FORM_FIELDS = [
   ['name', 'Full Name*'], ['pin', 'PIN* (leave blank on edit to keep current)'], ['empNum', 'Emp Number'],
   ['jobTitle', 'Job Title'], ['dept', 'Department'], ['bu', 'Business Unit'],
   ['locationInfo', 'Location'], ['email', 'Email'], ['phone', 'Phone'],
-  ['joiningDate', 'Joining Date', 'date'],
+  ['joiningDate', 'Joining Date', 'date'], ['dateOfBirth', 'Date of Birth', 'date'],
 ]
-const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office' }
+const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office' }
+const EMPTY_ASSET = { assetType: '', serialNumber: '', assignedDate: '', status: '', assignedBy: '' }
 
-export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, onAudit }) {
+export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, onAudit }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
   const [form, setForm] = useState(null)
   const [balEditor, setBalEditor] = useState(null)
+  const [assetEditor, setAssetEditor] = useState(null) // { empId, empName, assets: [], form: {...} | null }
+  const [assetMsg, setAssetMsg] = useState('')
   const [errMsg, setErrMsg] = useState('')
 
   const q = search.trim().toLowerCase()
@@ -118,6 +121,47 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
       setBalEditor(null)
       setErrMsg('')
     } catch (err) { setErrMsg(`Error: ${err.message}`) }
+  }
+
+  // --- Assets (VA-8..VA-11, plan.md §11) ---
+  async function openAssetEditor(e) {
+    setAssetMsg('')
+    try {
+      const assets = await fetchEmployeeAssets(e.id)
+      setAssetEditor({ empId: e.id, empName: e.name, assets, form: null })
+    } catch (err) { setErrMsg(err.message) }
+  }
+
+  async function refreshAssetEditor() {
+    const assets = await fetchEmployeeAssets(assetEditor.empId)
+    setAssetEditor(prev => ({ ...prev, assets, form: null }))
+  }
+
+  async function saveAsset() {
+    if (!assetEditor.form.assetType.trim()) { setAssetMsg('Asset type is required'); return }
+    try {
+      await upsertEmployeeAsset(assetEditor.empId, assetEditor.form)
+      onAudit?.('ASSET', `${assetEditor.form.assetType} -> ${assetEditor.empName}`, 'admin')
+      await refreshAssetEditor()
+      setAssetMsg('')
+    } catch (err) { setAssetMsg(err.message) }
+  }
+
+  async function removeAsset(assetId) {
+    try {
+      await deleteEmployeeAsset(assetId)
+      onAudit?.('ASSET_DELETE', assetEditor.empName, 'admin')
+      await refreshAssetEditor()
+    } catch (err) { setAssetMsg(err.message) }
+  }
+
+  async function returnAssets(e) {
+    if (!window.confirm(`Confirm all assets have been returned by ${e.name}?`)) return
+    try {
+      await markAssetsReturned(e.id)
+      onAudit?.('ASSETS_RETURNED', e.name, 'admin')
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
   }
 
   return (
@@ -228,6 +272,11 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
             <div className="flex gap-1 flex-wrap">
               <Button variant="secondary" className="text-xs" onClick={() => setForm({ ...e, pin: '' })}>Edit</Button>
               <Button variant="secondary" className="text-xs" onClick={() => openBalanceEditor(e)}>Leave Bal</Button>
+              <Button variant="secondary" className="text-xs" onClick={() => openAssetEditor(e)}>Assets</Button>
+              {e.employmentStatus === 'Exited' && !e.assetsReturned && (
+                <Button variant="secondary" className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/30" onClick={() => returnAssets(e)}>Mark Assets Returned</Button>
+              )}
+              {e.assetsReturned && <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 self-center">Assets Returned</span>}
               <Button variant="secondary" className={`text-xs ${e.active ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border-yellow-500/30' : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/30'}`} onClick={() => toggle(e.id)}>{e.active ? 'Deactivate' : 'Restore'}</Button>
               <Button variant="danger" onClick={() => del(e.id)}>Delete</Button>
             </div>
@@ -267,6 +316,51 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
             </div>
             {errMsg && <p className="text-red-400 text-xs mb-3">{errMsg}</p>}
             <Button className="w-full" onClick={saveBalances}>Save Leave Balances</Button>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={!!assetEditor} onClose={() => setAssetEditor(null)} title="Assets" wide>
+        {assetEditor && (
+          <>
+            <p className="text-white/40 text-xs mb-4">{assetEditor.empName}</p>
+            {assetEditor.assets.length === 0 ? (
+              <p className="text-white/30 text-sm text-center py-4">No assets assigned</p>
+            ) : (
+              <div className="space-y-2 mb-4">
+                {assetEditor.assets.map(a => (
+                  <div key={a.id} className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-white text-sm font-medium">{a.assetType}{a.serialNumber && <span className="text-white/30 font-normal"> · {a.serialNumber}</span>}</p>
+                      <p className="text-white/30 text-xs">{[a.assignedDate, a.status, a.assignedBy && `by ${a.assignedBy}`].filter(Boolean).join(' · ') || '—'}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="secondary" className="text-xs" onClick={() => setAssetEditor(prev => ({ ...prev, form: { ...a } }))}>Edit</Button>
+                      <Button variant="danger" onClick={() => removeAsset(a.id)}>Remove</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {assetEditor.form ? (
+              <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4">
+                <h4 className="text-white font-medium mb-3 text-sm">{assetEditor.form.id ? 'Edit' : 'New'} Asset</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><Label>Asset Type*</Label><Input value={assetEditor.form.assetType || ''} placeholder="e.g. Laptop" onChange={e => setAssetEditor(prev => ({ ...prev, form: { ...prev.form, assetType: e.target.value } }))} /></div>
+                  <div><Label>Serial / Asset ID</Label><Input value={assetEditor.form.serialNumber || ''} onChange={e => setAssetEditor(prev => ({ ...prev, form: { ...prev.form, serialNumber: e.target.value } }))} /></div>
+                  <div><Label>Date Assigned</Label><Input type="date" value={assetEditor.form.assignedDate || ''} onChange={e => setAssetEditor(prev => ({ ...prev, form: { ...prev.form, assignedDate: e.target.value } }))} /></div>
+                  <div><Label>Status / Condition</Label><Input value={assetEditor.form.status || ''} placeholder="e.g. Good" onChange={e => setAssetEditor(prev => ({ ...prev, form: { ...prev.form, status: e.target.value } }))} /></div>
+                  <div><Label>Assigned By</Label><Input value={assetEditor.form.assignedBy || ''} onChange={e => setAssetEditor(prev => ({ ...prev, form: { ...prev.form, assignedBy: e.target.value } }))} /></div>
+                </div>
+                {assetMsg && <p className="text-red-400 text-xs mt-2">{assetMsg}</p>}
+                <div className="flex gap-2 mt-3">
+                  <Button className="text-xs" onClick={saveAsset}>Save Asset</Button>
+                  <Button variant="secondary" className="text-xs" onClick={() => setAssetEditor(prev => ({ ...prev, form: null }))}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <Button className="text-xs" onClick={() => setAssetEditor(prev => ({ ...prev, form: { ...EMPTY_ASSET } }))}>+ Add Asset</Button>
+            )}
           </>
         )}
       </Modal>
