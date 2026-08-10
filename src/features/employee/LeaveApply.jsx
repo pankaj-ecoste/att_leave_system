@@ -138,22 +138,16 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
           <>
             <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-3">Leave Balances</p>
             <div className="grid grid-cols-2 gap-2 mb-4">
+              {/* Just the balance you actually have right now — no "/quota". The annual
+                  entitlement is already explained on the Leave Policy page, and quota
+                  here would be one more number for every employee to reconcile for
+                  themselves; the balance itself already reflects their real joining
+                  date (pro-rated in the database, not computed on screen) and every
+                  approval/monthly credit that's happened since. */}
               {Object.entries(balances).filter(([lt]) => !lt.includes('Partial')).map(([lt, v]) => (
                 <div key={lt} className="bg-white/5 rounded-xl p-3 border border-white/10">
                   <p className="text-white/40 text-xs truncate">{lt}</p>
-                  {/* Compensatory Leave has no fixed annual quota (it's earned per day
-                      worked, quota stays 0) — showing "/0" would read as broken, so it
-                      gets just the balance and no progress bar. */}
-                  {v.quota > 0 ? (
-                    <>
-                      <p className="text-white font-bold text-lg mt-1">{v.balance}<span className="text-white/30 text-sm">/{v.quota}</span></p>
-                      <div className="w-full bg-white/10 rounded-full h-1.5 mt-2">
-                        <div className="bg-gradient-to-r from-indigo-500 to-violet-500 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, (v.balance / Math.max(v.quota, 1)) * 100)}%` }} />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-white font-bold text-lg mt-1">{v.balance}</p>
-                  )}
+                  <p className="text-white font-bold text-lg mt-1">{v.balance}</p>
                   <p className="text-white/20 text-xs mt-1">{v.consumed} consumed</p>
                 </div>
               ))}
