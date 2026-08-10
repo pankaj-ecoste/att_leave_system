@@ -1028,9 +1028,64 @@ test` (46 tests) both green.
 file: Compensatory Leave actually appearing as an "Apply for" option on a real screen,
 its balance card rendering without a "/0", and the new Leave Accrual Ledger section in
 Reports.jsx actually rendering rows in a browser. The data and server-side logic
-underneath are all proven; nobody has watched the pixels yet. Also not yet done:
-committing/pushing this session's changes, and deploying to Vercel (Phase B is still
-sitting committed-but-undeployed too — see the V2 next-chat note below).
+underneath are all proven; nobody has watched the pixels yet.
+
+**Follow-up, same day (2026-08-10) — two rounds of live feedback after the user
+actually looked at the running app:**
+
+**Round 1 — balance card simplified.** The "X/quota" fraction + progress bar on the
+employee's Leave Balances cards was dropped in favor of just the plain balance number
+("9" instead of "9/9") — the annual entitlement is already explained on the Leave
+Policy page, so repeating it as a denominator here was redundant and, per the user,
+confusing. The underlying number was never wrong, only how it was displayed.
+A "Compensatory Leave" tile was also added so it always shows (defaulting to 0) even
+before an employee has ever earned any, instead of only appearing once a
+`leave_balances` row exists for them.
+
+**Round 2 — a real, deliberate reversal of 0024's grandfathering decision
+(`0025_v2_phase_c_elapsed_accrual_correction.sql`).** Seeing real employees' balances
+still showing their old full front-loaded amount (e.g. "9" for someone who joined 2
+months ago) surfaced that grandfathering — kept on purpose in `0024` specifically so
+nobody's number would drop — wasn't actually what the user wanted once they saw it
+live. Confirmed explicitly, including the consequence: every employee's CL/EL balance
+now reflects literal months-elapsed-since-joining (the same monthly pace `0024` gives
+new hires — CL 1/month, EL 0.5/month), for every employee, not just recent joiners —
+and it's allowed to go negative for anyone who already used more than that pace would
+have given them by now. That's intentional, not a bug: `employee_apply_leave`'s
+existing insufficient-balance check already blocks any further Casual/Earned Leave
+application once balance is at or below what's needed and points them at LOP instead —
+exactly the policy the user described ("credit allows only what's accrued, want more,
+take LOP") — confirmed live by testing that exact block against a real negative-balance
+employee before calling this done.
+
+New `months_elapsed_in_fy()` function (mirrors `months_remaining_in_fy`'s exact
+effective-start / ≤15th-cutoff rule, counting elapsed months instead of remaining ones)
+plus a one-time correction pass — not a recurring job, the regular monthly crediting in
+`0024` is untouched — that recomputes `accrued`/`balance` for every current-FY CL/EL
+row and records one honest correction entry per changed row in `leave_accruals`
+(deliberately not a fabricated row per elapsed month, since there's no real
+month-by-month consumption history to reconstruct). The correction's ledger period
+matches what the regular monthly cron would use for the current month, so its
+idempotency guard correctly avoids double-crediting this month once the real cron fires
+next.
+
+**Impact, confirmed via a read-only dry run before writing anything, then presented to
+the user before running it live:** 276 CL/EL balance rows, 274 reduced, 105 going
+negative (down to -6 in the largest cases, e.g. an employee who'd already used 11 CL
+against the old full-year quota when only 5 months had actually elapsed). The user
+reviewed these concrete numbers and confirmed before the migration ran.
+
+**Verified live:** migration applied and reconfirmed re-run-safe (applied twice, the
+second pass a genuine no-op — same accrued/balance, same ledger row count, updated not
+duplicated) · spot-checked a real employee's before/after numbers matched the dry run
+exactly · confirmed a real employee now sitting at a negative Casual Leave balance is
+correctly blocked from applying for more (tested against the actual `employee_apply_leave`
+RPC, not assumed) · G-1 guardrail clean (23 tables, 87 functions) · `npm run build` and
+`npm run test` (46 tests) both green.
+
+**Not yet done:** committing/pushing this session's changes, and deploying to Vercel
+(Phase B is still sitting committed-but-undeployed too — see the V2 next-chat note
+below).
 
 **Open, not a build blocker:** final birthday message wording — ships as an editable
 Settings field (VA-7), HR can supply the real text whenever, no code change needed.

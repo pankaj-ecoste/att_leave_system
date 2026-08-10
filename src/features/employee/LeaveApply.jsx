@@ -143,8 +143,12 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
                   here would be one more number for every employee to reconcile for
                   themselves; the balance itself already reflects their real joining
                   date (pro-rated in the database, not computed on screen) and every
-                  approval/monthly credit that's happened since. */}
-              {Object.entries(balances).filter(([lt]) => !lt.includes('Partial')).map(([lt, v]) => (
+                  approval/monthly credit that's happened since. Compensatory Leave
+                  always gets a tile here even before the employee has ever earned any
+                  (no leave_balances row yet) — shown as 0, so the tile's presence isn't
+                  the first time they learn it exists. */}
+              {Object.entries({ 'Compensatory Leave': { balance: 0, consumed: 0 }, ...balances })
+                .filter(([lt]) => !lt.includes('Partial')).map(([lt, v]) => (
                 <div key={lt} className="bg-white/5 rounded-xl p-3 border border-white/10">
                   <p className="text-white/40 text-xs truncate">{lt}</p>
                   <p className="text-white font-bold text-lg mt-1">{v.balance}</p>
