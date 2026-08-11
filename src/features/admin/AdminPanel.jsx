@@ -52,7 +52,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         {tab === 'dashboard' && <Dashboard employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
         {tab === 'attendance' && (
           <>
-            <Imports leaveBalanceImport={imports.leaveBalance} dailyBioImport={imports.dailyBio} monthlyBioImport={imports.monthlyBio} />
+            <Imports leaveBalanceImport={imports.leaveBalance} />
             <AttendanceGrid employees={admin.employees} attendanceHook={attendanceHook} stdHours={admin.stdHours} updateStdHours={v => admin.updateSettings(v)} holidays={admin.holidays} />
           </>
         )}

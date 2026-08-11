@@ -14,8 +14,6 @@ import { useTeam } from './hooks/useTeam'
 import { useAdminAttendance } from './hooks/useAdminAttendance'
 import { useAdminData } from './hooks/useAdminData'
 import { useLeaveBalanceImport } from './hooks/useLeaveBalanceImport'
-import { useDailyBioImport } from './hooks/useDailyBioImport'
-import { useMonthlyBioImport } from './hooks/useMonthlyBioImport'
 
 // Shell only: routing between login / employee / admin, and wiring each role's hooks
 // into its feature tree. No business logic lives here — see lib/, api/ and hooks/.
@@ -40,8 +38,6 @@ export default function App() {
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
   const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail, auth.birthdayMessage, auth.setBirthdayMessage)
   const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
-  const dailyBioImport = useDailyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
-  const monthlyBioImport = useMonthlyBioImport(auth.adminToken, admin.employees, admin.setEmployees, adminAttendance.attendance, adminAttendance.bulkUpsert, admin.stdHours)
 
   // Resolve a remembered session (localStorage "remember me") once the directory has
   // loaded — replicates the old app's auto-login without racing the initial fetch.
@@ -69,7 +65,7 @@ export default function App() {
           onLogout={async () => { await auth.adminLogout(); setShowAdminLogin(false) }}
           admin={admin}
           attendanceHook={adminAttendance}
-          imports={{ leaveBalance: leaveBalanceImport, dailyBio: dailyBioImport, monthlyBio: monthlyBioImport }}
+          imports={{ leaveBalance: leaveBalanceImport }}
         />
       </ErrorBoundary>
     )

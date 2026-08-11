@@ -71,18 +71,6 @@ export function calcRawHrs(inTime, outTime) {
   return minutes / 60
 }
 
-// Absolute difference in minutes between two "HH:MM" times, ignoring which day they
-// wrap into — good enough for flagging an app-vs-biometric mismatch (P3-11), not for
-// duration math (calcRawHrs above handles the overnight-wrap case that actually needs
-// it). Returns null if either side is missing, so the caller can distinguish "no
-// reading to compare" from "readings agree exactly".
-export function timeDiffMinutes(a, b) {
-  if (!a || !b) return null
-  const [ah, am] = a.split(':').map(Number)
-  const [bh, bm] = b.split(':').map(Number)
-  return Math.abs((ah * 60 + am) - (bh * 60 + bm))
-}
-
 // Day status for one attendance row. `stdHours` is always read from app_settings, never
 // hardcoded (G-3) — the half-day/absent boundary is std hours ÷ 2, matching what the
 // settings screen has always promised (§4.2 #4, previously hardcoded to 4.5).

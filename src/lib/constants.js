@@ -125,10 +125,6 @@ export function requiresFieldNote(workMode) {
 export const ACCEPTABLE_GPS_ACCURACY_M = 100
 export const GPS_RETRY_ATTEMPTS = 3
 
-// App-vs-biometric mismatch flag (P3-11) — readings within this many minutes of each
-// other are treated as agreeing (clocks/devices are rarely perfectly in sync).
-export const APP_BIO_MISMATCH_THRESHOLD_MIN = 5
-
 // Duplicate-tap guard (P3-8). Mirrored server-side in employee_punch's cooldown check
 // (supabase/migrations/0005_field_staff_and_geo.sql) — keep both in sync if this changes.
 export const PUNCH_COOLDOWN_MS = 30000

@@ -6,8 +6,8 @@ import { Input, Label } from '../../components/ui/Input'
 import { adminFetchAttendance } from '../../api/attendance'
 import { adminFetchLeaves, adminFetchLeaveAccruals, adminFetchCompOffPayouts } from '../../api/leave'
 import { adminGetAllLocationLogs } from '../../api/location'
-import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M, APP_BIO_MISMATCH_THRESHOLD_MIN } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
+import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M } from '../../lib/constants'
+import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
@@ -108,7 +108,6 @@ export function Reports({ token, employees, stdHours, onAudit }) {
           'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '', Company: emp.company || '',
           'In Time': v.inTime || '', 'Out Time': v.outTime || '', 'Raw Hours': raw.toFixed(2), 'Net Hours': net.toFixed(2), Overtime: ot.toFixed(2),
           Status: v.status || '', 'Day Part': v.dayPart !== 'full' ? v.dayPart : '', 'Leave Type': v.leaveType || '',
-          Source: v.officialSource || v.source || '', 'App In': v.appInTime || '', 'Bio In': v.bioInTime || '',
         }
       })
       if (totalOt > 0) summaryRows.push({ Metric: 'Total Overtime Hours', Value: totalOt.toFixed(2) })
@@ -133,10 +132,6 @@ export function Reports({ token, employees, stdHours, onAudit }) {
         if (v.inSiteId && v.inInsideGeofence === false) exceptionRows.push({ ...who, Exception: 'Outside office radius (punch in)', Detail: `${v.inDistanceM ?? '?'}m from site` })
         if (v.outSiteId && v.outInsideGeofence === false) exceptionRows.push({ ...who, Exception: 'Outside office radius (punch out)', Detail: `${v.outDistanceM ?? '?'}m from site` })
         if (v.inTime && !v.outTime && v.date !== todayIST()) exceptionRows.push({ ...who, Exception: 'Missing punch-out', Detail: `Punched in at ${v.inTime}, never punched out` })
-        const inMismatch = timeDiffMinutes(v.appInTime, v.bioInTime)
-        if (inMismatch !== null && inMismatch > APP_BIO_MISMATCH_THRESHOLD_MIN) exceptionRows.push({ ...who, Exception: 'App/biometric mismatch (in)', Detail: `App ${v.appInTime} vs Bio ${v.bioInTime} — ${inMismatch}min apart` })
-        const outMismatch = timeDiffMinutes(v.appOutTime, v.bioOutTime)
-        if (outMismatch !== null && outMismatch > APP_BIO_MISMATCH_THRESHOLD_MIN) exceptionRows.push({ ...who, Exception: 'App/biometric mismatch (out)', Detail: `App ${v.appOutTime} vs Bio ${v.bioOutTime} — ${outMismatch}min apart` })
         if (v.inAccuracyM > ACCEPTABLE_GPS_ACCURACY_M) exceptionRows.push({ ...who, Exception: 'Suspicious GPS accuracy (in)', Detail: `±${Math.round(v.inAccuracyM)}m` })
         if (v.outAccuracyM > ACCEPTABLE_GPS_ACCURACY_M) exceptionRows.push({ ...who, Exception: 'Suspicious GPS accuracy (out)', Detail: `±${Math.round(v.outAccuracyM)}m` })
         if (hasIncompleteHoursFlag(v, stdHours)) exceptionRows.push({ ...who, Exception: 'Incomplete hours (late punch-in)', Detail: `In ${v.inTime}, out ${v.outTime} — marked Present, but stdHours wasn't reached within the work window` })
@@ -235,7 +230,7 @@ export function Reports({ token, employees, stdHours, onAudit }) {
 
       <div className="border border-indigo-500/30 bg-indigo-500/5 rounded-2xl p-4 space-y-3">
         <h4 className="text-white font-medium text-sm">Daily Report — 5-Sheet Workbook</h4>
-        <p className="text-white/40 text-xs">Summary · Attendance · Location Log · Leave · Exceptions (outside-office, missing punch-out, app/bio mismatch, low GPS accuracy, incomplete hours from a late punch-in) — all generated fresh for the exact date selected.</p>
+        <p className="text-white/40 text-xs">Summary · Attendance · Location Log · Leave · Exceptions (outside-office, missing punch-out, low GPS accuracy, incomplete hours from a late punch-in) — all generated fresh for the exact date selected.</p>
         <div className="flex gap-2 flex-wrap items-end">
           <div className="flex-1 min-w-[140px]"><Label>Date</Label><Input type="date" value={dailyDate} max={todayIST()} onChange={e => setDailyDate(e.target.value)} /></div>
           <Button className="text-xs" disabled={dailyBusy} onClick={() => exportDailyReport(dailyDate)}>{dailyBusy ? 'Generating...' : 'Download Daily Report'}</Button>

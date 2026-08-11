@@ -3,8 +3,8 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
-import { COMPANIES, MONTHS, APP_BIO_MISMATCH_THRESHOLD_MIN, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, timeDiffMinutes, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
+import { COMPANIES, MONTHS, getShiftInfo } from '../../lib/constants'
+import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmtHrs, fmt2 } from '../../lib/format'
 
 function monthRange(month, year) {
@@ -13,24 +13,8 @@ function monthRange(month, year) {
   return { from, to }
 }
 
-const SOURCE_STYLE = {
-  app: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
-  biometric: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  manual: 'bg-white/10 text-white/50 border-white/20',
-}
-
-// App-vs-biometric mismatch (P3-11) — both readings exist and disagree by more than
-// the threshold on either end.
-function isMismatch(r) {
-  if (!r.appInTime && !r.appOutTime) return false
-  if (!r.bioInTime && !r.bioOutTime) return false
-  const inDiff = timeDiffMinutes(r.appInTime, r.bioInTime)
-  const outDiff = timeDiffMinutes(r.appOutTime, r.bioOutTime)
-  return (inDiff != null && inDiff > APP_BIO_MISMATCH_THRESHOLD_MIN) || (outDiff != null && outDiff > APP_BIO_MISMATCH_THRESHOLD_MIN)
-}
-
 export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdHours, holidays }) {
-  const { attendance, loading, fetchRange, editCell, setOfficialSource } = attendanceHook
+  const { attendance, loading, fetchRange, editCell } = attendanceHook
   const [filters, setFilters] = useState({
     company: '', location: '', month: new Date().getMonth() + 1, year: new Date().getFullYear(),
     empId: '', customRange: false, from: todayIST(), to: todayIST(), allSummary: false, monthlyDetail: false,
@@ -182,7 +166,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
           <h3 className="text-white font-semibold mb-3">Daily Records</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-white/70 min-w-max">
-              <thead><tr className="border-b border-white/10">{['Date', 'Emp Code', 'Name', 'Dept', 'In Time', 'Out Time', 'Net Hrs', 'OT', 'Status', 'Leave Type', 'Mode / Note', 'App vs Biometric'].map(h => <th key={h} className="text-left py-2.5 pr-3 text-white/30 font-medium uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead><tr className="border-b border-white/10">{['Date', 'Emp Code', 'Name', 'Dept', 'In Time', 'Out Time', 'Net Hrs', 'OT', 'Status', 'Leave Type', 'Mode / Note'].map(h => <th key={h} className="text-left py-2.5 pr-3 text-white/30 font-medium uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{rows.map(r => {
                 const emp = employees.find(e => e.id === r.empId) || {}
                 const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
@@ -224,31 +208,6 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                           {r.inLocation || r.outLocation}
                           {r.inInsideGeofence === false && <span className="text-red-400"> · outside</span>}
                         </p>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 min-w-[190px]">
-                      {!r.appInTime && !r.appOutTime && !r.bioInTime && !r.bioOutTime ? (
-                        <span className="text-white/20">--</span>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-indigo-300/80">App {r.appInTime || '--:--'}–{r.appOutTime || '--:--'}</p>
-                          <p className="font-mono text-blue-300/80">Bio {r.bioInTime || '--:--'}–{r.bioOutTime || '--:--'}</p>
-                          <div className="flex items-center gap-1.5 pt-0.5">
-                            {r.officialSource && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border uppercase ${SOURCE_STYLE[r.officialSource] || SOURCE_STYLE.manual}`}>{r.officialSource}</span>
-                            )}
-                            {isMismatch(r) && <span className="text-amber-400 text-[10px] font-semibold">MISMATCH</span>}
-                            {isMismatch(r) && setOfficialSource && (
-                              <button
-                                className="text-[10px] text-white/40 hover:text-white/70 underline"
-                                onClick={() => setOfficialSource(aKey, r.officialSource === 'app' ? 'biometric' : 'app')}
-                                title="Switch which reading counts as official for this day"
-                              >
-                                use {r.officialSource === 'app' ? 'bio' : 'app'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
                       )}
                     </td>
                   </tr>

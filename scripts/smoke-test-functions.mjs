@@ -90,12 +90,6 @@ const CALLS = [
   ['admin_get_imported_sheet', { p_token: FAKE_UUID }],
   ['admin_set_imported_sheet', { p_token: FAKE_UUID, p_filename: 'test.xlsx', p_cols: [], p_rows: [] }],
   ['admin_clear_imported_sheet', { p_token: FAKE_UUID }],
-  ['admin_get_bio_sheet', { p_token: FAKE_UUID }],
-  ['admin_set_bio_sheet', { p_token: FAKE_UUID, p_filename: 'test.xlsx', p_cols: [], p_rows: [], p_report_date: TODAY, p_synced: 0, p_skipped: 0 }],
-  ['admin_clear_bio_sheet', { p_token: FAKE_UUID }],
-  ['admin_get_monthly_sheet', { p_token: FAKE_UUID }],
-  ['admin_set_monthly_sheet', { p_token: FAKE_UUID, p_filename: 'test.xlsx', p_report_month: 1, p_report_year: 2026, p_synced: 0, p_skipped: 0 }],
-  ['admin_clear_monthly_sheet', { p_token: FAKE_UUID }],
   // Sites (P3-1) — admin-only writes; reads go straight through PostgREST (`sites`
   // has an anon select policy, 0006), so there's no fetch RPC to smoke-test here.
   ['admin_create_site', { p_token: FAKE_UUID, p_data: { name: 'test', latitude: 0, longitude: 0 } }],

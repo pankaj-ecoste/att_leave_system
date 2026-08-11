@@ -51,19 +51,5 @@ export function useAdminAttendance(token, stdHours) {
     return count
   }
 
-  // P3-12 — admin's explicit switch between the app's reading and the biometric
-  // device's reading for one day. Re-derives the official in/out/status from whichever
-  // source is chosen; 'manual' isn't a target here since it has no stored raw reading
-  // to switch back to — that's what editCell above is for.
-  async function setOfficialSource(key, source) {
-    const rec = attendance[key]
-    if (!rec) return
-    const next = { ...rec, officialSource: source }
-    if (source === 'app') { next.inTime = rec.appInTime; next.outTime = rec.appOutTime }
-    else if (source === 'biometric') { next.inTime = rec.bioInTime; next.outTime = rec.bioOutTime }
-    next.status = calcStatus(next, stdHours, next.dayType)
-    return upsert(next)
-  }
-
-  return { attendance, setAttendance, loading, fetchRange, upsert, editCell, bulkUpsert, setOfficialSource }
+  return { attendance, setAttendance, loading, fetchRange, upsert, editCell, bulkUpsert }
 }

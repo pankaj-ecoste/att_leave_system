@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { adminCreateEmployee, adminUpdateEmployee } from '../api/employees'
 import { adminFetchImportedSheet, adminSetImportedSheet, adminClearImportedSheet } from '../api/imports'
-import { gField, findEmpInSnap } from '../lib/bioImport'
+import { gField, findEmpInSnap } from '../lib/importHelpers'
 import { COMPANIES } from '../lib/constants'
 
 // 'LOP' — renamed from 'Unpaid Leave' (P4B-11) to match the leave_type value the app

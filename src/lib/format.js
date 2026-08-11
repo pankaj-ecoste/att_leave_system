@@ -29,21 +29,3 @@ const DEFAULT_STATUS_STYLE = { bg: 'bg-white/10', text: 'text-white/60', border:
 export function statusStyle(status) {
   return STATUS_STYLES[status] || DEFAULT_STATUS_STYLE
 }
-
-// Colour-codes cells in the Daily Bio import preview table by column meaning: status
-// (green=Present, red=Absent, yellow=other), green arrival time, red departure time,
-// orange late hours. Column names vary by export source, so this matches loosely.
-export function bioSheetCellColor(colName, value) {
-  const c = String(colName || '').toLowerCase().replace(/[\s._]/g, '')
-  if (c.includes('status')) {
-    const v = String(value || '').toLowerCase().trim()
-    if (v === 'p' || v === 'present') return 'text-emerald-400'
-    if (v === 'a' || v === 'absent') return 'text-red-400'
-    if (v) return 'text-yellow-400'
-    return ''
-  }
-  if (c.includes('arrtime') || c.includes('arrivaltime') || c === 'intime') return 'text-emerald-400'
-  if (c.includes('depttime') || c.includes('departuretime') || c === 'outtime') return 'text-red-400'
-  if (c.includes('latehrs') || c.includes('late')) return 'text-orange-400'
-  return ''
-}
