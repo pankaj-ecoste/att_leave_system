@@ -11,8 +11,11 @@ const PROBATION_ALERT_WINDOW_DAYS = 14
 // Sub Dept and Cost Center dropped from the form per your request — the columns and
 // mapper still carry them through untouched for anyone imported with values already,
 // this just stops asking for them going forward.
+// Emp Number is handled separately below, not in this loop — it's auto-assigned by
+// the server on create (see admin_create_employee, 0030) and only stays a plain
+// editable field once the employee already exists.
 const FORM_FIELDS = [
-  ['name', 'Full Name*'], ['pin', 'PIN* (leave blank on edit to keep current)'], ['empNum', 'Emp Number'],
+  ['name', 'Full Name*'], ['pin', 'PIN* (leave blank on edit to keep current)'],
   ['jobTitle', 'Job Title'], ['dept', 'Department'], ['bu', 'Business Unit'],
   ['locationInfo', 'Location'], ['email', 'Email'], ['phone', 'Phone'],
   ['joiningDate', 'Joining Date', 'date'], ['dateOfBirth', 'Date of Birth', 'date'],
@@ -208,6 +211,12 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                 <Input type={t || 'text'} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
               </div>
             ))}
+            <div>
+              <Label>{form.id ? 'Emp Number' : 'Emp Number (auto-assigned)'}</Label>
+              {form.id
+                ? <Input value={form.empNum || ''} onChange={e => setForm(p => ({ ...p, empNum: e.target.value }))} />
+                : <Input value="Assigned on save" disabled className="opacity-50 cursor-not-allowed" />}
+            </div>
             <div>
               <Label>Company*</Label>
               <Select value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value, managerEmpId: '', manager: '' }))}>
