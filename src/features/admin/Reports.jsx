@@ -46,7 +46,12 @@ export function Reports({ token, employees, stdHours, onAudit }) {
         WFH: v.wfh ? 'Yes' : 'No', 'On Duty': v.onDuty ? 'Yes' : 'No', Location: v.inLocation || '', Remarks: '',
       }
     })
-    if (!rows.length) { setMsg('No records found.'); return }
+    if (!rows.length) {
+      setMsg(`No attendance records found for ${from} to ${to}.`)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    setMsg('')
     downloadRows(rows, type, `attendance_${from}_${to}`)
     onAudit?.('REPORT', `Report ${from} to ${to}`, 'admin')
   }
