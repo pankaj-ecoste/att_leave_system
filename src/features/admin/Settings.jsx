@@ -194,8 +194,6 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
             ['Leave Balance Import', lastImports?.leaveBalance],
-            ['Daily Bio Import', lastImports?.dailyBio],
-            ['Monthly Bio Import', lastImports?.monthlyBio],
           ].map(([label, ts]) => (
             <div key={label} className="bg-white/5 rounded-xl p-3 border border-white/10">
               <p className="text-white/40 text-xs">{label}</p>

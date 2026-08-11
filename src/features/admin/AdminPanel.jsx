@@ -68,8 +68,6 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
             addHoliday={admin.addHoliday} deleteHoliday={admin.deleteHoliday} onAudit={onAudit}
             lastImports={{
               leaveBalance: imports.leaveBalance.sheet?.importedAt,
-              dailyBio: imports.dailyBio.sheet?.importedAt,
-              monthlyBio: imports.monthlyBio.sheet?.importedAt,
             }}
           />
         )}
