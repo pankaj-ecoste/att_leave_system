@@ -2,22 +2,44 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Input, Label } from '../../components/ui/Input'
+import { Input, Label, Select } from '../../components/ui/Input'
 import { adminFetchAttendance } from '../../api/attendance'
 import { adminFetchLeaves, adminFetchLeaveAccruals, adminFetchCompOffPayouts } from '../../api/leave'
 import { adminGetAllLocationLogs } from '../../api/location'
+import { attnKey } from '../../api/mappers'
 import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M } from '../../lib/constants'
 import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
+// Monthly Attendance Register — location cell per punch side. Office staff show the
+// matched site's name (or "Outside" if the punch fell outside every site's geofence);
+// field staff (no fixed site to match against) show the full raw address plus whatever
+// note they typed at punch time, since that's the only record of where they actually were.
+function registerLocationCell(rec, side, emp, siteNameById) {
+  const time = rec[`${side}Time`]
+  if (!time) return ''
+  const isField = emp.workMode === 'field' || emp.workMode === 'both'
+  if (isField) {
+    const address = rec[`${side}Location`] || ''
+    return rec.fieldNote ? `${address} — ${rec.fieldNote}` : address
+  }
+  const siteId = rec[`${side}MatchedSiteId`]
+  if (siteId) return siteNameById[siteId] || ''
+  if (rec[`${side}InsideGeofence`] === false) return 'Outside'
+  return ''
+}
+
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
 // §8B S-2b) — the old app silently stopped at 200 rows while telling the user nothing
 // (§4.5 #4). So this fetches fresh, for exactly the requested range, every time.
-export function Reports({ token, employees, stdHours, onAudit }) {
+export function Reports({ token, employees, sites, stdHours, onAudit }) {
   const [reportDate, setReportDate] = useState(todayIST())
   const [reportFrom, setReportFrom] = useState(todayIST())
   const [reportTo, setReportTo] = useState(todayIST())
   const [msg, setMsg] = useState('')
+  const [registerMonth, setRegisterMonth] = useState(new Date().getMonth() + 1)
+  const [registerYear, setRegisterYear] = useState(new Date().getFullYear())
+  const [registerBusy, setRegisterBusy] = useState(false)
   const [dailyDate, setDailyDate] = useState(todayIST())
   const [dailyBusy, setDailyBusy] = useState(false)
   const [dailyMsg, setDailyMsg] = useState('')
@@ -69,6 +91,75 @@ export function Reports({ token, employees, stdHours, onAudit }) {
       a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`
       a.download = `${filenameBase}.csv`
       a.click()
+    }
+  }
+
+  // Monthly Attendance Register — one row per employee, 4 columns per day (In time,
+  // In location, Out time, Out location) plus a trailing per-employee summary. Built
+  // fresh from a server fetch of the whole month, same S-2b "not capped by what's on
+  // screen" rule every other report here follows.
+  async function exportMonthlyRegister(type) {
+    setRegisterBusy(true)
+    setMsg('')
+    try {
+      const from = `${registerYear}-${fmt2(registerMonth)}-01`
+      const days = new Date(registerYear, registerMonth, 0).getDate()
+      const to = `${registerYear}-${fmt2(registerMonth)}-${fmt2(days)}`
+      const attMap = await adminFetchAttendance(token, { from, to, limit: 100000 })
+      const siteNameById = {}
+      for (const s of sites || []) siteNameById[s.id] = s.name
+
+      const activeEmployees = employees.filter(e => e.active).sort((a, b) => a.name.localeCompare(b.name))
+      if (!activeEmployees.length) {
+        setMsg('No active employees found.')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+
+      const rows = activeEmployees.map(emp => {
+        const row = {
+          'Emp Code': emp.empNum || '', 'Employee Name': emp.name || '',
+          Department: emp.dept || '', Company: emp.company || '',
+        }
+        let present = 0, halfDay = 0, leave = 0, absent = 0, totalHours = 0, totalOt = 0
+        for (let d = 1; d <= days; d++) {
+          const date = `${registerYear}-${fmt2(registerMonth)}-${fmt2(d)}`
+          const rec = attMap[attnKey(emp.id, date)]
+          const label = `${MONTHS[registerMonth - 1].slice(0, 3)} ${d}`
+          if (!rec) {
+            row[`${label} In`] = ''; row[`${label} In Loc`] = ''
+            row[`${label} Out`] = ''; row[`${label} Out Loc`] = ''
+            continue
+          }
+          row[`${label} In`] = rec.inTime || ''
+          row[`${label} In Loc`] = registerLocationCell(rec, 'in', emp, siteNameById)
+          row[`${label} Out`] = rec.outTime || ''
+          row[`${label} Out Loc`] = registerLocationCell(rec, 'out', emp, siteNameById)
+
+          const status = rec.status || 'Absent'
+          if (status === 'Present') present++
+          else if (status === 'Half Day') halfDay++
+          else if (status === 'Leave' || status === 'Half Day Leave') leave++
+          else if (status === 'Absent') absent++
+          totalHours += Math.max(0, calcRawHrs(rec.inTime, rec.outTime))
+          totalOt += calcOvertimeHours(rec, stdHours)
+        }
+        row.Present = present
+        row['Half Day'] = halfDay
+        row.Leave = leave
+        row.Absent = absent
+        row['Total Hours'] = totalHours.toFixed(2)
+        row['Total Overtime'] = totalOt.toFixed(2)
+        return row
+      })
+
+      downloadRows(rows, type, `attendance_register_${registerYear}-${fmt2(registerMonth)}`)
+      onAudit?.('REPORT', `Monthly attendance register ${registerYear}-${fmt2(registerMonth)}`, 'admin')
+    } catch (err) {
+      setMsg(err.message || 'Could not generate the attendance register — please try again')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setRegisterBusy(false)
     }
   }
 
@@ -241,6 +332,27 @@ export function Reports({ token, employees, stdHours, onAudit }) {
           <Button className="text-xs" disabled={dailyBusy} onClick={() => exportDailyReport(dailyDate)}>{dailyBusy ? 'Generating...' : 'Download Daily Report'}</Button>
         </div>
         {dailyMsg && <p className="text-red-400 text-xs">{dailyMsg}</p>}
+      </div>
+
+      <div className="border border-fuchsia-500/30 bg-fuchsia-500/5 rounded-2xl p-4 space-y-3">
+        <h4 className="text-white font-medium text-sm">Monthly Attendance Register</h4>
+        <p className="text-white/40 text-xs">One row per active employee, In/Out time + location for every day of the month, plus a Present/Half Day/Leave/Absent/Hours/OT summary. Office punches show the matched site name (or "Outside"); field staff show the full address and their punch-time note.</p>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="flex-1 min-w-[140px]">
+            <Label>Month</Label>
+            <Select value={registerMonth} onChange={e => setRegisterMonth(+e.target.value)}>
+              {MONTHS.map((mn, i) => <option key={i + 1} value={i + 1}>{mn}</option>)}
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[100px]">
+            <Label>Year</Label>
+            <Select value={registerYear} onChange={e => setRegisterYear(+e.target.value)}>
+              {[registerYear - 1, registerYear, registerYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+            </Select>
+          </div>
+          <Button className="text-xs" disabled={registerBusy} onClick={() => exportMonthlyRegister('xlsx')}>{registerBusy ? 'Generating...' : 'Export XLSX'}</Button>
+          <Button variant="secondary" className="text-xs" disabled={registerBusy} onClick={() => exportMonthlyRegister('csv')}>Export CSV</Button>
+        </div>
       </div>
 
       <div className="border border-emerald-500/30 bg-emerald-500/5 rounded-2xl p-4 space-y-3">

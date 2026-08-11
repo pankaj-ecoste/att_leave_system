@@ -59,7 +59,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         {tab === 'leaves' && <LeaveApprovals employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
         {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} onAudit={onAudit} />}
         {tab === 'sites' && <Sites sites={admin.sites} createSite={admin.createSite} updateSite={admin.updateSite} deleteSite={admin.deleteSite} onAudit={onAudit} />}
-        {tab === 'reports' && <Reports token={token} employees={admin.employees} stdHours={admin.stdHours} onAudit={onAudit} />}
+        {tab === 'reports' && <Reports token={token} employees={admin.employees} sites={admin.sites} stdHours={admin.stdHours} onAudit={onAudit} />}
         {tab === 'database' && <Database token={token} employees={admin.employees} attendanceHook={attendanceHook} leaves={admin.leaves} leaveBalances={admin.leaveBalances} auditLogs={admin.auditLogs} />}
         {tab === 'settings' && (
           <Settings
