@@ -49,7 +49,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         </div>
       </div>
       <div className="max-w-7xl mx-auto p-4 space-y-4">
-        {tab === 'dashboard' && <Dashboard employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
+        {tab === 'dashboard' && <Dashboard token={token} employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
         {tab === 'attendance' && (
           <>
             <Imports leaveBalanceImport={imports.leaveBalance} />
