@@ -13,13 +13,15 @@ import { fmt2 } from '../../lib/format'
 
 // Monthly Attendance Register — location cell per punch side. Office staff show the
 // matched site's name (or "Outside" if the punch fell outside every site's geofence);
-// field staff (no fixed site to match against) show the full raw address plus whatever
-// note they typed at punch time, since that's the only record of where they actually were.
+// Field and WFH staff (no fixed site to match against) show the full raw address plus
+// whatever note they typed at punch time, since that's the only record of where they
+// actually were. plan.md §12 V3 decision 7 — WFH used to fall into the office branch by
+// omission here, showing "Outside" instead of their home address.
 function registerLocationCell(rec, side, emp, siteNameById) {
   const time = rec[`${side}Time`]
   if (!time) return ''
-  const isField = emp.workMode === 'field' || emp.workMode === 'both'
-  if (isField) {
+  const showFullAddress = emp.workMode === 'field' || emp.workMode === 'both' || emp.workMode === 'wfh'
+  if (showFullAddress) {
     const address = rec[`${side}Location`] || ''
     return rec.fieldNote ? `${address} — ${rec.fieldNote}` : address
   }
@@ -208,10 +210,11 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
       })
       if (totalOt > 0) summaryRows.push({ Metric: 'Total Overtime Hours', Value: totalOt.toFixed(2) })
 
-      // --- Location Log ---
+      // --- Location Log --- plan.md §12 V3 decision 7 — site name when the ping fell
+      // inside a known office's radius, full address otherwise (Field/WFH, naturally).
       const locationRows = locLogs.map(l => ({
         Time: new Date(l.capturedAt).toLocaleTimeString(), 'Employee ID': l.empNum || '', 'Employee Name': l.empName || '',
-        Type: l.type, Location: l.latLon || '', Latitude: l.lat ?? '', Longitude: l.lon ?? '', 'Accuracy (m)': l.accuracyM ?? '',
+        Type: l.type, Location: l.siteName || l.latLon || '', Latitude: l.lat ?? '', Longitude: l.lon ?? '', 'Accuracy (m)': l.accuracyM ?? '',
       }))
 
       // --- Leave ---

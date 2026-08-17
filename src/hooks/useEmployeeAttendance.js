@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
 import { employeeFetchAttendance, employeePunch } from '../api/attendance'
 import { employeeLogLocation, employeeLogOdLocation } from '../api/location'
 import { attnKey } from '../api/mappers'
@@ -176,10 +175,12 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
           await persist(next)
           lastPunchAtRef.current[type] = Date.now()
           try {
-            await supabase.rpc('employee_log_location', {
-              p_token: token, p_emp_id: currentUser.id, p_lat_lon: loc, p_date: todayIST(),
-              p_type: type === 'in' ? 'punch_in' : 'punch_out',
-            })
+            // Reuses the same wrapper the 2-hourly auto-tracking already uses, passing
+            // `meta` (already captured above for this exact punch) so a punch-time
+            // location log carries real coordinates too — it used to call the raw RPC
+            // directly and silently drop lat/lon, which meant a punch could never be
+            // matched to a site name (plan.md §12 V3 decision 7 follow-up).
+            await employeeLogLocation(token, currentUser.id, loc, todayIST(), type === 'in' ? 'punch_in' : 'punch_out', meta)
           } catch (e) {
             console.error('Location log failed:', e)
           }

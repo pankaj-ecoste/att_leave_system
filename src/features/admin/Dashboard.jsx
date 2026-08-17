@@ -3,7 +3,7 @@ import { StatCard } from '../../components/ui/StatCard'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
-import { getShiftInfo } from '../../lib/constants'
+import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
 import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 
@@ -24,9 +24,13 @@ const TILE_FILTERS = {
   halfDay: r => r.status === 'Half Day',
   wfh: r => r.wfh,
   onDuty: r => r.onDuty,
+  // Employee-level tag, not a today's-attendance outcome like the others — the only
+  // predicate here that looks at the employee rather than their record. plan.md §12 V3
+  // decision 8.
+  fieldStaff: (r, e) => requiresFieldNote(e.workMode),
 }
 
-const TILE_LABELS = { present: 'Present', absent: 'Absent', leave: 'On Leave', halfDay: 'Half Day', wfh: 'WFH', onDuty: 'On Duty', pending: 'Pending Leave Requests' }
+const TILE_LABELS = { present: 'Present', absent: 'Absent', leave: 'On Leave', halfDay: 'Half Day', wfh: 'WFH', onDuty: 'On Duty', fieldStaff: 'Field Staff', pending: 'Pending Leave Requests' }
 
 export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysBirthdays = [], markBirthdayWished }) {
   const today = todayIST()
@@ -49,12 +53,13 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
   const pendingLeaves = leaves.filter(l => l.status === 'Pending')
   const stats = {
     active: activeEmps.length,
-    present: activeEmps.filter(e => TILE_FILTERS.present(todayRecordFor(e))).length,
-    absent: activeEmps.filter(e => TILE_FILTERS.absent(todayRecordFor(e))).length,
-    leave: activeEmps.filter(e => TILE_FILTERS.leave(todayRecordFor(e))).length,
-    halfDay: activeEmps.filter(e => TILE_FILTERS.halfDay(todayRecordFor(e))).length,
-    wfh: activeEmps.filter(e => TILE_FILTERS.wfh(todayRecordFor(e))).length,
-    onDuty: activeEmps.filter(e => TILE_FILTERS.onDuty(todayRecordFor(e))).length,
+    present: activeEmps.filter(e => TILE_FILTERS.present(todayRecordFor(e), e)).length,
+    absent: activeEmps.filter(e => TILE_FILTERS.absent(todayRecordFor(e), e)).length,
+    leave: activeEmps.filter(e => TILE_FILTERS.leave(todayRecordFor(e), e)).length,
+    halfDay: activeEmps.filter(e => TILE_FILTERS.halfDay(todayRecordFor(e), e)).length,
+    wfh: activeEmps.filter(e => TILE_FILTERS.wfh(todayRecordFor(e), e)).length,
+    onDuty: activeEmps.filter(e => TILE_FILTERS.onDuty(todayRecordFor(e), e)).length,
+    fieldStaff: activeEmps.filter(e => TILE_FILTERS.fieldStaff(todayRecordFor(e), e)).length,
     pending: pendingLeaves.length,
   }
 
@@ -63,7 +68,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
   }
 
   const shownEmps = filter && filter !== 'pending'
-    ? activeEmps.filter(e => TILE_FILTERS[filter](todayRecordFor(e)))
+    ? activeEmps.filter(e => TILE_FILTERS[filter](todayRecordFor(e), e))
     : activeEmps
 
   return (
@@ -98,6 +103,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
         <StatCard label="Half Day" value={stats.halfDay} color="yellow" sub="Below std hours" onClick={() => toggleFilter('halfDay')} active={filter === 'halfDay'} />
         <StatCard label="WFH" value={stats.wfh} color="cyan" sub="Work from home" onClick={() => toggleFilter('wfh')} active={filter === 'wfh'} />
         <StatCard label="On Duty" value={stats.onDuty} color="purple" sub="Out on duty" onClick={() => toggleFilter('onDuty')} active={filter === 'onDuty'} />
+        <StatCard label="Field Staff" value={stats.fieldStaff} color="blue" sub="Note vs. GPS location" onClick={() => toggleFilter('fieldStaff')} active={filter === 'fieldStaff'} />
         <StatCard label="Pending" value={stats.pending} color="orange" sub="Leave requests" onClick={() => toggleFilter('pending')} active={filter === 'pending'} />
       </div>
 
@@ -141,29 +147,58 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-white/70 min-w-[700px]">
-                <thead><tr className="border-b border-white/10">
-                  {['Employee', 'Emp Code', 'Dept', 'Shift', 'Manager', 'In', 'Out', 'Net Hrs', 'OT', 'Status'].map(h => <th key={h} className="text-left py-2.5 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}
-                </tr></thead>
-                <tbody>{shownEmps.map(e => {
-                  const r = attendance[`${e.id}_${today}`] || {}
-                  const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
-                  const ot = calcOvertimeHours(r, stdHours)
-                  const sh = getShiftInfo(r, e)
-                  return (
-                    <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="py-2.5 pr-4 font-medium text-white/80">{e.name}</td>
-                      <td className="py-2.5 pr-4 text-white/30">{e.empNum || '--'}</td>
-                      <td className="py-2.5 pr-4 text-white/30">{e.dept || '--'}</td>
-                      <td className="py-2.5 pr-4">{sh.id !== 'none' && <span className="text-xs font-semibold px-2 py-0.5 rounded whitespace-nowrap" style={{ background: sh.color + '33', color: sh.color, border: `1px solid ${sh.color}55` }}>{sh.label}</span>}</td>
-                      <td className="py-2.5 pr-4 text-white/30">{e.manager || '--'}</td>
-                      <td className="py-2.5 pr-4 font-mono text-emerald-400">{r.inTime || '--'}</td>
-                      <td className="py-2.5 pr-4 font-mono text-red-400">{r.outTime || '--'}</td>
-                      <td className="py-2.5 pr-4">{fmtHrs(net)}</td>
-                      <td className="py-2.5 pr-4 text-indigo-300">{ot > 0 ? fmtHrs(ot) : '--'}</td>
-                      <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
-                    </tr>
-                  )
-                })}</tbody>
+                {filter === 'fieldStaff' ? (
+                  // plan.md §12 V3 decision 8 — Note (what they typed) and Location (what
+                  // GPS actually captured) side by side, so a mismatch is visible at a
+                  // glance. Net Hrs/OT/Dept/Shift drop out here — they don't help for this
+                  // specific check the way they do for the default view.
+                  <>
+                    <thead><tr className="border-b border-white/10">
+                      {['Employee', 'Emp Code', 'Manager', 'In', 'Out', 'Note (typed)', 'Location (GPS)', 'Status'].map(h => <th key={h} className="text-left py-2.5 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}
+                    </tr></thead>
+                    <tbody>{shownEmps.map(e => {
+                      const r = attendance[`${e.id}_${today}`] || {}
+                      return (
+                        <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="py-2.5 pr-4 font-medium text-white/80">{e.name}</td>
+                          <td className="py-2.5 pr-4 text-white/30">{e.empNum || '--'}</td>
+                          <td className="py-2.5 pr-4 text-white/30">{e.manager || '--'}</td>
+                          <td className="py-2.5 pr-4 font-mono text-emerald-400">{r.inTime || '--'}</td>
+                          <td className="py-2.5 pr-4 font-mono text-red-400">{r.outTime || '--'}</td>
+                          <td className="py-2.5 pr-4 max-w-[180px] truncate italic text-white/50">{r.fieldNote || '--'}</td>
+                          <td className="py-2.5 pr-4 max-w-[220px] truncate text-purple-400/80">{r.inLocation || r.outLocation || '--'}</td>
+                          <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
+                        </tr>
+                      )
+                    })}</tbody>
+                  </>
+                ) : (
+                  <>
+                    <thead><tr className="border-b border-white/10">
+                      {['Employee', 'Emp Code', 'Dept', 'Shift', 'Manager', 'In', 'Out', 'Net Hrs', 'OT', 'Status'].map(h => <th key={h} className="text-left py-2.5 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}
+                    </tr></thead>
+                    <tbody>{shownEmps.map(e => {
+                      const r = attendance[`${e.id}_${today}`] || {}
+                      const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
+                      const ot = calcOvertimeHours(r, stdHours)
+                      const sh = getShiftInfo(r, e)
+                      return (
+                        <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="py-2.5 pr-4 font-medium text-white/80">{e.name}</td>
+                          <td className="py-2.5 pr-4 text-white/30">{e.empNum || '--'}</td>
+                          <td className="py-2.5 pr-4 text-white/30">{e.dept || '--'}</td>
+                          <td className="py-2.5 pr-4">{sh.id !== 'none' && <span className="text-xs font-semibold px-2 py-0.5 rounded whitespace-nowrap" style={{ background: sh.color + '33', color: sh.color, border: `1px solid ${sh.color}55` }}>{sh.label}</span>}</td>
+                          <td className="py-2.5 pr-4 text-white/30">{e.manager || '--'}</td>
+                          <td className="py-2.5 pr-4 font-mono text-emerald-400">{r.inTime || '--'}</td>
+                          <td className="py-2.5 pr-4 font-mono text-red-400">{r.outTime || '--'}</td>
+                          <td className="py-2.5 pr-4">{fmtHrs(net)}</td>
+                          <td className="py-2.5 pr-4 text-indigo-300">{ot > 0 ? fmtHrs(ot) : '--'}</td>
+                          <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
+                        </tr>
+                      )
+                    })}</tbody>
+                  </>
+                )}
               </table>
             </div>
           )}

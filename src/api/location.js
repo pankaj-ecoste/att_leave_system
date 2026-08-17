@@ -46,7 +46,7 @@ export async function adminGetAllLocationLogs(token, date) {
   return (data || []).map(r => ({
     id: r.id, empId: r.emp_id, empName: r.emp_name, empNum: r.emp_num,
     date: r.date, latLon: r.lat_lon, type: r.type, capturedAt: r.captured_at,
-    lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m,
+    lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m, siteName: r.site_name,
   }))
 }
 
@@ -68,6 +68,6 @@ export async function managerGetTeamLocationLogs(token, managerId, date) {
   return (data || []).map(r => ({
     id: r.id, empId: r.emp_id, empName: r.emp_name, empNum: r.emp_num,
     date: r.date, latLon: r.lat_lon, type: r.type, capturedAt: r.captured_at,
-    lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m,
+    lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m, siteName: r.site_name,
   }))
 }

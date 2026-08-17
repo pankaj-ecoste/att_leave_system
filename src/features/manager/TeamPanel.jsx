@@ -199,7 +199,7 @@ export function TeamPanel({
                     <tr key={r.id} className="border-b border-white/5 hover:bg-white/5">
                       <td className="py-2 pr-4 whitespace-nowrap font-mono">{new Date(r.capturedAt).toLocaleTimeString()}</td>
                       <td className="py-2 pr-4 whitespace-nowrap font-medium text-white/80">{r.empName}</td>
-                      <td className="py-2 pr-4 max-w-[250px] truncate text-purple-400/80">{r.latLon}</td>
+                      <td className="py-2 pr-4 max-w-[250px] truncate text-purple-400/80">{r.siteName || r.latLon}</td>
                       <td className="py-2 pr-4 whitespace-nowrap"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${r.type === 'punch_in' ? 'bg-emerald-500/20 text-emerald-300' : r.type === 'punch_out' ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300'}`}>{r.type === 'punch_in' ? 'Punch In' : r.type === 'punch_out' ? 'Punch Out' : 'Auto'}</span></td>
                     </tr>
                   ))}</tbody>
