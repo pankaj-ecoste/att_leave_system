@@ -44,9 +44,10 @@ export function TeamPanel({
 
   const pendingLeaves = teamLeaves.filter(l => l.status === 'Pending')
   const pendingRegs = teamRegs.filter(r => r.status === 'Pending')
-  // P4-3 — a manager's "Approved" isn't final anymore (P4-1, two-stage approval): it
-  // moves to 'Manager Approved' and waits on admin. Shown separately, read-only, so the
-  // manager can see it's out of their hands without it looking like a final outcome.
+  // A manager's "Approved" is now fully final (plan.md §12 V3 decision 4 — manager and
+  // admin have equal, independent authority). 'Manager Approved' only ever appears on
+  // legacy rows from before that change, still shown read-only here so nothing a
+  // manager already saw quietly disappears from their view.
   const awaitingAdmin = teamLeaves.filter(l => l.status === 'Manager Approved')
   const actioned = [
     ...teamLeaves.filter(l => l.status === 'Approved' || l.status === 'Rejected'),

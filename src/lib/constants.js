@@ -129,6 +129,11 @@ export const GPS_RETRY_ATTEMPTS = 3
 // (supabase/migrations/0005_field_staff_and_geo.sql) — keep both in sync if this changes.
 export const PUNCH_COOLDOWN_MS = 30000
 
+// Minimum minutes required between a punch-in and that day's punch-out (plan.md §12 V3
+// decision 5) — catches an accidental back-to-back tap of both buttons. Mirrored
+// server-side in employee_punch (supabase/migrations/0032_*.sql) — keep both in sync.
+export const MIN_PUNCH_GAP_MIN = 5
+
 // Leave policy quotas (plan.md §6A) — CL 12 / EL 6 / SL 4 per year, credited in full on
 // 1 April, pro-rated for part-year joiners. Used by both the balance-generation script
 // (Stage G) and the Day 3 accrual engine.

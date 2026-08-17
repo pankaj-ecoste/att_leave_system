@@ -61,10 +61,8 @@ export function useTeam(token, empId, onAudit) {
 
   async function decideLeave(leaveId, status) {
     try {
-      // Trust the server's returned row rather than the status passed in — an
-      // 'Approved' manager decision lands on 'Manager Approved' (P4-1, two-stage
-      // approval), not 'Approved' outright, so echoing the argument back would show
-      // the wrong state until the next refetch.
+      // Trust the server's returned row rather than the status passed in — it carries
+      // the real decided_at/decided_by fields the argument alone doesn't have.
       const updated = await apiManagerDecideLeave(token, empId, leaveId, status)
       setTeamLeaves(prev => prev.map(l => (l.id === leaveId ? updated : l)))
       onAudit?.('MANAGER_ACTION', `${status} leave ${leaveId}`)

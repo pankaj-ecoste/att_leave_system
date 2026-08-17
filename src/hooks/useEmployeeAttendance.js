@@ -3,8 +3,8 @@ import { supabase } from '../lib/supabase'
 import { employeeFetchAttendance, employeePunch } from '../api/attendance'
 import { employeeLogLocation, employeeLogOdLocation } from '../api/location'
 import { attnKey } from '../api/mappers'
-import { calcStatus, todayIST, isWithinCooldown } from '../lib/datetime'
-import { PUNCH_COOLDOWN_MS, ACCEPTABLE_GPS_ACCURACY_M } from '../lib/constants'
+import { calcStatus, calcRawHrs, todayIST, isWithinCooldown } from '../lib/datetime'
+import { PUNCH_COOLDOWN_MS, MIN_PUNCH_GAP_MIN, ACCEPTABLE_GPS_ACCURACY_M } from '../lib/constants'
 import { getLocation } from './useGeolocation'
 
 const AUTO_LOC_INTERVAL_MS = 2 * 60 * 60 * 1000 // every 2 hours, while punched in (plan.md Decision 5)
@@ -119,6 +119,24 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
       setLocationStatus('Please wait a few seconds before punching again')
       setTimeout(() => setLocationStatus(''), 3000)
       return
+    }
+    // Hard block, not a dismissible warning (plan.md §12 V3 decision 5) — catches an
+    // accidental back-to-back tap of Punch In then Punch Out. Checked before GPS is even
+    // captured, so a rejected attempt doesn't waste a location fetch. calcRawHrs already
+    // handles the overnight-wrap case correctly (a next-day out-time never reads as a
+    // same-moment double-tap).
+    if (type === 'out') {
+      const existing = attendance[todayKey(currentUser.id)]
+      if (existing?.inTime) {
+        const now = new Date()
+        const nowHHMM = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+        const gapMin = calcRawHrs(existing.inTime, nowHHMM) * 60
+        if (gapMin < MIN_PUNCH_GAP_MIN) {
+          setLocationStatus(`You just punched in — please wait at least ${MIN_PUNCH_GAP_MIN} minutes before punching out`)
+          setTimeout(() => setLocationStatus(''), 5000)
+          return
+        }
+      }
     }
     punchingRef.current = true
     setIsPunching(true)

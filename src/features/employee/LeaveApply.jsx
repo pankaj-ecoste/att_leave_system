@@ -34,8 +34,10 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
 
   const myLeaves = leaves.filter(l => l.empId === currentUser.id)
   const avLT = availableLeaveTypes(currentUser.company)
-  // P4-5 — manager name + email visible to the employee, and where their pending
-  // requests currently stand (Pending = with manager, Manager Approved = with admin).
+  // P4-5 — manager name + email visible to the employee. 'Manager Approved' only ever
+  // appears on legacy requests from before manager/admin got equal decision authority
+  // (plan.md §12 V3 decision 4); still counted as pending here since nothing new lands
+  // in that state anymore.
   const manager = currentUser.managerEmpId ? (directory || []).find(e => e.id === currentUser.managerEmpId) : null
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 

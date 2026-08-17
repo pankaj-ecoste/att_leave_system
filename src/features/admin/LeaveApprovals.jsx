@@ -30,13 +30,12 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
   }
 
   const pendingRegs = adminRegs.filter(r => r.status === 'Pending')
-  // P4-2/P4-4 — two-stage approval: a request is only actionable by admin once the
-  // manager has approved it, or immediately if the employee has no manager at all
-  // (routes straight to admin). Everything else is still waiting on the manager and
-  // shown separately, read-only — matches the guard admin_decide_leave enforces
-  // server-side, so there's no button here that would just bounce off that check.
-  const readyForAdmin = leaves.filter(l => l.status === 'Manager Approved' || (l.status === 'Pending' && !l.hasManager))
-  const awaitingManager = leaves.filter(l => l.status === 'Pending' && l.hasManager)
+  // plan.md §12 V3 decision 4 — manager and admin now have fully equal, independent
+  // approval authority; admin is never blocked waiting on the manager. Everything not
+  // yet finalized is actionable here. 'Manager Approved' only ever appears on legacy
+  // rows from before this change (the interim status new decisions no longer produce)
+  // and still needs admin's sign-off, so it stays in this queue too.
+  const readyForAdmin = leaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved')
 
   return (
     <>
@@ -96,11 +95,15 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
                     View prescription
                   </button>
                 )}
-                {/* P4-4 — the manager's decision, visible before admin acts on top of it. */}
-                {l.hasManager ? (
-                  <p className="text-emerald-400/70 text-xs mt-1.5">✓ Approved by {l.managerName || 'manager'}{l.managerDecidedAt ? ` on ${new Date(l.managerDecidedAt).toLocaleDateString()}` : ''}</p>
+                {/* plan.md §12 V3 decision 4 — informational only, never a gate. Manager and
+                    admin have equal authority, so this just shows whether the manager got
+                    to it first; it's never a reason a button here would be disabled. */}
+                {l.managerDecision === 'Approved' ? (
+                  <p className="text-emerald-400/70 text-xs mt-1.5">✓ Already approved by {l.managerName || 'manager'}{l.managerDecidedAt ? ` on ${new Date(l.managerDecidedAt).toLocaleDateString()}` : ''} — your decision will finalize it</p>
+                ) : l.hasManager ? (
+                  <p className="text-white/30 text-xs mt-1.5">Manager hasn't decided yet — you can still act now</p>
                 ) : (
-                  <p className="text-amber-400/70 text-xs mt-1.5">No manager on file — routed directly to you</p>
+                  <p className="text-amber-400/70 text-xs mt-1.5">No manager on file</p>
                 )}
               </div>
               <div className="flex gap-2">
@@ -111,22 +114,6 @@ export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, deci
           </div>
         ))}
       </Card>
-
-      {awaitingManager.length > 0 && (
-        <Card>
-          <h3 className="text-white font-semibold mb-3">Awaiting Manager <span className="ml-2 bg-white/10 text-white/40 text-xs px-2 py-0.5 rounded-full border border-white/20">{awaitingManager.length}</span></h3>
-          <p className="text-white/30 text-xs mb-3">Not yet actionable — the employee's manager hasn't decided these yet.</p>
-          {awaitingManager.map(l => (
-            <div key={l.id} className="flex items-center justify-between py-2 border-b border-white/5">
-              <div>
-                <p className="text-white/60 text-sm">{l.empName} · {l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`}</p>
-                <p className="text-white/30 text-xs">{l.date}</p>
-              </div>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/40 border border-white/10">Pending manager</span>
-            </div>
-          ))}
-        </Card>
-      )}
 
       <Card>
         <h3 className="text-white font-semibold mb-3">All Applications</h3>

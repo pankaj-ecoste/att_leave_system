@@ -10,11 +10,13 @@ import { fmtHrs } from '../../lib/format'
 // Predicate per attendance-based tile — 'pending' is handled separately below since it
 // comes from leave requests, not today's attendance records.
 const TILE_FILTERS = {
-  // "Present" here means "punched in today" (matches the tile's own subtitle) — covers
-  // both someone still mid-shift ("Punched In") and someone who has already completed
-  // their day ("Present"), so the count never disagrees with what's visibly true in the
-  // table below it. See plan.md §12 V3 decision 2.
-  present: r => r.status === 'Present' || r.status === 'Punched In',
+  // "Present" here means "actually working today" (matches the tile's own subtitle,
+  // "Punched in today") — covers someone still mid-shift ("Punched In"), someone who has
+  // already completed their day ("Present"), and someone out on official duty
+  // ("On Duty"), so the count never disagrees with what's visibly true in the table
+  // below it. The row badge still shows the specific status — only this tile's count
+  // merges them. See plan.md §12 V3 decisions 2 and 3.
+  present: r => r.status === 'Present' || r.status === 'Punched In' || r.status === 'On Duty',
   absent: r => r.status === 'Absent',
   leave: r => r.status === 'Leave',
   halfDay: r => r.status === 'Half Day',
