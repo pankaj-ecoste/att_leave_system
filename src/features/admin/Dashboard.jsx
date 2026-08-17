@@ -17,7 +17,9 @@ const TILE_FILTERS = {
   // below it. The row badge still shows the specific status — only this tile's count
   // merges them. See plan.md §12 V3 decisions 2 and 3.
   present: r => r.status === 'Present' || r.status === 'Punched In' || r.status === 'On Duty',
-  absent: r => r.status === 'Absent',
+  // Mirrors the per-row table's own fallback (`r.status || 'Absent'`) — an employee with
+  // no attendance record at all today is still Absent, not invisible to this tile.
+  absent: r => (r.status || 'Absent') === 'Absent',
   leave: r => r.status === 'Leave',
   halfDay: r => r.status === 'Half Day',
   wfh: r => r.wfh,
@@ -37,16 +39,22 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
   }, [])
 
   const activeEmps = employees.filter(e => e.active)
-  const todayRecs = Object.values(attendance).filter(r => r.date === today)
+  // Every active employee counts toward the tiles below, not just the ones who already
+  // have an attendance row today — someone who simply hasn't punched in yet has no row
+  // at all, and used to be invisible to every tile (including Absent) as a result, even
+  // though the table further down already correctly defaulted them to Absent. Same
+  // `attendance[...] || {}` lookup the table uses, so the tiles and the table can never
+  // disagree again.
+  const todayRecordFor = e => attendance[`${e.id}_${today}`] || {}
   const pendingLeaves = leaves.filter(l => l.status === 'Pending')
   const stats = {
     active: activeEmps.length,
-    present: todayRecs.filter(TILE_FILTERS.present).length,
-    absent: todayRecs.filter(TILE_FILTERS.absent).length,
-    leave: todayRecs.filter(TILE_FILTERS.leave).length,
-    halfDay: todayRecs.filter(TILE_FILTERS.halfDay).length,
-    wfh: todayRecs.filter(TILE_FILTERS.wfh).length,
-    onDuty: todayRecs.filter(TILE_FILTERS.onDuty).length,
+    present: activeEmps.filter(e => TILE_FILTERS.present(todayRecordFor(e))).length,
+    absent: activeEmps.filter(e => TILE_FILTERS.absent(todayRecordFor(e))).length,
+    leave: activeEmps.filter(e => TILE_FILTERS.leave(todayRecordFor(e))).length,
+    halfDay: activeEmps.filter(e => TILE_FILTERS.halfDay(todayRecordFor(e))).length,
+    wfh: activeEmps.filter(e => TILE_FILTERS.wfh(todayRecordFor(e))).length,
+    onDuty: activeEmps.filter(e => TILE_FILTERS.onDuty(todayRecordFor(e))).length,
     pending: pendingLeaves.length,
   }
 
@@ -55,7 +63,7 @@ export function Dashboard({ employees, leaves, attendanceHook, stdHours, todaysB
   }
 
   const shownEmps = filter && filter !== 'pending'
-    ? activeEmps.filter(e => TILE_FILTERS[filter]((attendance[`${e.id}_${today}`] || {})))
+    ? activeEmps.filter(e => TILE_FILTERS[filter](todayRecordFor(e)))
     : activeEmps
 
   return (
