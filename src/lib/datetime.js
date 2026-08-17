@@ -6,7 +6,7 @@
 //
 // Pure functions only — no React, no network — so they're testable alone (plan.md §8C).
 
-import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS, WORK_WINDOW_END } from './constants'
+import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, PUNCHED_IN_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS, WORK_WINDOW_END } from './constants'
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 
@@ -88,6 +88,13 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
   }
 
   if (rec.inTime) {
+    // Still punched in, no out-punch yet — hours worked aren't final, so don't run the
+    // Present/Half Day/Absent math at all (calcRawHrs treats a missing out-time as 0
+    // hours, which used to fall straight through to Absent for anyone mid-shift). Once
+    // they punch out, calcStatus runs again with the real out-time and settles into the
+    // correct status below — this branch only ever covers the in-progress window.
+    if (!rec.outTime) return PUNCHED_IN_STATUS
+
     const raw = calcRawHrs(rec.inTime, rec.outTime)
     const deduct = rec.leaveType ? findLeaveType(rec.leaveType)?.deduct || 0 : 0
     const available = windowAvailableHours(rec.inTime)

@@ -46,6 +46,13 @@ describe('calcStatus', () => {
     expect(calcStatus({ inTime: '09:00', outTime: '11:00' }, stdHours)).toBe('Absent')
   })
 
+  it('marks a punched-in-but-not-out employee as Punched In, not Absent', () => {
+    // Regression for plan.md §12 V3 decision 2 — an employee mid-shift with no
+    // out-punch yet used to fall through to calcRawHrs treating the missing out-time as
+    // 0 hours, which read as Absent despite having clearly shown up.
+    expect(calcStatus({ inTime: '09:00', outTime: null }, stdHours)).toBe('Punched In')
+  })
+
   it('does not count an unpunched week-off as Absent', () => {
     expect(calcStatus({ inTime: null }, stdHours, DAY_TYPES.WEEK_OFF)).toBe('Week Off')
   })

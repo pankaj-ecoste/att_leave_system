@@ -1076,6 +1076,22 @@ the 3-consecutive-day and >5-day absence rules — is untouched.
 
 ---
 
+## 12. V3 — HR Enhancement Requirements (added 2026-08-17)
+
+**Status:** 2 items scoped and locked in below. HR has 2 more updates still to come this
+round (per the user, same session) — this section will grow as those arrive. Same rule
+as V2: settle the *why* and edge cases in discussion first, write the decision here,
+build after.
+
+### V3 decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | **Partial Leave (1hr/2hr) can be applied for today**, not just future dates. Today `employee_apply_leave` requires every leave type except Sick/Bereavement/WFH/On Duty/LOP/Earned Leave to be applied **at least 1 day in advance** (`v_date < current_date + 1` → rejected) — Partial Leave was never added to that exemption list, so HR staff hit "must be applied at least a day in advance" when trying to apply for an hourly leave the same day it's needed. Fix: add both Partial Leave types to the exemption, but with their **own lower bound of "today", not "no bound"** — a new dedicated check blocks only genuinely *past* dates for these two types (`v_date < current_date` → rejected with "cannot be applied for a past date"), so today and any future date both work, matching how Earned Leave gets its own dedicated advance-notice rule rather than reusing Sick Leave's unrestricted one. This was **not** about letting the 1hr and 2hr types be combined on the same date (an earlier misread during discussion) — it's purely about removing the 1-day-advance wait for these two types |
+| 2 | **A punched-in employee (in-punch recorded, no out-punch yet) must never display as Absent** — confirmed live via screenshot (Shalini Vishwakarma, IN 09:02, Status showed "Absent"; admin dashboard's "Present" tile also read 0 despite people having punched in). Root cause: `calcStatus` (`lib/datetime.js`) computes hours-worked as `out time − in time`; with no out-punch, that's `0`, which falls below the half-day threshold and returns `Absent`. This status is written to the `attendance.status` column the moment the employee punches in (`useEmployeeAttendance.js`), so every screen reading that stored value — staff panel, admin dashboard, admin attendance grid — shows the same wrong "Absent" simultaneously. **Fix, chosen over just showing "Present":** a new distinct status, **"Punched In"**, returned by `calcStatus` whenever `inTime` is set and `outTime` isn't — skips the hours math entirely rather than running it against a missing out-time. The moment the employee punches out, `calcStatus` runs again with the real out-time and settles into the correct Present/Half Day/Absent, same as it already did before this bug was found — only the *in-progress* window was ever wrong. Gets its own badge color (blue) alongside the existing Present/Absent/Half Day/Leave/WFH/On Duty palette. The admin dashboard's "Present" stat tile (already labeled "Punched in today") counts **both** "Present" and "Punched In" so the number matches its own subtitle; the "Absent" tile now only ever means "no punch at all today" |
+
+---
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

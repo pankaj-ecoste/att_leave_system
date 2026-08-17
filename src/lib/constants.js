@@ -153,6 +153,7 @@ export const WORK_WINDOW_END = '19:00'
 
 export const ABSENT_STATUS = 'Absent'
 export const PRESENT_STATUS = 'Present'
+export const PUNCHED_IN_STATUS = 'Punched In'
 export const HALF_DAY_STATUS = 'Half Day'
 export const LEAVE_STATUS = 'Leave'
 export const HALF_DAY_LEAVE_STATUS = 'Half Day Leave'
