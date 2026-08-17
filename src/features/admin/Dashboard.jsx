@@ -22,7 +22,12 @@ const TILE_FILTERS = {
   absent: r => (r.status || 'Absent') === 'Absent',
   leave: r => r.status === 'Leave',
   halfDay: r => r.status === 'Half Day',
-  wfh: r => r.wfh,
+  // Two different ways to be "WFH today": an approved WFH leave application for
+  // someone who isn't normally remote (sets attendance.wfh), or an employee whose
+  // permanent tag is WFH (plan.md §6B) simply punching in as usual — that punch never
+  // touches attendance.wfh at all, so the tile used to miss every permanently-remote
+  // employee entirely, counting only occasional WFH-leave days.
+  wfh: (r, e) => r.wfh || e.workMode === 'wfh',
   onDuty: r => r.onDuty,
   // Employee-level tag, not a today's-attendance outcome like the others — the only
   // predicate here that looks at the employee rather than their record. plan.md §12 V3
