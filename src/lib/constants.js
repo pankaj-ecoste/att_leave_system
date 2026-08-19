@@ -134,6 +134,14 @@ export const PUNCH_COOLDOWN_MS = 30000
 // server-side in employee_punch (supabase/migrations/0032_*.sql) — keep both in sync.
 export const MIN_PUNCH_GAP_MIN = 5
 
+// Grace period against stdHours before a shortfall counts against Half Day (plan.md §12
+// V3 decision 10, HR request 2026-08-19) — a miss of up to 15 minutes is forgiven
+// automatically; anything more needs an applied Partial Leave (1hr/2hr) to cover it, or
+// the day falls through to Half Day/Absent as before. Client-side only, used by
+// calcStatus (lib/datetime.js) — no server mirror, this status is never stored
+// precomputed.
+export const GRACE_PERIOD_MIN = 15
+
 // Leave policy quotas (plan.md §6A) — CL 12 / EL 6 / SL 4 per year, credited in full on
 // 1 April, pro-rated for part-year joiners. Used by both the balance-generation script
 // (Stage G) and the Day 3 accrual engine.

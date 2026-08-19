@@ -6,7 +6,7 @@
 //
 // Pure functions only — no React, no network — so they're testable alone (plan.md §8C).
 
-import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, PUNCHED_IN_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS, WORK_WINDOW_END } from './constants'
+import { DAY_TYPES, findLeaveType, ABSENT_STATUS, PRESENT_STATUS, PUNCHED_IN_STATUS, HALF_DAY_STATUS, LEAVE_STATUS, HALF_DAY_LEAVE_STATUS, WFH_STATUS, ON_DUTY_STATUS, WEEK_OFF_STATUS, HOLIDAY_STATUS, WORK_WINDOW_END, GRACE_PERIOD_MIN } from './constants'
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 
@@ -99,7 +99,6 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
     const deduct = rec.leaveType ? findLeaveType(rec.leaveType)?.deduct || 0 : 0
     const available = windowAvailableHours(rec.inTime)
     const cappedRaw = available == null ? raw : Math.min(raw, available)
-    const eff = Math.max(0, cappedRaw - deduct)
     const halfDayThreshold = stdHours / 2
 
     // Punched in too late to ever reach stdHours before the work window closes (e.g.
@@ -112,9 +111,19 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
       return PRESENT_STATUS
     }
 
+    // Grace period + Partial Leave credit (plan.md §12 V3 decision 10, HR 2026-08-19).
+    // A shortfall against stdHours of up to GRACE_PERIOD_MIN is forgiven automatically.
+    // Anything beyond that needs an applied Partial Leave (1hr/2hr) to cover the gap —
+    // `deduct` credits those hours back against the shortfall here (the opposite of the
+    // old `cappedRaw - deduct`, which made applying Partial Leave push a day *closer* to
+    // Half Day instead of covering it). calcOvertimeHours is deliberately untouched —
+    // Partial Leave still earns no OT credit for the excused hour.
+    const shortfallHrs = Math.max(0, stdHours - cappedRaw - deduct)
+    if (shortfallHrs <= GRACE_PERIOD_MIN / 60) return PRESENT_STATUS
+
+    const eff = stdHours - shortfallHrs
     if (eff < halfDayThreshold) return ABSENT_STATUS
-    if (eff < stdHours) return HALF_DAY_STATUS
-    return PRESENT_STATUS
+    return HALF_DAY_STATUS
   }
 
   if (dayType === DAY_TYPES.WEEK_OFF) return WEEK_OFF_STATUS

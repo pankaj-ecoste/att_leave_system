@@ -1335,3 +1335,24 @@ still outstanding is operational, not code: Phase A/B were committed and pushed
 previously; Phase C's changes are made but **not yet committed/pushed**, and none of the
 three V2 phases are deployed to Vercel yet (all verified against the live database via
 the local dev server / direct scripts, per this session's established pattern).
+
+---
+
+## 🆕 Next chat — V3 decision 10: 15-min grace period (added 2026-08-19)
+
+HR reported staff being marked Half Day for missing the 9h shift by as little as 5-10
+minutes, with no forgiveness at all. Discussed and locked in as **`plan.md` §12
+decision 10** before any code: a shortfall of up to 15 minutes (`GRACE_PERIOD_MIN` in
+`constants.js`) is now forgiven automatically (still Present); anything beyond that
+needs an applied **Partial Leave – 1 Hour / 2 Hours** to cover the gap, or it falls
+through to Half Day/Absent exactly as before. Found and fixed a real bug along the way:
+Partial Leave's `deduct` hours were being *subtracted* from hours worked in `calcStatus`
+instead of credited back against the shortfall, so applying Partial Leave used to push a
+day *closer* to Half Day rather than covering it — the feature never actually worked as
+"early leave" cover before this fix.
+
+**Scope:** `src/lib/constants.js` (new `GRACE_PERIOD_MIN` constant) and
+`src/lib/datetime.js` (`calcStatus` only) — pure client-side status math, no SQL
+migration, `calcOvertimeHours` deliberately untouched. 6 new tests added
+(`datetime.test.js`), all 53 project tests pass, build is clean. **Not yet committed,
+pushed, or deployed to Vercel** — this session's next step once you confirm.

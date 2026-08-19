@@ -114,6 +114,41 @@ describe('calcStatus', () => {
       expect(calcStatus({ inTime: '21:00', outTime: '23:00' }, stdHours)).toBe('Absent')
     })
   })
+
+  describe('15-minute grace period and Partial Leave credit (plan.md §12 V3 decision 10)', () => {
+    it('forgives a shortfall under 15 minutes — still Present, no leave needed', () => {
+      // 09:00-17:50 = 8h50m, 10 minutes short of stdHours=9.
+      expect(calcStatus({ inTime: '09:00', outTime: '17:50' }, stdHours)).toBe('Present')
+    })
+
+    it('forgives a shortfall of exactly 15 minutes (grace boundary is inclusive)', () => {
+      // 09:00-17:45 = 8h45m, exactly 15 minutes short.
+      expect(calcStatus({ inTime: '09:00', outTime: '17:45' }, stdHours)).toBe('Present')
+    })
+
+    it('a shortfall just past 15 minutes with no leave applied still falls to Half Day', () => {
+      // 09:00-17:44 = 8h44m, 16 minutes short — one minute past the grace window.
+      expect(calcStatus({ inTime: '09:00', outTime: '17:44' }, stdHours)).toBe('Half Day')
+    })
+
+    it('Partial Leave - 1 Hour fully covers a 1-hour shortfall — Present, not Half Day', () => {
+      // Regression: the old code subtracted `deduct` from hours worked instead of
+      // crediting it toward the shortfall, so applying Partial Leave used to make a day
+      // MORE likely to show Half Day. 09:00-17:00 = 8h, 1h short of stdHours=9.
+      expect(calcStatus({ inTime: '09:00', outTime: '17:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe('Present')
+    })
+
+    it('Partial Leave - 2 Hours fully covers a 2-hour shortfall — Present', () => {
+      // 09:00-16:00 = 7h, 2h short of stdHours=9.
+      expect(calcStatus({ inTime: '09:00', outTime: '16:00', leaveType: 'Partial Leave - 2 Hours' }, stdHours)).toBe('Present')
+    })
+
+    it('Partial Leave only partly covering a bigger shortfall still falls to Half Day', () => {
+      // 09:00-16:30 = 7h30m, 1h30m short. Partial Leave - 1 Hour only credits 1h back,
+      // leaving 30 minutes uncovered — beyond the 15-minute grace, so still Half Day.
+      expect(calcStatus({ inTime: '09:00', outTime: '16:30', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe('Half Day')
+    })
+  })
 })
 
 describe('calcOvertimeHours', () => {
