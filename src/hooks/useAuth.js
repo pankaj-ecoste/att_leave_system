@@ -24,6 +24,7 @@ export function useAuth() {
   const [adminToken, setAdminToken] = useState(null)
 
   const [restoredSession, setRestoredSession] = useState(null) // { token, empId } from localStorage, resolved once directory loads
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState(null) // plan.md §13 — set when the server tells us the employee session died
 
   useEffect(() => {
     ;(async () => {
@@ -53,10 +54,30 @@ export function useAuth() {
     })()
   }, [])
 
+  // plan.md §13 — fired by the supabase.rpc wrapper (lib/supabase.js) the moment any
+  // employee API call reports a dead session. Drops straight back to the login screen
+  // instead of leaving the dashboard stuck looking logged-in but non-functional.
+  useEffect(() => {
+    function handleExpired() {
+      setEmployeeToken(null)
+      setCurrentUser(null)
+      setView('login')
+      setSessionExpiredMessage('Your session expired — please log in again.')
+      try {
+        localStorage.removeItem(SESSION_KEY)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener('hrms:employee-session-expired', handleExpired)
+    return () => window.removeEventListener('hrms:employee-session-expired', handleExpired)
+  }, [])
+
   const loginAsEmployee = useCallback((token, emp, remember) => {
     setEmployeeToken(token)
     setCurrentUser(emp)
     setView('employee')
+    setSessionExpiredMessage(null)
     if (remember) {
       try {
         localStorage.setItem(SESSION_KEY, JSON.stringify({ token, empId: emp.id }))
@@ -103,6 +124,7 @@ export function useAuth() {
     directory, stdHours, setStdHours, adminEmail, setAdminEmail, birthdayMessage, setBirthdayMessage, holidays, setHolidays, sites, setSites,
     currentUser, setCurrentUser, employeeToken, adminToken,
     restoredSession, clearRestoredSession: () => setRestoredSession(null), loginAsEmployee,
+    sessionExpiredMessage, clearSessionExpiredMessage: () => setSessionExpiredMessage(null),
     employeeLogin, employeeLogout, adminLogin, adminLogout,
   }
 }

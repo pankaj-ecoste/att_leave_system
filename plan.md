@@ -1098,6 +1098,65 @@ edge cases in discussion first, write the decision here, build after.
 
 ---
 
+## 13. Employee "session expired" confusion (HR/staff-reported, added 2026-08-20)
+
+**Reported symptom:** staff open the app, still see their name/avatar and a working Logout
+button (looks logged in), tap Punch In, and get a small message reading "Invalid or expired
+session" near the punch buttons. Non-technical staff don't know what this means or that
+logging out and back in fixes it, so it gets reported as "the app is broken." Confirmed live
+via screenshot (Khushboo, 2026-08-20, punch buttons all live but a blue "Invalid or expired
+session" strip sitting where the result of the tap should show).
+
+**Root cause, traced through the actual code:**
+1. `employee_sessions.expires_at` (`0001_baseline_schema.sql`/`0002_hrms_schema.sql`) defaults
+   to `now() + 18 hours`, set once at login and never extended by activity. Anyone who logs in
+   once and comes back roughly a day later (the normal daily-use pattern) already has a dead
+   token.
+2. `useAuth.js` restores `{token, empId}` from `localStorage` on app load and treats it as a
+   valid login without ever checking the server — so the UI shows fully logged-in even when
+   the token is already dead.
+3. When the dead token is finally used (e.g. Punch In), `employee_punch` raises the Postgres
+   exception `Invalid or expired session` (`is_valid_employee_token`, e.g.
+   `0032_punch_gap_and_equal_leave_authority.sql:41`), and `useEmployeeAttendance.js`'s `punch()`
+   dumps that raw message straight into the on-screen status line (`setLocationStatus(e.message
+   || ...)`) with no recovery — the employee is left stuck on a dashboard that looks fine but
+   silently can't do anything.
+
+**Decisions locked in:**
+- **Employee session lifetime: 18 hours → 30 days.** One-line change to the
+  `employee_sessions.expires_at` column default (new logins only; already-issued tokens keep
+  their original 18h expiry until they naturally lapse once, after which the graceful-recovery
+  fix below takes over). This alone makes the bug rare to the point of practically not
+  happening under normal day-to-day use.
+- **Admin/HR sessions (`admin_sessions`, 12h) are explicitly out of scope for this fix** — same
+  underlying mechanism, but not reported as an issue and left untouched, matching the
+  "don't alter flows that aren't broken" constraint.
+- **Graceful recovery for the rare case a session does expire** (e.g. an employee back from a
+  week of leave): detect the exact employee-session-expired error centrally, at the one place
+  every API call already funnels through (`supabase.rpc` in `lib/supabase.js`), rather than
+  touching each of the ~30 call sites across `src/api/*.js`. On detection: clear the stale
+  `localStorage` session, drop the app back to the login screen automatically, and show a
+  plain banner — "Your session expired — please log in again" — instead of a raw Postgres
+  message. No manual Logout-then-Login dance required.
+  - Matched only on the exact employee-facing message `Invalid or expired session` — the admin
+    equivalents are always phrased `Invalid admin session` / `Invalid or expired admin session`
+    (distinct wording, confirmed in `0001_baseline_schema.sql`), so this can't accidentally
+    fire for/affect the admin panel.
+  - `useEmployeeAttendance.js`'s punch-error handler skips writing the raw message to
+    `locationStatus` when it's this specific error, since the screen is about to be replaced by
+    the login redirect anyway.
+- **No other flow touched.** Login, logout, punch-in/out, geofencing, leave, and every other
+  RPC call keep calling `supabase.rpc` exactly as before — the wrapper only observes the result
+  and passes it through unchanged unless this one specific message is seen.
+
+**Files touched:** new migration `supabase/migrations/0034_...sql` (session lifetime),
+`src/lib/supabase.js` (central detection + event dispatch), `src/hooks/useAuth.js` (listen for
+the event, clear session, expose the banner message), `src/features/auth/LoginScreen.jsx`
+(render the banner), `src/App.jsx` (wire the message through), `src/hooks/useEmployeeAttendance.js`
+(skip the redundant raw-message flash).
+
+---
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

@@ -194,9 +194,13 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
         } catch (e) {
           // Includes the server's own duplicate-tap rejection (employee_punch's cooldown
           // check) and the geofence rejection ("Outside <site> radius — ...") — surfaced
-          // plainly rather than as a raw Postgres error (§8C).
-          setLocationStatus(e.message || 'Could not save punch — please try again')
-          setTimeout(() => setLocationStatus(''), 5000)
+          // plainly rather than as a raw Postgres error (§8C). An expired session is the
+          // one exception — the app is about to redirect to login (lib/supabase.js +
+          // useAuth.js, plan.md §13), so there's no point flashing the raw message here.
+          if (e.message !== 'Invalid or expired session') {
+            setLocationStatus(e.message || 'Could not save punch — please try again')
+            setTimeout(() => setLocationStatus(''), 5000)
+          }
         } finally {
           punchingRef.current = false
           setIsPunching(false)

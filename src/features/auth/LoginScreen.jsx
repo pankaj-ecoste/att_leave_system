@@ -7,7 +7,7 @@ import { Input, Label } from '../../components/ui/Input'
 // Company -> employee picker -> PIN entry. The employee list here is intentionally the
 // public directory (name/company/job title only, no email/phone) — see the RLS notes
 // in 0002_hrms_schema.sql for what's deliberately not exposed pre-login.
-export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminLogin }) {
+export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminLogin, sessionExpiredMessage }) {
   const [step, setStep] = useState(1)
   const [company, setCompany] = useState('')
   const [search, setSearch] = useState('')
@@ -52,6 +52,12 @@ export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminL
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">HRMS</h1>
           <p className="text-white/30 text-sm mt-2">Select your company to get started</p>
         </div>
+
+        {sessionExpiredMessage && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6 text-amber-300 text-sm text-center">
+            {sessionExpiredMessage}
+          </div>
+        )}
 
         {step === 1 && (
           <div className="space-y-3">

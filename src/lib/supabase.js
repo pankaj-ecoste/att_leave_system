@@ -11,3 +11,19 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
+
+// plan.md §13 — every employee/admin/manager API call in src/api/*.js goes through
+// supabase.rpc(), so this is the one place that can catch an expired employee session
+// centrally instead of special-casing ~30 call sites. Passes every result through
+// unchanged; the only side effect is dispatching an event when the exact employee-facing
+// message is seen (never the admin-panel one — that's worded "Invalid admin session" /
+// "Invalid or expired admin session", deliberately distinct, and left untouched).
+const rawRpc = supabase.rpc.bind(supabase)
+supabase.rpc = (...args) => {
+  return rawRpc(...args).then(result => {
+    if (result?.error?.message === 'Invalid or expired session') {
+      window.dispatchEvent(new Event('hrms:employee-session-expired'))
+    }
+    return result
+  })
+}

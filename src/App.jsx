@@ -118,6 +118,7 @@ export default function App() {
       <LoginScreen
         directory={auth.directory}
         employeeLogin={auth.employeeLogin}
+        sessionExpiredMessage={auth.sessionExpiredMessage}
         onLoggedIn={(token, emp, remember) => {
           auth.loginAsEmployee(token, emp, remember)
           setEmpTab('today')
