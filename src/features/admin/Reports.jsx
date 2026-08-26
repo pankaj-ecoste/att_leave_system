@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label, Select } from '../../components/ui/Input'
@@ -11,30 +12,10 @@ import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M } from '../../lib/cons
 import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
-// Monthly Attendance Register — location cell per punch side. Office staff show the
-// matched site's name (or "Outside" if the punch fell outside every site's geofence);
-// Field and WFH staff (no fixed site to match against) show the full raw address plus
-// whatever note they typed at punch time, since that's the only record of where they
-// actually were. plan.md §12 V3 decision 7 — WFH used to fall into the office branch by
-// omission here, showing "Outside" instead of their home address.
-function registerLocationCell(rec, side, emp, siteNameById) {
-  const time = rec[`${side}Time`]
-  if (!time) return ''
-  const showFullAddress = emp.workMode === 'field' || emp.workMode === 'both' || emp.workMode === 'wfh'
-  if (showFullAddress) {
-    const address = rec[`${side}Location`] || ''
-    return rec.fieldNote ? `${address} — ${rec.fieldNote}` : address
-  }
-  const siteId = rec[`${side}MatchedSiteId`]
-  if (siteId) return siteNameById[siteId] || ''
-  if (rec[`${side}InsideGeofence`] === false) return 'Outside'
-  return ''
-}
-
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
 // §8B S-2b) — the old app silently stopped at 200 rows while telling the user nothing
 // (§4.5 #4). So this fetches fresh, for exactly the requested range, every time.
-export function Reports({ token, employees, sites, stdHours, onAudit }) {
+export function Reports({ token, employees, stdHours, holidays, onAudit }) {
   const [reportDate, setReportDate] = useState(todayIST())
   const [reportFrom, setReportFrom] = useState(todayIST())
   const [reportTo, setReportTo] = useState(todayIST())
@@ -96,10 +77,10 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
     }
   }
 
-  // Monthly Attendance Register — one row per employee, 4 columns per day (In time,
-  // In location, Out time, Out location) plus a trailing per-employee summary. Built
-  // fresh from a server fetch of the whole month, same S-2b "not capped by what's on
-  // screen" rule every other report here follows.
+  // Monthly Attendance Register — one row per employee, 2 columns per day (In/Out time
+  // only — plan.md §14 dropped the In/Out location columns per HR request) plus a
+  // trailing per-employee summary. Built fresh from a server fetch of the whole month,
+  // same S-2b "not capped by what's on screen" rule every other report here follows.
   async function exportMonthlyRegister(type) {
     setRegisterBusy(true)
     setMsg('')
@@ -108,8 +89,6 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
       const days = new Date(registerYear, registerMonth, 0).getDate()
       const to = `${registerYear}-${fmt2(registerMonth)}-${fmt2(days)}`
       const attMap = await adminFetchAttendance(token, { from, to, limit: 100000 })
-      const siteNameById = {}
-      for (const s of sites || []) siteNameById[s.id] = s.name
 
       const activeEmployees = employees.filter(e => e.active).sort((a, b) => a.name.localeCompare(b.name))
       if (!activeEmployees.length) {
@@ -118,25 +97,30 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
         return
       }
 
+      // Sunday is the only paid week-off in this company's policy (matches the Sunday-only
+      // comp-off accrual rule in 0024_v2_phase_c_comp_off_and_accrual.sql), so that's the
+      // only day-of-week flagged here — Saturdays are ordinary working days.
+      const dayMeta = []
+      for (let d = 1; d <= days; d++) {
+        const date = `${registerYear}-${fmt2(registerMonth)}-${fmt2(d)}`
+        const isSunday = new Date(registerYear, registerMonth - 1, d).getDay() === 0
+        const isHoliday = (holidays || []).some(h => h.date === date)
+        const base = `${MONTHS[registerMonth - 1].slice(0, 3)} ${d}`
+        const label = isHoliday ? `${base} (Holiday)` : isSunday ? `${base} (Sun)` : base
+        dayMeta.push({ date, isSunday, isHoliday, label })
+      }
+
       const rows = activeEmployees.map(emp => {
         const row = {
           'Emp Code': emp.empNum || '', 'Employee Name': emp.name || '',
           Department: emp.dept || '', Company: emp.company || '',
         }
         let present = 0, halfDay = 0, leave = 0, absent = 0, totalHours = 0, totalOt = 0
-        for (let d = 1; d <= days; d++) {
-          const date = `${registerYear}-${fmt2(registerMonth)}-${fmt2(d)}`
+        for (const { date, label } of dayMeta) {
           const rec = attMap[attnKey(emp.id, date)]
-          const label = `${MONTHS[registerMonth - 1].slice(0, 3)} ${d}`
-          if (!rec) {
-            row[`${label} In`] = ''; row[`${label} In Loc`] = ''
-            row[`${label} Out`] = ''; row[`${label} Out Loc`] = ''
-            continue
-          }
-          row[`${label} In`] = rec.inTime || ''
-          row[`${label} In Loc`] = registerLocationCell(rec, 'in', emp, siteNameById)
-          row[`${label} Out`] = rec.outTime || ''
-          row[`${label} Out Loc`] = registerLocationCell(rec, 'out', emp, siteNameById)
+          row[`${label} In`] = rec?.inTime || ''
+          row[`${label} Out`] = rec?.outTime || ''
+          if (!rec) continue
 
           const status = rec.status || 'Absent'
           if (status === 'Present') present++
@@ -155,7 +139,9 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
         return row
       })
 
-      downloadRows(rows, type, `attendance_register_${registerYear}-${fmt2(registerMonth)}`)
+      const filenameBase = `attendance_register_${registerYear}-${fmt2(registerMonth)}`
+      if (type === 'xlsx') await downloadStyledRegister(rows, dayMeta, filenameBase)
+      else downloadRows(rows, type, filenameBase)
       onAudit?.('REPORT', `Monthly attendance register ${registerYear}-${fmt2(registerMonth)}`, 'admin')
     } catch (err) {
       setMsg(err.message || 'Could not generate the attendance register — please try again')
@@ -163,6 +149,53 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
     } finally {
       setRegisterBusy(false)
     }
+  }
+
+  // xlsx-only: the register needs cell borders/fills the plain `xlsx` library (SheetJS
+  // Community Edition, used everywhere else in this file) can't write — verified directly
+  // that it silently drops any cell `.s` styling on write (plan.md §14). exceljs is used
+  // here alone, building the workbook straight from `rows`/`dayMeta` rather than routing
+  // through the generic `downloadRows` helper.
+  async function downloadStyledRegister(rows, dayMeta, filenameBase) {
+    const idCols = ['Emp Code', 'Employee Name', 'Department', 'Company']
+    const summaryCols = ['Present', 'Half Day', 'Leave', 'Absent', 'Total Hours', 'Total Overtime']
+    const headers = [...idCols, ...dayMeta.flatMap(({ label }) => [`${label} In`, `${label} Out`]), ...summaryCols]
+
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Attendance')
+    ws.addRow(headers)
+    for (const row of rows) ws.addRow(headers.map(h => row[h]))
+
+    ws.getRow(1).font = { bold: true }
+    ws.getRow(1).eachCell(cell => { cell.alignment = { horizontal: 'center', wrapText: true } })
+    ws.columns = headers.map(h => ({ width: idCols.includes(h) ? (h === 'Employee Name' ? 22 : 12) : 9 }))
+
+    const sundayFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }
+    const holidayFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE8B4' } }
+    const thickBorder = { style: 'thick', color: { argb: 'FF000000' } }
+    const lastRow = rows.length + 1
+
+    dayMeta.forEach(({ isSunday, isHoliday }, i) => {
+      const inCol = idCols.length + i * 2 + 1
+      const outCol = inCol + 1
+      const fill = isHoliday ? holidayFill : isSunday ? sundayFill : null
+      const isLastDay = i === dayMeta.length - 1
+      for (let r = 1; r <= lastRow; r++) {
+        const inCell = ws.getCell(r, inCol)
+        inCell.border = { ...inCell.border, left: thickBorder }
+        if (fill) { inCell.fill = fill; ws.getCell(r, outCol).fill = fill }
+        if (isLastDay) ws.getCell(r, outCol).border = { ...ws.getCell(r, outCol).border, right: thickBorder }
+      }
+    })
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${filenameBase}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // P4C-1..4 — daily report, 5 sheets. Every sheet is built from a fresh, server-side
@@ -339,7 +372,7 @@ export function Reports({ token, employees, sites, stdHours, onAudit }) {
 
       <div className="border border-fuchsia-500/30 bg-fuchsia-500/5 rounded-2xl p-4 space-y-3">
         <h4 className="text-white font-medium text-sm">Monthly Attendance Register</h4>
-        <p className="text-white/40 text-xs">One row per active employee, In/Out time + location for every day of the month, plus a Present/Half Day/Leave/Absent/Hours/OT summary. Office punches show the matched site name (or "Outside"); field staff show the full address and their punch-time note.</p>
+        <p className="text-white/40 text-xs">One row per active employee, In/Out time for every day of the month, plus a Present/Half Day/Leave/Absent/Hours/OT summary. Each day is boxed off with a bold border; Sundays are shaded gray and holidays shaded amber (xlsx only — CSV can't carry colors).</p>
         <div className="flex gap-2 flex-wrap items-end">
           <div className="flex-1 min-w-[140px]">
             <Label>Month</Label>

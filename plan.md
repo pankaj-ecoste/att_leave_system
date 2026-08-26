@@ -1157,6 +1157,73 @@ the event, clear session, expose the banner message), `src/features/auth/LoginSc
 
 ---
 
+## 14. Monthly Attendance Register — HR readability update (added 2026-08-26)
+
+**Reported ask:** HR opens `attendance_register_YYYY-MM.xlsx` (built by `exportMonthlyRegister` in
+`src/features/admin/Reports.jsx`) and finds it hard to read: no visible separation between one
+day's columns and the next, and no way to tell at a glance which columns are a Sunday or a
+holiday (currently every day just shows a plain date header).
+
+**Current layout (as of the file HR shared, `attendance_register_2026-08.xlsx`):** one row per
+active employee; 4 columns per calendar day — `<Mon> <D> In`, `<Mon> <D> In Loc`, `<Mon> <D>
+Out`, `<Mon> <D> Out Loc` — followed by summary columns (Present, Half Day, Leave, Absent, Total
+Hours, Total Overtime). 31 days × 4 = 124 day-columns, ~134 columns total.
+
+**Decisions locked in:**
+1. **Drop the two location columns.** Each day becomes 2 columns instead of 4: `In`, `Out` only
+   (no `In Loc` / `Out Loc`). Halves the day-columns from 124 to 62.
+2. **Visible boundary between days.** A dark/thick border runs down the left edge of every day's
+   2-column block (i.e. before its `In` column) and along the outer right edge of the last day,
+   from the header row through the last employee row — so each day reads as one visually boxed
+   unit, distinct from its neighbors.
+3. **Sunday / Holiday columns get a header tag + a fill color**, applied to the day's whole
+   2-column block (header + every data row below it):
+   - Sunday (plain `getDay() === 0`, no DB lookup needed): header reads `"<Mon> <D> (Sun)"`,
+     light gray fill.
+   - Holiday (date found in the `holidays` table, already fetched app-wide via
+     `fetchHolidays()`/`useAuth.js`/`useAdminData.js` but not currently passed into `Reports`):
+     header reads `"<Mon> <D> (Holiday)"`, light amber fill — same color family
+     `format.js` already uses for the `Holiday` status elsewhere (sky/amber), distinct from
+     Sunday's gray so HR can tell the two apart at a glance.
+   - If a date is both a Sunday and a listed holiday, Holiday styling wins (rarer, more specific,
+     more useful to flag).
+   - Date always stays visible in the header (append the tag, never replace the date) — locked
+     via user confirmation.
+4. **Reports.jsx needs the `holidays` list.** `Reports` is currently instantiated without it in
+   `AdminPanel.jsx`; add `holidays={admin.holidays}` to that call site and accept `holidays` as a
+   new prop on `Reports`.
+
+**Technical constraint found + resolved:** the app's existing Excel writer is `xlsx` (SheetJS
+Community Edition, pinned to the CDN tarball in `package.json`). Verified directly (wrote a cell
+with `fill`/`border` in its `s` property, inspected the raw `xl/styles.xml` inside the output
+file) that **CE silently drops all cell styling on write** — no fill or border ever reaches the
+file, regardless of what's set. Styling is Pro-only in that library. Resolution: add `exceljs`
+(MIT, free) as a second dependency, used only inside `exportMonthlyRegister`'s `xlsx` branch —
+every other export in `Reports.jsx` (daily report, overtime, ledger, single-day/range) keeps
+using the existing `xlsx` library unchanged, since none of them need styling.
+- Confirmed `exceljs` bundles cleanly through this project's Vite setup: its `package.json`
+  `"browser"` field points bundlers at a prebuilt `dist/exceljs.min.js`, so Vite's default
+  browser-field resolution picks it up automatically — test build succeeded with no Node
+  polyfill errors (`fs`/`stream`/etc. never enter the graph). Output is built with
+  `workbook.xlsx.writeBuffer()` (no filesystem calls) and turned into a downloadable `Blob`, the
+  same client-side download pattern the rest of the file already uses.
+- `npm audit` after adding it: one new moderate advisory (`uuid`, a transitive dep) — everything
+  high/critical in the audit output is pre-existing dev-tooling (vite/vitest/esbuild), unrelated
+  to this change.
+- The register's `csv` export path is untouched — CSV has no concept of cell styling, so it stays
+  on the simple `downloadRows` path exactly as today (still gains the In-Loc/Out-Loc column
+  removal, since that's a data change not a styling one).
+
+**Not changed:** every other report/export in `Reports.jsx`; the underlying attendance data model;
+`registerLocationCell` (deleted — no longer called once the two Loc columns are gone).
+
+**Files touched:** `src/features/admin/Reports.jsx` (`exportMonthlyRegister` rewritten to build
+the xlsx with `exceljs` styling; `registerLocationCell` removed; new `holidays` prop),
+`src/features/admin/AdminPanel.jsx` (pass `holidays={admin.holidays}` to `<Reports>`),
+`package.json`/`package-lock.json` (`exceljs` added).
+
+---
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
