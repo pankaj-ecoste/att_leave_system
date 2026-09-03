@@ -144,20 +144,24 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
 // One-line, human-readable reason for a status that hinges on a shortfall against
 // stdHours — plan.md §15.2 (HR/staff asked why a day landed where it did, since
 // nothing on screen explained a grace-period save or a Partial Leave that fell short).
-// Mirrors calcStatus's own math exactly (same branches, same order) so the message
-// never disagrees with the badge next to it. Returns null whenever there's nothing
-// worth explaining: no punch yet, a full leave/WFH/On Duty day, or hours that met
-// stdHours outright with no grace or Partial Leave involved.
+// Deliberately simple, per admin's own rule (2026-09-03): check the raw shortfall
+// (before any leave deduction) against the grace period FIRST — if it's within grace,
+// say so, full stop, even if a Partial Leave was *also* applied that day (that leave
+// turned out unnecessary, worth knowing since its balance was still spent). Only past
+// grace does it matter whether a Partial Leave was applied; if not, the Half Day/Absent
+// badge already says enough and no extra note is shown. Mirrors calcStatus's other
+// branches (leave-type early-outs, the work-window forgiveness) so it never fires on a
+// day whose status has nothing to do with hours worked.
 export function explainShortfall(rec, stdHours) {
-  if (!rec.inTime || !rec.outTime) return null
   if (rec.leaveType) {
     const lt = findLeaveType(rec.leaveType)
-    if (lt && !lt.present) return null // full-day leave, not an hours story
+    // Full-day leave, or a leave type that returns early in calcStatus regardless of
+    // hours (WFH / On Duty) — not an hours story either way.
+    if (lt && (!lt.present || lt.label === 'Work From Home' || lt.label === 'On Duty')) return null
   }
+  if (!rec.inTime || !rec.outTime) return null
 
   const raw = calcRawHrs(rec.inTime, rec.outTime)
-  const lt = rec.leaveType ? findLeaveType(rec.leaveType) : null
-  const deduct = lt?.deduct || 0
   const available = windowAvailableHours(rec.inTime)
   const cappedRaw = available == null ? raw : Math.min(raw, available)
 
@@ -168,17 +172,12 @@ export function explainShortfall(rec, stdHours) {
   const rawShortfallMin = Math.round(Math.max(0, stdHours - cappedRaw) * 60)
   if (rawShortfallMin === 0) return null // met or exceeded stdHours, nothing to explain
 
-  const shortfallHrs = Math.max(0, stdHours - cappedRaw - deduct)
-  const partialLeaveMin = deduct > 0 ? Math.round(deduct * 60) : 0
-  const withinGrace = shortfallHrs <= GRACE_PERIOD_MIN / 60
+  if (rawShortfallMin <= GRACE_PERIOD_MIN) return `${rawShortfallMin} min short — grace period used`
 
-  if (partialLeaveMin > 0) {
-    return withinGrace
-      ? `Partial Leave (${lt.label}) covered a ${rawShortfallMin}-min shortfall`
-      : `Partial Leave (${lt.label}) applied, but still ${Math.round(shortfallHrs * 60)} min short`
-  }
-  if (withinGrace) return `${rawShortfallMin} min short — covered by the ${GRACE_PERIOD_MIN}-min grace period`
-  return `${Math.round(shortfallHrs * 60)} min short of the ${stdHours}h target`
+  const lt = rec.leaveType ? findLeaveType(rec.leaveType) : null
+  if (lt?.deduct > 0) return `${rawShortfallMin} min short — Partial Leave (${lt.label}) used`
+
+  return null // beyond grace, no leave applied — the Half Day/Absent badge says enough
 }
 
 // Hours worked beyond `stdHours` for one attendance row (plan.md §11 Decision 13 — V2

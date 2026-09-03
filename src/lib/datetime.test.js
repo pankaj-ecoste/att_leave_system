@@ -223,25 +223,41 @@ describe('explainShortfall', () => {
   it('explains a shortfall covered by the grace period', () => {
     // 09:00-17:50 = 8h50m, 10 minutes short — within the 15-min grace (calcStatus: Present).
     expect(explainShortfall({ inTime: '09:00', outTime: '17:50' }, stdHours))
-      .toBe('10 min short — covered by the 15-min grace period')
+      .toBe('10 min short — grace period used')
   })
 
-  it('explains a shortfall beyond grace with no leave applied (matches calcStatus: Half Day)', () => {
-    // 09:00-17:44 = 8h44m, 16 minutes short — one past the grace window.
-    expect(explainShortfall({ inTime: '09:00', outTime: '17:44' }, stdHours))
-      .toBe('16 min short of the 9h target')
+  it('credits grace, not the leave, when a Partial Leave was applied but the raw shortfall alone was already within grace', () => {
+    // Admin's rule (2026-09-03): grace is checked FIRST against the raw shortfall,
+    // regardless of any leave applied that day. 09:00-17:50 = 10 min short — grace
+    // alone covers it, so the 1-hour Partial Leave (still deducted from balance) wasn't
+    // actually needed. The message should say grace, not the leave.
+    expect(explainShortfall({ inTime: '09:00', outTime: '17:50', leaveType: 'Partial Leave - 1 Hour' }, stdHours))
+      .toBe('10 min short — grace period used')
   })
 
-  it('explains a shortfall fully covered by Partial Leave (matches calcStatus: Present)', () => {
-    // 09:00-17:00 = 8h, 1h short of stdHours=9 — Partial Leave - 1 Hour covers it exactly.
+  it('returns null beyond grace with no leave applied — the Half Day/Absent badge already says enough', () => {
+    // 09:00-17:44 = 8h44m, 16 minutes short — one past the grace window, no leave.
+    expect(explainShortfall({ inTime: '09:00', outTime: '17:44' }, stdHours)).toBe(null)
+  })
+
+  it('names the Partial Leave once the raw shortfall is past grace (matches calcStatus: Present)', () => {
+    // 09:00-17:00 = 8h, 1h short of stdHours=9 — past grace, Partial Leave - 1 Hour applied.
     expect(explainShortfall({ inTime: '09:00', outTime: '17:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours))
-      .toBe('Partial Leave (Partial Leave - 1 Hour) covered a 60-min shortfall')
+      .toBe('60 min short — Partial Leave (Partial Leave - 1 Hour) used')
   })
 
-  it('explains a shortfall only partly covered by Partial Leave (matches calcStatus: Half Day)', () => {
-    // 09:00-16:30 = 7h30m, 1h30m short. Partial Leave - 1 Hour credits only 1h back.
+  it('still names the Partial Leave even when it only partly covers the shortfall (matches calcStatus: Half Day)', () => {
+    // 09:00-16:30 = 7h30m, 1h30m short. Partial Leave - 1 Hour only credits 1h back
+    // (calcStatus still lands on Half Day) — the message stays simple either way.
     expect(explainShortfall({ inTime: '09:00', outTime: '16:30', leaveType: 'Partial Leave - 1 Hour' }, stdHours))
-      .toBe('Partial Leave (Partial Leave - 1 Hour) applied, but still 30 min short')
+      .toBe('90 min short — Partial Leave (Partial Leave - 1 Hour) used')
+  })
+
+  it('returns null for Work From Home / On Duty days even if a punch happens to exist that day', () => {
+    // calcStatus returns WFH_STATUS/ON_DUTY_STATUS regardless of hours worked — this
+    // must never compute a shortfall message that would contradict that badge.
+    expect(explainShortfall({ inTime: '09:00', outTime: '11:00', leaveType: 'Work From Home' }, stdHours)).toBe(null)
+    expect(explainShortfall({ inTime: '09:00', outTime: '11:00', leaveType: 'On Duty' }, stdHours)).toBe(null)
   })
 
   it('returns null for a late punch-in forgiven by the work-window rule (matches calcStatus: Present)', () => {

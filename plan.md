@@ -1369,6 +1369,22 @@ either ever changes again. Purely a nudge — punching outside the slot is still
 exactly as before as long as the shift gets completed (the rare late-both-ends case).
 **Files touched:** `src/features/employee/PunchPanel.jsx`.
 
+**Simplified, same day — admin caught an ambiguity and corrected the rule:** raised the
+case of someone 8h45m in (only 15 min short) who *also* had a Partial Leave applied that
+day — the first `explainShortfall` always credited whichever leave was applied, even
+when the raw shortfall alone was already within the 15-min grace, so the message would
+say "Partial Leave used" when really grace alone was enough (and the leave balance was
+spent for nothing). Admin's fix, deliberately simple: check the **raw** shortfall
+(before any leave deduction) against grace **first** — if it's within 15 min, say grace
+was used, full stop, regardless of any leave applied that day. Only past grace does a
+Partial Leave get named; if none was applied, no note at all (the Half Day/Absent badge
+already says enough — no need to restate the exact minute count). `explainShortfall`
+rewritten to this simpler priority order, and fixed to also skip Work From Home / On
+Duty days outright (it wasn't mirroring calcStatus's early-return for those, so a punch
+recorded alongside an approved WFH/On Duty leave could have produced a contradicting
+message). **Files touched:** `src/lib/datetime.js`, `src/lib/datetime.test.js` (rewrote
+the affected tests, added a WFH/On Duty regression test).
+
 ---
 
 ## Appendix — Reference
