@@ -1360,6 +1360,15 @@ Half Day → Absent, matching the restored 4.5h half-day threshold and 9h target
 `backfill-status-after-std-hours-change.mjs` for rows in this window). No app code
 changed for this correction — only data.
 
+**Polite punch-slot reminder (admin's other ask):** a non-blocking one-line note on
+`PunchPanel.jsx`, shown whenever punching is still possible today (`phase !== 'done'`):
+*"Please try to punch in between 09:00–10:00 and out between 18:00–19:00 to comfortably
+complete your 9h shift."* Times are derived from `WORK_WINDOW_START`/`WORK_WINDOW_END`
+and the current `stdHours` (`idealPunchSlots()`), not hardcoded, so it stays correct if
+either ever changes again. Purely a nudge — punching outside the slot is still accepted
+exactly as before as long as the shift gets completed (the rare late-both-ends case).
+**Files touched:** `src/features/employee/PunchPanel.jsx`.
+
 ---
 
 ## Appendix — Reference

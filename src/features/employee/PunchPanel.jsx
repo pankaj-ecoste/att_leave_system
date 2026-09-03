@@ -1,10 +1,29 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../../components/ui/Card'
-import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
+import { getShiftInfo, requiresFieldNote, WORK_WINDOW_START, WORK_WINDOW_END } from '../../lib/constants'
 import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { haversineMeters, nearestSite } from '../../lib/geo'
 import { getLocation } from '../../hooks/useGeolocation'
+
+// A polite (non-blocking) reminder of the ideal punch slots, derived from the flexible
+// work window rather than hardcoded text — stays correct if WORK_WINDOW_* or stdHours
+// ever change (plan.md §15.2). Punching outside this slot is still accepted as long as
+// stdHours gets completed; this is just a nudge, never an enforced rule.
+function fmtHHMM(totalMin) {
+  const m = ((totalMin % 1440) + 1440) % 1440
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+}
+function idealPunchSlots(stdHours) {
+  const [sh, sm] = WORK_WINDOW_START.split(':').map(Number)
+  const [eh, em] = WORK_WINDOW_END.split(':').map(Number)
+  const startMin = sh * 60 + sm
+  const endMin = eh * 60 + em
+  return {
+    inFrom: fmtHHMM(startMin), inTo: fmtHHMM(endMin - stdHours * 60),
+    outFrom: fmtHHMM(startMin + stdHours * 60), outTo: fmtHHMM(endMin),
+  }
+}
 
 // Which action is next for today: nothing punched yet -> 'in', punched in but not out
 // -> 'out', both done -> 'done'. Drives which tiles are tappable (plan.md §6B).
@@ -88,6 +107,15 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
             </div>
           </div>
         </div>
+
+        {phase !== 'done' && (() => {
+          const slots = idealPunchSlots(stdHours)
+          return (
+            <p className="text-white/30 text-xs text-center mb-3">
+              Please try to punch in between {slots.inFrom}–{slots.inTo} and out between {slots.outFrom}–{slots.outTo} to comfortably complete your {stdHours}h shift.
+            </p>
+          )
+        })()}
 
         {needsNote && phase !== 'done' && (
           <div className="mb-4">
