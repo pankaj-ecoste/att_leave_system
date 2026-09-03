@@ -141,6 +141,46 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
   return ABSENT_STATUS
 }
 
+// One-line, human-readable reason for a status that hinges on a shortfall against
+// stdHours — plan.md §15.2 (HR/staff asked why a day landed where it did, since
+// nothing on screen explained a grace-period save or a Partial Leave that fell short).
+// Mirrors calcStatus's own math exactly (same branches, same order) so the message
+// never disagrees with the badge next to it. Returns null whenever there's nothing
+// worth explaining: no punch yet, a full leave/WFH/On Duty day, or hours that met
+// stdHours outright with no grace or Partial Leave involved.
+export function explainShortfall(rec, stdHours) {
+  if (!rec.inTime || !rec.outTime) return null
+  if (rec.leaveType) {
+    const lt = findLeaveType(rec.leaveType)
+    if (lt && !lt.present) return null // full-day leave, not an hours story
+  }
+
+  const raw = calcRawHrs(rec.inTime, rec.outTime)
+  const lt = rec.leaveType ? findLeaveType(rec.leaveType) : null
+  const deduct = lt?.deduct || 0
+  const available = windowAvailableHours(rec.inTime)
+  const cappedRaw = available == null ? raw : Math.min(raw, available)
+
+  // Same early-out as calcStatus: a late punch-in that used every minute of its
+  // available window is Present outright — no grace or Partial Leave involved.
+  if (available != null && available < stdHours && raw >= available) return null
+
+  const rawShortfallMin = Math.round(Math.max(0, stdHours - cappedRaw) * 60)
+  if (rawShortfallMin === 0) return null // met or exceeded stdHours, nothing to explain
+
+  const shortfallHrs = Math.max(0, stdHours - cappedRaw - deduct)
+  const partialLeaveMin = deduct > 0 ? Math.round(deduct * 60) : 0
+  const withinGrace = shortfallHrs <= GRACE_PERIOD_MIN / 60
+
+  if (partialLeaveMin > 0) {
+    return withinGrace
+      ? `Partial Leave (${lt.label}) covered a ${rawShortfallMin}-min shortfall`
+      : `Partial Leave (${lt.label}) applied, but still ${Math.round(shortfallHrs * 60)} min short`
+  }
+  if (withinGrace) return `${rawShortfallMin} min short — covered by the ${GRACE_PERIOD_MIN}-min grace period`
+  return `${Math.round(shortfallHrs * 60)} min short of the ${stdHours}h target`
+}
+
 // Hours worked beyond `stdHours` for one attendance row (plan.md §11 Decision 13 — V2
 // Phase B, tracking only, no payroll integration). Net hours mirrors calcStatus's own
 // effective-hours calc (raw minus any half-day-leave deduction) so OT and status math

@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
-import { calcRawHrs, calcStatus, todayIST } from '../../lib/datetime'
+import { calcRawHrs, calcStatus, todayIST, explainShortfall } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 
 export function AttendanceHistory({ currentUser, attendance, stdHours, regularizations, submitRegularization }) {
@@ -59,6 +59,7 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, regulariz
             {myRecs.map(({ date, rec }) => {
               const raw = calcRawHrs(rec.inTime, rec.outTime)
               const st = rec.status || calcStatus(rec, stdHours, rec.dayType)
+              const shortfallNote = explainShortfall(rec, stdHours)
               return (
                 <div key={date} className="flex items-center gap-3 p-3 rounded-xl border bg-white/5 border-white/10">
                   <div className="flex-1 min-w-0">
@@ -67,6 +68,7 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, regulariz
                       {rec.inTime || '--:--'} — {rec.outTime || '--:--'}
                       {rec.leaveType && <span className="ml-2 text-amber-400/70">{rec.leaveType}</span>}
                     </p>
+                    {shortfallNote && <p className="text-white/30 text-xs mt-0.5">{shortfallNote}</p>}
                   </div>
                   <div className="text-right shrink-0">
                     <Badge status={st} />

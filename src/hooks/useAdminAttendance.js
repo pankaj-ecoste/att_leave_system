@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { adminFetchAttendance, adminUpsertAttendance, adminBulkUpsertAttendance } from '../api/attendance'
+import { fetchAppSettings } from '../api/auth'
 import { attnKey } from '../api/mappers'
 import { calcStatus } from '../lib/datetime'
 
@@ -37,7 +38,11 @@ export function useAdminAttendance(token, stdHours) {
     // app punch — is protected from being silently overwritten by a later bio import
     // (P3-10, plan.md). Only inTime/outTime are ever inline-edited here today.
     if (field === 'inTime' || field === 'outTime') next.officialSource = 'manual'
-    next.status = calcStatus(next, stdHours, next.dayType)
+    // Fetch std_hours fresh rather than trusting the `stdHours` argument (loaded once at
+    // app bootstrap and never refreshed) — same staleness bug as employee punches,
+    // plan.md §15.2.
+    const freshSettings = await fetchAppSettings()
+    next.status = calcStatus(next, freshSettings.stdHours, next.dayType)
     return upsert(next)
   }
 

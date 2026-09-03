@@ -2,7 +2,7 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, calcOvertimeHours, hasIncompleteHoursFlag, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
+import { calcRawHrs, calcStatus, calcOvertimeHours, hasIncompleteHoursFlag, explainShortfall, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
 import { DAY_TYPES } from './constants'
 
 describe('calcRawHrs', () => {
@@ -201,6 +201,53 @@ describe('hasIncompleteHoursFlag', () => {
 
   it('does not flag a leave day', () => {
     expect(hasIncompleteHoursFlag({ inTime: '15:00', outTime: '22:00', leaveType: 'Casual Leave' }, stdHours)).toBe(false)
+  })
+})
+
+describe('explainShortfall', () => {
+  const stdHours = 9
+
+  it('returns null when there is no punch yet', () => {
+    expect(explainShortfall({ inTime: '09:00', outTime: null }, stdHours)).toBe(null)
+  })
+
+  it('returns null for a full-day leave — nothing to explain', () => {
+    expect(explainShortfall({ leaveType: 'Sick Leave' }, stdHours)).toBe(null)
+  })
+
+  it('returns null when stdHours was met or exceeded outright', () => {
+    expect(explainShortfall({ inTime: '09:00', outTime: '18:00' }, stdHours)).toBe(null)
+    expect(explainShortfall({ inTime: '09:00', outTime: '20:00' }, stdHours)).toBe(null)
+  })
+
+  it('explains a shortfall covered by the grace period', () => {
+    // 09:00-17:50 = 8h50m, 10 minutes short — within the 15-min grace (calcStatus: Present).
+    expect(explainShortfall({ inTime: '09:00', outTime: '17:50' }, stdHours))
+      .toBe('10 min short — covered by the 15-min grace period')
+  })
+
+  it('explains a shortfall beyond grace with no leave applied (matches calcStatus: Half Day)', () => {
+    // 09:00-17:44 = 8h44m, 16 minutes short — one past the grace window.
+    expect(explainShortfall({ inTime: '09:00', outTime: '17:44' }, stdHours))
+      .toBe('16 min short of the 9h target')
+  })
+
+  it('explains a shortfall fully covered by Partial Leave (matches calcStatus: Present)', () => {
+    // 09:00-17:00 = 8h, 1h short of stdHours=9 — Partial Leave - 1 Hour covers it exactly.
+    expect(explainShortfall({ inTime: '09:00', outTime: '17:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours))
+      .toBe('Partial Leave (Partial Leave - 1 Hour) covered a 60-min shortfall')
+  })
+
+  it('explains a shortfall only partly covered by Partial Leave (matches calcStatus: Half Day)', () => {
+    // 09:00-16:30 = 7h30m, 1h30m short. Partial Leave - 1 Hour credits only 1h back.
+    expect(explainShortfall({ inTime: '09:00', outTime: '16:30', leaveType: 'Partial Leave - 1 Hour' }, stdHours))
+      .toBe('Partial Leave (Partial Leave - 1 Hour) applied, but still 30 min short')
+  })
+
+  it('returns null for a late punch-in forgiven by the work-window rule (matches calcStatus: Present)', () => {
+    // 15:00-22:00 = 7h raw, but only 15:00-19:00 (4h) is inside the window and they
+    // stayed through close — calcStatus forgives this outright, nothing to explain.
+    expect(explainShortfall({ inTime: '15:00', outTime: '22:00' }, stdHours)).toBe(null)
   })
 })
 

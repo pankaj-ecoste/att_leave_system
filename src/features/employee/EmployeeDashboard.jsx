@@ -9,7 +9,7 @@ import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
-import { todayIST } from '../../lib/datetime'
+import { todayIST, explainShortfall } from '../../lib/datetime'
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
@@ -31,6 +31,7 @@ export function EmployeeDashboard({
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
   ]
   const status = todayRecord.status || 'Absent'
+  const shortfallNote = explainShortfall(todayRecord, stdHours)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950">
@@ -64,6 +65,7 @@ export function EmployeeDashboard({
             <div>
               <p className="text-white/50 text-xs uppercase tracking-wide mb-1">Today's Status</p>
               <Badge status={status} />
+              {shortfallNote && <p className="text-white/40 text-xs mt-1.5">{shortfallNote}</p>}
             </div>
           </div>
         </div>

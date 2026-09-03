@@ -1285,6 +1285,60 @@ to change.
 (`employee_log_location`, `employee_log_od_location` redefined), one-off script to
 correct the two existing mismatched rows' `date` to match their real capture time.
 
+### 15.2 Staff reported "only 4 minutes short, even with the 15-min grace" but got Half Day
+
+**Reported by:** Staff, via admin — worked their shift only a few minutes under target,
+expected the 15-min grace period (plan.md §12 V3 decision 10) to cover it, but the app
+showed Half Day anyway.
+
+**Root cause:** `app_settings.std_hours` was **9** the entire time until admin changed it
+to **8** on 2026-09-01 (`SETTINGS_UPDATE` in `audit_logs`). `useAuth.js` fetches
+`std_hours` exactly once, in a `useEffect(..., [])` that only runs when the app first
+loads — it never refreshes afterward. Employee sessions now last 30 days (§13), so
+anyone who already had the app open (or a still-valid session) before the setting
+changed kept computing their shift status against the *old* 9h target indefinitely. And
+because a computed `status` is written once at punch time and never recalculated
+(no server mirror, nothing re-derives it later), that wrong value then stays frozen in
+the database forever. Confirmed against live data — e.g. Shalini Gupta worked 7h57m on
+2026-09-02 (3 min short of the *current* 8h target, comfortably inside the 15-min grace
+— should be Present), but her app had evidently not refetched settings since before
+Sep 1, computed a 63-minute shortfall against 9h instead, and stored Half Day. The same
+`useAuth.js`-loaded-once pattern also feeds `useAdminAttendance.js`'s manual-edit path
+(`editCell`), so an admin session left open across a settings change carries the exact
+same risk.
+
+**Decision:**
+1. **Root fix:** `useEmployeeAttendance.js`'s `punch()` and `useAdminAttendance.js`'s
+   `editCell()` both now call `fetchAppSettings()` fresh, right before computing
+   `calcStatus`, instead of trusting the `stdHours` value each hook was handed (which
+   traces back to that one-time bootstrap fetch). A settings change now takes effect on
+   the very next punch/edit for everyone, not only people who reload the tab.
+2. **Backfill:** one-off script recomputes `status` for every completed punch recorded
+   after the 2026-09-01 settings change, using the real `calcStatus` (imported directly,
+   not reimplemented) against the current `std_hours` — dry run first, listing every
+   row that would change, applied only after review. Found 15 affected rows: 13
+   Half Day → Present (people who'd actually met the new 8h target), 2 Absent → Half Day
+   (people who cleared the new, lower 4h half-day threshold but not the old 4.5h one).
+   Nothing before 2026-09-01 is touched — those rows were correctly computed against the
+   9h target that genuinely applied at the time.
+3. **New transparency feature (staff/admin's actual ask):** a new pure function,
+   `explainShortfall(rec, stdHours)` in `lib/datetime.js`, mirrors `calcStatus`'s exact
+   branches to produce a one-line reason wherever a shortfall against `stdHours` was
+   involved — e.g. *"10 min short — covered by the 15-min grace period"*, *"Partial Leave
+   (Partial Leave - 1 Hour) covered a 60-min shortfall"*, or *"16 min short of the 9h
+   target"* — and `null` when there's nothing to explain (no punch yet, a full leave day,
+   or stdHours met outright). Shown under the status badge in three places: the
+   employee's "Today's Status" tile (`EmployeeDashboard.jsx`), the employee's
+   `AttendanceHistory.jsx` per-day rows, and the admin `AttendanceGrid.jsx` Daily Records
+   table (next to the existing "incomplete hrs" flag).
+
+**Files touched:** `src/lib/datetime.js` (`explainShortfall` added, exported),
+`src/lib/datetime.test.js` (7 new tests), `src/hooks/useEmployeeAttendance.js` and
+`src/hooks/useAdminAttendance.js` (fetch `std_hours` fresh before computing status),
+`src/features/employee/EmployeeDashboard.jsx`, `src/features/employee/AttendanceHistory.jsx`,
+`src/features/admin/AttendanceGrid.jsx` (render the explanation), one-off backfill script
+`scripts/backfill-status-after-std-hours-change.mjs`.
+
 ---
 
 ## Appendix — Reference
