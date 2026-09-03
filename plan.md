@@ -1258,6 +1258,33 @@ clock, not a real punch.
 **Files touched:** new migration (`employee_punch` redefined to use server clock for
 date/in_time/out_time instead of `p_data`), one-off cleanup script to delete the bad row.
 
+**Follow-up audit (same day, admin asked to confirm this class of error can't recur):**
+queried the live database for every function that writes `attendance`, `location_logs`,
+or `od_tracking_logs` and checked which ones derive a "today" date from the caller
+instead of the server. Found the *same* unvalidated-client-date bug in two more
+functions — `employee_log_location` and `employee_log_od_location` (the 2-hourly GPS
+trail, plan.md §12 "silent GPS trail" and On Duty tracking) — both took `p_date`
+straight from the phone with no server check. Confirmed this was already live, not
+hypothetical: `location_logs` had one row (Rahul Das) dated 2 days off from its own
+`captured_at`, and `od_tracking_logs` had one row (Ashish Singh) dated 1 day off from
+its own `ts` — both tables' timestamp columns already default to server `now()`, only
+the separate `date` column was client-trusted. Every other function that writes
+`attendance` (`admin_upsert_attendance`, `admin_bulk_upsert_attendance`,
+`admin_decide_regularization`, `manager_decide_regularization`,
+`apply_leave_approval_effects`, `refresh_attendance_monthly_summary`) takes an
+explicit, intentional date chosen by an admin/manager or from a leave application —
+not an auto-detected "today" — so those are a different, non-buggy pattern and were
+left alone.
+
+**Decision:** same fix as 15.1 — both functions now derive `date` from the server's own
+clock (`now() at time zone 'Asia/Kolkata'`) instead of the client-supplied `p_date`. The
+parameter itself is kept (unused) so the client's existing call signature doesn't need
+to change.
+
+**Files touched:** `supabase/migrations/0035_location_logs_use_server_clock.sql`
+(`employee_log_location`, `employee_log_od_location` redefined), one-off script to
+correct the two existing mismatched rows' `date` to match their real capture time.
+
 ---
 
 ## Appendix — Reference
