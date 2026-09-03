@@ -1224,6 +1224,42 @@ the xlsx with `exceljs` styling; `registerLocationCell` removed; new `holidays` 
 
 ---
 
+## 15. Ongoing bug fixes — admin/staff reported (added 2026-09-03)
+
+Small issues reported piecemeal by admin and staff, fixed one at a time. Each entry: what was
+reported, root cause, decision, files touched.
+
+### 15.1 Future-dated punch — Shashi showed "Present" on 2026-09-20 while actually absent on 2026-09-03
+
+**Reported by:** Admin, via screenshot of the Attendance grid — a row dated `2026-09-20` for
+employee Shashi showing status `Present`, `In: 09:39`, while the real date was 2026-09-03 (17
+days earlier) and she had no punch at all that day.
+
+**Root cause:** The attendance `date`, `in_time`, and `out_time` written on every punch are all
+read from the **employee's own phone clock** (`todayIST()` / `new Date()` in
+`useEmployeeAttendance.js`) and sent to the server as-is. `employee_punch`
+(`0032_punch_gap_and_equal_leave_authority.sql`) inserts `(p_data->>'date')::date` and the
+in/out times exactly as received — nothing on the server checks that the submitted date is
+actually today, or even that it isn't in the future. A misconfigured device clock (common on
+field-staff phones) silently files the punch under whatever wrong date the phone believes it is.
+This is a systemic gap: any employee's punch can land on any past/future date if their phone's
+clock is off, not just Shashi's case.
+
+**Decision:** The server becomes the sole source of truth for punch date/time. `employee_punch`
+computes `date`, `in_time`, and `out_time` itself from the database server's own clock (converted
+to IST), and ignores whatever date/time value the phone sends in `p_data`. This matches the
+"server decides, not the phone" principle already used for the duplicate-punch cooldown check in
+the same function, and closes the entire bug class (past-dated and future-dated punches alike) in
+one place rather than special-casing this one report.
+
+**Cleanup:** Delete Shashi's stray `2026-09-20` attendance row — bad data from a misconfigured
+clock, not a real punch.
+
+**Files touched:** new migration (`employee_punch` redefined to use server clock for
+date/in_time/out_time instead of `p_data`), one-off cleanup script to delete the bad row.
+
+---
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
