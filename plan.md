@@ -1339,6 +1339,27 @@ same risk.
 `src/features/admin/AttendanceGrid.jsx` (render the explanation), one-off backfill script
 `scripts/backfill-status-after-std-hours-change.mjs`.
 
+**Correction, same day — the real policy is 9h, not 8h:** admin clarified the actual
+shift policy: 9-hour shift, flexible 9:00-10:00 AM punch-in / 6:00-7:00 PM punch-out
+(complete the 9h anywhere in that window), plus the 15-min grace, and a rare case —
+e.g. punch-in 10:30, punch-out 19:30, both ends later than the ideal slot but still a
+full 9h worked — should still count as complete rather than penalized. Cross-checked
+against the code: `WORK_WINDOW_START`/`WORK_WINDOW_END` (`09:00`/`19:00` in
+`constants.js`) already encode exactly this policy — 19:00 minus 9:00 is exactly the
+9h shift, which is why the latest on-time punch-in lands at 10:00 and on-time punch-out
+at 18:00-19:00. The rare late-both-ends case is also already handled: `calcStatus`
+accepts it once actual hours worked meet or exceed the window still available at that
+late a start. **None of that needed a code change — std_hours=8 (set 2026-09-01) was
+the actual mistake**, since it breaks the 9:00-19:00 window's built-in alignment with a
+9h shift. Admin corrected the live setting back to 9 directly in the app
+(`SETTINGS_UPDATE`, 2026-09-03). Re-ran the same kind of recompute as the backfill
+above — this time against 9 — for every completed punch dated 2026-09-01 onward,
+superseding the earlier std=8 backfill: 15 rows changed (11 Present → Half Day, 2
+Half Day → Absent, matching the restored 4.5h half-day threshold and 9h target).
+**Files touched:** `scripts/revert-std-hours-to-9.mjs` (one-off, supersedes
+`backfill-status-after-std-hours-change.mjs` for rows in this window). No app code
+changed for this correction — only data.
+
 ---
 
 ## Appendix — Reference
