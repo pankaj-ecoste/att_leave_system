@@ -90,7 +90,7 @@ export function EmployeeDashboard({
           />
         )}
         {empTab === 'history' && (
-          <AttendanceHistory currentUser={currentUser} attendance={attendance} stdHours={stdHours} regularizations={regularizations} submitRegularization={submitRegularization} />
+          <AttendanceHistory currentUser={currentUser} attendance={attendance} stdHours={stdHours} holidays={holidays} regularizations={regularizations} submitRegularization={submitRegularization} />
         )}
         {empTab === 'leaves' && (
           <LeaveApply currentUser={currentUser} leaves={leaves} balances={leaveBalances[currentUser.id] || {}} availableLeaveTypes={availableLeaveTypes} applyLeave={applyLeave} onOdApplied={onOdApplied} directory={directory} adminEmail={adminEmail} />

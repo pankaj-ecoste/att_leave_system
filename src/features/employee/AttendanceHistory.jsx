@@ -7,19 +7,35 @@ import { Badge } from '../../components/ui/Badge'
 import { calcRawHrs, calcStatus, todayIST, explainShortfall } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 
-export function AttendanceHistory({ currentUser, attendance, stdHours, regularizations, submitRegularization }) {
+export function AttendanceHistory({ currentUser, attendance, stdHours, holidays, regularizations, submitRegularization }) {
   const [tab, setTab] = useState('attendance')
   const [showRegModal, setShowRegModal] = useState(false)
   const [form, setForm] = useState({ date: '', inTime: '', outTime: '', reason: '' })
   const [errs, setErrs] = useState({})
 
   const empId = currentUser.id
-  const myRecs = Object.entries(attendance)
-    .filter(([k]) => k.startsWith(`${empId}_`))
-    .map(([k, v]) => ({ date: k.slice(String(empId).length + 1), rec: v }))
-    .filter(({ date }) => date && /^\d{4}-\d{2}-\d{2}$/.test(date))
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 90)
+  // Current month only, day 1 through today — resets automatically once a new month
+  // starts. Sunday/Holiday rows are synthesized when there's no punch record so the
+  // day still shows up (an ordinary absent working day with no record stays hidden,
+  // same as before).
+  const [y, m, todayD] = todayIST().split('-').map(Number)
+  const myRecs = []
+  for (let d = todayD; d >= 1; d--) {
+    const date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const rec = attendance[`${empId}_${date}`]
+    if (rec) {
+      myRecs.push({ date, rec })
+      continue
+    }
+    const holiday = (holidays || []).find(h => h.date === date)
+    if (holiday) {
+      myRecs.push({ date, rec: { status: 'Holiday', holidayName: holiday.name } })
+      continue
+    }
+    if (new Date(y, m - 1, d).getDay() === 0) {
+      myRecs.push({ date, rec: { status: 'Week Off' } })
+    }
+  }
 
   async function submit() {
     const nextErrs = {}
@@ -57,18 +73,25 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, regulariz
         ) : (
           <div className="space-y-1.5 max-h-[65vh] overflow-y-auto pr-1">
             {myRecs.map(({ date, rec }) => {
-              const raw = calcRawHrs(rec.inTime, rec.outTime)
-              const st = rec.status || calcStatus(rec, stdHours, rec.dayType)
-              const shortfallNote = explainShortfall(rec, stdHours)
+              const isPlaceholder = rec.status === 'Holiday' || rec.status === 'Week Off'
+              const raw = isPlaceholder ? 0 : calcRawHrs(rec.inTime, rec.outTime)
+              const st = isPlaceholder ? rec.status : (rec.status || calcStatus(rec, stdHours, rec.dayType))
+              const shortfallNote = isPlaceholder ? null : explainShortfall(rec, stdHours)
               return (
                 <div key={date} className="flex items-center gap-3 p-3 rounded-xl border bg-white/5 border-white/10">
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium">{date}</p>
-                    <p className="text-white/40 text-xs font-mono mt-0.5">
-                      {rec.inTime || '--:--'} — {rec.outTime || '--:--'}
-                      {rec.leaveType && <span className="ml-2 text-amber-400/70">{rec.leaveType}</span>}
-                    </p>
-                    {shortfallNote && <p className="text-white/30 text-xs mt-0.5">{shortfallNote}</p>}
+                    {isPlaceholder ? (
+                      <p className="text-white/40 text-xs mt-0.5">{rec.status === 'Holiday' ? rec.holidayName : 'Weekly off'}</p>
+                    ) : (
+                      <>
+                        <p className="text-white/40 text-xs font-mono mt-0.5">
+                          {rec.inTime || '--:--'} — {rec.outTime || '--:--'}
+                          {rec.leaveType && <span className="ml-2 text-amber-400/70">{rec.leaveType}</span>}
+                        </p>
+                        {shortfallNote && <p className="text-white/30 text-xs mt-0.5">{shortfallNote}</p>}
+                      </>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <Badge status={st} />
