@@ -27,6 +27,19 @@ export async function fetchAppSettings() {
   return { stdHours: Number(data.std_hours) || 9, adminEmail: data.admin_email || null, birthdayMessage: data.birthday_message || null }
 }
 
+// One employee's target hours, resolved fresh (their override if set, else the org
+// default) in a single round trip — plan.md §16. Used at the same write-time points
+// that already fetch app_settings.std_hours fresh rather than trust a stale prop
+// (useEmployeeAttendance's punch flow, useAdminAttendance's editCell — plan.md §15.2).
+export async function fetchEffectiveStdHours(empId, fallback = 9) {
+  const { data, error } = await supabase.rpc('get_effective_std_hours', { p_emp_id: empId })
+  if (error) {
+    console.error(error)
+    return fallback
+  }
+  return Number(data) || fallback
+}
+
 // ---------------------------------------------------------------------------
 // Employee login/session
 // ---------------------------------------------------------------------------

@@ -1387,6 +1387,87 @@ the affected tests, added a WFH/On Duty regression test).
 
 ---
 
+## 16. Per-employee 8-hour shift override (added 2026-09-04)
+
+**Reported by:** Admin — only 2 people in the whole org are actually on an 8-hour shift;
+everyone else is 9-hour. Today `std_hours` is a single global value
+(`app_settings.std_hours`), so there was no way to special-case just these two without
+changing it for everyone — which is exactly what caused the §15.2 incident (admin
+changed the global setting from 9→8 to try to fix it for these people, broke Present/
+Absent for the other ~98% of staff until it was reverted). This feature is the real fix:
+make the target hours a **per-employee** value instead of one global number.
+
+**The two employees:** Archana (emp #1113), Vivek Singh (emp #1154). To be looked up by
+`emp_num` at build time and set to an 8-hour override; every other active employee keeps
+`std_hours_override = null` and continues on the global 9h default, completely
+unaffected.
+
+### Decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | New nullable column **`employees.std_hours_override`** (numeric). `null` = "uses the org default from `app_settings.std_hours`" — not reusing the existing `shift_type` column (day/night shift label, unrelated concept, already used for punch-window guessing) |
+| 2 | One small pure resolver, `effectiveStdHours(employee, globalStdHours)` in `src/lib/datetime.js`, next to `calcStatus`. Every call site that currently reads the flat global `stdHours` switches to this resolved value instead — `calcStatus`, `calcOvertimeHours`, `hasIncompleteHoursFlag`, `explainShortfall`, and `idealPunchSlots` themselves are **untouched**; they still just take a plain number |
+| 3 | **Everything hours-derived follows the override consistently** for these two — half-day threshold (stdHours ÷ 2 → 4h not 4.5h), overtime (counted only beyond 8h), the incomplete-hours late-punch flag, the shortfall explanation text, and the punch-slot reminder on `PunchPanel.jsx` (suggests an 8h-shift punch-out window for them, not the 9h one) |
+| 4 | The **15-minute grace period stays a flat constant**, not scaled by stdHours — it already sits inside `calcStatus`'s shortfall check regardless of the number that comes in, so it applies to the 8h shortfall calc exactly the way it applies to the 9h one today. No code change needed for this, just confirming it isn't accidentally scaled |
+| 5 | The **9:00–19:00 work window** (`WORK_WINDOW_START/END`) stays global and unchanged — that's office hours, not personal shift length |
+| 6 | **Comp-off accrual** (`run_comp_off_accrual`, §11 decision 10) also respects the override — these two earn a comp-off credit for 8h worked on a Sunday/holiday instead of 9h. Server-side function joins `employees.std_hours_override` per row instead of reading one global `v_std_hours` |
+| 7 | Amends §11 decision 13 ("Overtime = hours worked beyond stdHours ... no per-company override") — that "no override" applied to the Plant-vs-other-companies question, not to this. OT is now per-employee where an override is set, per-org-default otherwise |
+| 8 | **Forward-only, not retroactive** — matches how §15.2's std_hours revert was handled. Only punches/admin edits made after this ships use the resolved per-employee value. Existing stored `status`/OT for past days is left exactly as-is |
+| 9 | Admin UI: new **"Standard Hours"** number field on the employee Add/Edit form (`Employees.jsx`), next to Shift Type. Blank/empty = no override (org default) |
+| 10 | `app_settings.std_hours` and `admin_update_settings` are **untouched** — still the org-wide default for the ~98% of staff with no override, and still safe for admin to edit without touching these two |
+
+### Files touched (planned)
+
+- `supabase/migrations/0036_per_employee_std_hours.sql` — `employees.std_hours_override`
+  column; `run_comp_off_accrual` redefined to resolve per-employee; one-off `update` to
+  set the override to 8 for emp_num 1113 and 1154 (looked up by `emp_num`, not a
+  hardcoded UUID, so it's readable and re-runnable)
+- `src/lib/datetime.js` — `effectiveStdHours(employee, globalStdHours)` helper
+- `src/lib/datetime.test.js` — regression tests for the resolver and an 8h-shift
+  `calcStatus`/OT scenario
+- `src/hooks/useEmployeeAttendance.js` — punch flow resolves the current employee's
+  override before calling `calcStatus`
+- `src/hooks/useAdminAttendance.js` — admin manual edit resolves by `record.empId`
+- `src/features/employee/AttendanceHistory.jsx`, `MonthlySummary.jsx` — fallback
+  recompute path
+- `src/features/admin/AttendanceGrid.jsx`, `Reports.jsx`, `Dashboard.jsx`,
+  `src/features/employee/EmployeeDashboard.jsx`, `MyOvertime.jsx`, `PunchPanel.jsx` —
+  display-only OT/flag/explain/punch-slot calcs, resolved per row using the `employees`
+  list each of these already has in scope
+- `src/features/admin/Employees.jsx`, `src/api/admin.js` — Standard Hours field +
+  save path
+## 17. Pre-existing bug — app_settings_public silently missing admin_email/birthday_message (found + fixed 2026-09-04)
+
+**Found by:** not a user report — surfaced while regression-testing §16 (this was a
+console-error check on the login screen, unrelated to the 8h-shift feature itself; §16's
+own change never touches this view).
+
+**What was wrong:** every single page load was throwing `column
+app_settings_public.admin_email does not exist` in the console. `fetchAppSettings()`
+swallows that into a fallback (`{ adminEmail: null, birthdayMessage: null }`), so the app
+kept working but silently: the Apply Leave screen's "notify admin by email" link and any
+custom birthday message set in Settings were both reverting to defaults in production.
+
+**Root cause:** `app_settings_public` was live on production as 0002's original 1-column
+view (`std_hours` only) — even though 0020 widened it to add `admin_email` and 0023
+widened it again to add `birthday_message`, and PROGRESS.md's own P4/V2 write-up records
+both as verified live at the time. 0002 carries a `drop view if exists` guard (added for
+replay-safety); a later full `apply-migrations.mjs` replay attempt drops and recreates
+the view back to that narrow shape when it re-runs 0002, then errors out at migration
+0010 (the already-known broken-full-replay point, §13) — never reaching 0020/0023's
+widening statements again in that same replay. Neither this bug nor its cause has
+anything to do with §16.
+
+**Fix:** `supabase/migrations/0037_fix_app_settings_public_view.sql` — re-applies the
+exact same widening 0023 already defined (`select std_hours, admin_email,
+birthday_message from app_settings where id = 1`). Purely additive, no drop needed.
+Applied directly via `scripts/apply-0037-fix-app-settings-public-view.mjs` (same
+one-off-script pattern every post-0010 migration uses). Verified via the real anon key
+the app uses: `app_settings_public` now returns the actual configured admin email
+(`recruitment@ecoste.in`) and birthday message with no error, where before both silently
+came back null.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

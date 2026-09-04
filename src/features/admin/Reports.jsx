@@ -9,7 +9,7 @@ import { adminFetchLeaves, adminFetchLeaveAccruals, adminFetchCompOffPayouts } f
 import { adminGetAllLocationLogs } from '../../api/location'
 import { attnKey } from '../../api/mappers'
 import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag, effectiveStdHours } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
@@ -46,7 +46,7 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
       return {
         Date: v.date, 'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '',
         Designation: emp.jobTitle || '', Company: emp.company || '', 'Login Time': v.inTime || '', 'Logout Time': v.outTime || '',
-        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: calcOvertimeHours(v, stdHours).toFixed(2),
+        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: calcOvertimeHours(v, effectiveStdHours(emp, stdHours)).toFixed(2),
         Status: v.status || '', 'Leave Type': v.leaveType || '', 'Leave Reason': v.leaveReason || '',
         WFH: v.wfh ? 'Yes' : 'No', 'On Duty': v.onDuty ? 'Yes' : 'No', Location: v.inLocation || '', Remarks: '',
       }
@@ -128,7 +128,7 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
           else if (status === 'Leave' || status === 'Half Day Leave') leave++
           else if (status === 'Absent') absent++
           totalHours += Math.max(0, calcRawHrs(rec.inTime, rec.outTime))
-          totalOt += calcOvertimeHours(rec, stdHours)
+          totalOt += calcOvertimeHours(rec, effectiveStdHours(emp, stdHours))
         }
         row.Present = present
         row['Half Day'] = halfDay
@@ -233,7 +233,7 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
         const raw = calcRawHrs(v.inTime, v.outTime)
         const deduct = v.leaveType ? findLeaveType(v.leaveType)?.deduct || 0 : 0
         const net = Math.max(0, raw - deduct)
-        const ot = calcOvertimeHours(v, stdHours)
+        const ot = calcOvertimeHours(v, effectiveStdHours(emp, stdHours))
         totalOt += ot
         return {
           'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '', Company: emp.company || '',
@@ -266,7 +266,7 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
         if (v.inTime && !v.outTime && v.date !== todayIST()) exceptionRows.push({ ...who, Exception: 'Missing punch-out', Detail: `Punched in at ${v.inTime}, never punched out` })
         if (v.inAccuracyM > ACCEPTABLE_GPS_ACCURACY_M) exceptionRows.push({ ...who, Exception: 'Suspicious GPS accuracy (in)', Detail: `±${Math.round(v.inAccuracyM)}m` })
         if (v.outAccuracyM > ACCEPTABLE_GPS_ACCURACY_M) exceptionRows.push({ ...who, Exception: 'Suspicious GPS accuracy (out)', Detail: `±${Math.round(v.outAccuracyM)}m` })
-        if (hasIncompleteHoursFlag(v, stdHours)) exceptionRows.push({ ...who, Exception: 'Incomplete hours (late punch-in)', Detail: `In ${v.inTime}, out ${v.outTime} — marked Present, but stdHours wasn't reached within the work window` })
+        if (hasIncompleteHoursFlag(v, effectiveStdHours(emp, stdHours))) exceptionRows.push({ ...who, Exception: 'Incomplete hours (late punch-in)', Detail: `In ${v.inTime}, out ${v.outTime} — marked Present, but stdHours wasn't reached within the work window` })
       }
 
       const wb = XLSX.utils.book_new()
@@ -296,7 +296,8 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
       const attMap = await adminFetchAttendance(token, { from, to, limit: 100000 })
       const byEmp = {}
       for (const rec of Object.values(attMap)) {
-        const ot = calcOvertimeHours(rec, stdHours)
+        const emp = employees.find(e => e.id === rec.empId)
+        const ot = calcOvertimeHours(rec, effectiveStdHours(emp, stdHours))
         if (ot <= 0) continue
         if (!byEmp[rec.empId]) byEmp[rec.empId] = { empId: rec.empId, days: 0, totalOt: 0 }
         byEmp[rec.empId].days += 1

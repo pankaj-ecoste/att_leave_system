@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { employeeFetchAttendance, employeePunch } from '../api/attendance'
 import { employeeLogLocation, employeeLogOdLocation } from '../api/location'
-import { fetchAppSettings } from '../api/auth'
+import { fetchEffectiveStdHours } from '../api/auth'
 import { attnKey } from '../api/mappers'
 import { calcStatus, calcRawHrs, todayIST, isWithinCooldown } from '../lib/datetime'
 import { PUNCH_COOLDOWN_MS, MIN_PUNCH_GAP_MIN, ACCEPTABLE_GPS_ACCURACY_M } from '../lib/constants'
@@ -171,13 +171,15 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
         }
         if (fieldNote) next.fieldNote = fieldNote
         next.punchType = type
-        // Fetch std_hours fresh right here rather than trusting the `stdHours` argument
-        // (loaded once at app bootstrap in useAuth.js and never refreshed) — a tab left
-        // open across an admin settings change would otherwise keep computing status
-        // against a stale target forever, and since status is written once and never
-        // recalculated, that wrong value would be permanent (plan.md §15.2).
-        const freshSettings = await fetchAppSettings()
-        next.status = calcStatus(next, freshSettings.stdHours, next.dayType)
+        // Fetch this employee's effective std hours fresh right here rather than
+        // trusting the `stdHours` argument (loaded once at app bootstrap in useAuth.js
+        // and never refreshed) — a tab left open across an admin settings change would
+        // otherwise keep computing status against a stale target forever, and since
+        // status is written once and never recalculated, that wrong value would be
+        // permanent (plan.md §15.2). Resolves this employee's own override if they have
+        // one (plan.md §16), else the org default — never the stale `stdHours` prop.
+        const freshStdHours = await fetchEffectiveStdHours(empId, stdHours)
+        next.status = calcStatus(next, freshStdHours, next.dayType)
         try {
           await persist(next)
           lastPunchAtRef.current[type] = Date.now()

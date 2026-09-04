@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { COMPANIES, MONTHS, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag, explainShortfall } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag, explainShortfall, effectiveStdHours } from '../../lib/datetime'
 import { fmtHrs, fmt2 } from '../../lib/format'
 
 function monthRange(month, year) {
@@ -59,7 +59,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
       if (r.onDuty) map[r.empId].onDuty++
       const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
       map[r.empId].hrs += net
-      map[r.empId].ot += calcOvertimeHours(r, stdHours)
+      map[r.empId].ot += calcOvertimeHours(r, effectiveStdHours(employees.find(e => e.id === r.empId), stdHours))
     })
     return Object.values(map)
   })()
@@ -169,8 +169,9 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
               <thead><tr className="border-b border-white/10">{['Date', 'Emp Code', 'Name', 'Dept', 'In Time', 'Out Time', 'Net Hrs', 'OT', 'Status', 'Leave Type', 'Mode / Note'].map(h => <th key={h} className="text-left py-2.5 pr-3 text-white/30 font-medium uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>{rows.map(r => {
                 const emp = employees.find(e => e.id === r.empId) || {}
+                const rowStdHours = effectiveStdHours(emp, stdHours)
                 const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
-                const ot = calcOvertimeHours(r, stdHours)
+                const ot = calcOvertimeHours(r, rowStdHours)
                 const aKey = `${r.empId}_${r.date}`
                 const isField = emp.workMode === 'field' || emp.workMode === 'both'
                 return (
@@ -193,11 +194,11 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                     <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{ot > 0 ? fmtHrs(ot) : '--'}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">
                       <Badge status={r.status || 'Absent'} />
-                      {hasIncompleteHoursFlag(r, stdHours) && (
+                      {hasIncompleteHoursFlag(r, rowStdHours) && (
                         <span className="block mt-0.5 text-[10px] text-amber-400" title="Late punch-in — stdHours wasn't reached within the 9:00-19:00 work window">⚠ incomplete hrs</span>
                       )}
-                      {explainShortfall(r, stdHours) && (
-                        <span className="block mt-0.5 text-[10px] text-white/40">{explainShortfall(r, stdHours)}</span>
+                      {explainShortfall(r, rowStdHours) && (
+                        <span className="block mt-0.5 text-[10px] text-white/40">{explainShortfall(r, rowStdHours)}</span>
                       )}
                     </td>
                     <td className="py-2 pr-3 text-white/30 text-xs whitespace-nowrap">{r.leaveType || ''}</td>

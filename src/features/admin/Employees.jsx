@@ -20,7 +20,7 @@ const FORM_FIELDS = [
   ['locationInfo', 'Location'], ['email', 'Email'], ['phone', 'Phone'],
   ['joiningDate', 'Joining Date', 'date'], ['dateOfBirth', 'Date of Birth', 'date'],
 ]
-const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office' }
+const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office', stdHoursOverride: '' }
 const EMPTY_ASSET = { assetType: '', serialNumber: '', assignedDate: '', status: '', assignedBy: '' }
 
 export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, onAudit }) {
@@ -235,6 +235,10 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
               <Select value={form.shiftType || 'none'} onChange={e => setForm(p => ({ ...p, shiftType: e.target.value }))}>
                 {SHIFTS.map(s => <option key={s.id} value={s.id}>{s.label}{s.start ? ` (${s.start}–${s.end})` : ''}</option>)}
               </Select>
+            </div>
+            <div>
+              <Label>Standard Hours (blank = org default, 9)</Label>
+              <Input type="number" min="1" max="24" placeholder="9" value={form.stdHoursOverride ?? ''} onChange={e => setForm(p => ({ ...p, stdHoursOverride: e.target.value }))} />
             </div>
             <div>
               <Label>Employment Status (admin only)</Label>

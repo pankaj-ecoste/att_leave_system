@@ -9,17 +9,21 @@ import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
-import { todayIST, explainShortfall } from '../../lib/datetime'
+import { todayIST, explainShortfall, effectiveStdHours } from '../../lib/datetime'
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
 export function EmployeeDashboard({
   currentUser, empTab, setEmpTab, onLogout,
-  attendance, todayRecord, stdHours, adminEmail, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
+  attendance, todayRecord, stdHours: globalStdHours, adminEmail, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
   holidays, sites, directory, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
   team, isBirthdayToday, birthdayMessage, myAssets,
 }) {
+  // Resolved once here (this employee's own override if set, plan.md §16) and passed
+  // down to every child below as `stdHours` — none of them need to know about the
+  // override or `currentUser` specially, they just get the right number already.
+  const stdHours = effectiveStdHours(currentUser, globalStdHours)
   const tabs = [
     { id: 'today', label: 'Work Status' },
     { id: 'leaves', label: 'Apply For' },

@@ -5,7 +5,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, todayIST, effectiveStdHours } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { adminGetAllLocationLogs } from '../../api/location'
 
@@ -216,7 +216,7 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
                     <tbody>{shownEmps.map(e => {
                       const r = attendance[`${e.id}_${today}`] || {}
                       const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
-                      const ot = calcOvertimeHours(r, stdHours)
+                      const ot = calcOvertimeHours(r, effectiveStdHours(e, stdHours))
                       const sh = getShiftInfo(r, e)
                       return (
                         <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">

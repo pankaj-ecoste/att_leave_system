@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { adminFetchAttendance, adminUpsertAttendance, adminBulkUpsertAttendance } from '../api/attendance'
-import { fetchAppSettings } from '../api/auth'
+import { fetchEffectiveStdHours } from '../api/auth'
 import { attnKey } from '../api/mappers'
 import { calcStatus } from '../lib/datetime'
 
@@ -38,11 +38,12 @@ export function useAdminAttendance(token, stdHours) {
     // app punch — is protected from being silently overwritten by a later bio import
     // (P3-10, plan.md). Only inTime/outTime are ever inline-edited here today.
     if (field === 'inTime' || field === 'outTime') next.officialSource = 'manual'
-    // Fetch std_hours fresh rather than trusting the `stdHours` argument (loaded once at
-    // app bootstrap and never refreshed) — same staleness bug as employee punches,
-    // plan.md §15.2.
-    const freshSettings = await fetchAppSettings()
-    next.status = calcStatus(next, freshSettings.stdHours, next.dayType)
+    // Fetch this employee's effective std hours fresh rather than trusting the
+    // `stdHours` argument (loaded once at app bootstrap and never refreshed) — same
+    // staleness bug as employee punches, plan.md §15.2. Resolves rec.empId's own
+    // override if they have one (plan.md §16), else the org default.
+    const freshStdHours = await fetchEffectiveStdHours(next.empId, stdHours)
+    next.status = calcStatus(next, freshStdHours, next.dayType)
     return upsert(next)
   }
 

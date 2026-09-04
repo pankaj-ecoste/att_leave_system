@@ -71,7 +71,19 @@ export function calcRawHrs(inTime, outTime) {
   return minutes / 60
 }
 
-// Day status for one attendance row. `stdHours` is always read from app_settings, never
+// Resolves the target hours for one employee: their own `stdHoursOverride` if set
+// (plan.md §16 — only 2 people org-wide are on an 8h shift), otherwise the org-wide
+// `globalStdHours` from app_settings. Every calcStatus/calcOvertimeHours/etc call site
+// should resolve through this rather than reading `globalStdHours` directly, so the
+// override applies consistently everywhere hours are derived (status, OT, half-day
+// threshold, punch-slot reminder) — not just the top-level Present/Absent badge.
+export function effectiveStdHours(employee, globalStdHours) {
+  const override = employee?.stdHoursOverride
+  return override != null && override !== '' ? Number(override) : globalStdHours
+}
+
+// Day status for one attendance row. `stdHours` is always read from app_settings (or,
+// for an employee with an override, resolved via `effectiveStdHours` first), never
 // hardcoded (G-3) — the half-day/absent boundary is std hours ÷ 2, matching what the
 // settings screen has always promised (§4.2 #4, previously hardcoded to 4.5).
 // `dayType` ('working' / 'week_off' / 'holiday') decides what an *unpunched* day means —

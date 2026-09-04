@@ -23,6 +23,9 @@ export function rowToEmployee(row) {
     active: row.active,
     shiftType: row.shift_type || 'none',
     workMode: row.work_mode || 'office',
+    // null = no personal override, uses the org-wide app_settings.std_hours default
+    // (plan.md §16 — resolved via effectiveStdHours(), not read directly).
+    stdHoursOverride: row.std_hours_override != null ? Number(row.std_hours_override) : null,
     employmentStatus: row.employment_status || 'Probation',
     probationEndDate: row.probation_end_date,
     confirmedOn: row.confirmed_on,
@@ -56,6 +59,10 @@ export function employeeToPayload(emp) {
     shiftType: emp.shiftType || 'none',
     workMode: emp.workMode || 'office',
     dateOfBirth: emp.dateOfBirth || null,
+    // Key always present (even as null) so admin_update_employee's existence check can
+    // tell "clear the override" apart from "field wasn't touched" — same pattern
+    // managerEmpId already uses just above. '' (cleared number input) also means null.
+    stdHoursOverride: emp.stdHoursOverride === '' || emp.stdHoursOverride == null ? null : Number(emp.stdHoursOverride),
   }
 }
 

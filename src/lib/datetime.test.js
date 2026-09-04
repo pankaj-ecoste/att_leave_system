@@ -2,8 +2,20 @@
 // corrupt payroll if wrong" — not broad coverage, just the load-bearing math.
 
 import { describe, it, expect } from 'vitest'
-import { calcRawHrs, calcStatus, calcOvertimeHours, hasIncompleteHoursFlag, explainShortfall, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
+import { calcRawHrs, calcStatus, calcOvertimeHours, hasIncompleteHoursFlag, explainShortfall, effectiveStdHours, financialYearFor, monthsOfServiceSince, isWithinCooldown, todayIST, daysFromTodayIST } from './datetime'
 import { DAY_TYPES } from './constants'
+
+describe('effectiveStdHours', () => {
+  it('falls back to the org default when the employee has no override', () => {
+    expect(effectiveStdHours({ stdHoursOverride: null }, 9)).toBe(9)
+    expect(effectiveStdHours({}, 9)).toBe(9)
+    expect(effectiveStdHours(null, 9)).toBe(9)
+  })
+
+  it('uses the employee\'s own override when set — plan.md §16 (Archana/Vivek Singh, 8h)', () => {
+    expect(effectiveStdHours({ stdHoursOverride: 8 }, 9)).toBe(8)
+  })
+})
 
 describe('calcRawHrs', () => {
   it('computes a normal same-day shift', () => {
@@ -177,6 +189,30 @@ describe('calcOvertimeHours', () => {
     expect(calcOvertimeHours({ inTime: '09:00', outTime: '19:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe(0)
     // One more hour worked now clears stdHours after the deduction.
     expect(calcOvertimeHours({ inTime: '09:00', outTime: '20:00', leaveType: 'Partial Leave - 1 Hour' }, stdHours)).toBe(1)
+  })
+})
+
+describe('8h shift override end-to-end (plan.md §16)', () => {
+  const globalStdHours = 9
+  const eightHourEmp = { stdHoursOverride: 8 }
+  const nineHourEmp = { stdHoursOverride: null }
+
+  it('the same 8h-worked day is Present for the 8h employee but Half Day for a 9h employee', () => {
+    const rec = { inTime: '09:00', outTime: '17:00' } // 8h raw, 0 shortfall against 8, 1h against 9
+    expect(calcStatus(rec, effectiveStdHours(eightHourEmp, globalStdHours), rec.dayType)).toBe('Present')
+    expect(calcStatus(rec, effectiveStdHours(nineHourEmp, globalStdHours), rec.dayType)).toBe('Half Day')
+  })
+
+  it('overtime for the 8h employee starts an hour earlier than a 9h employee working the same day', () => {
+    const rec = { inTime: '09:00', outTime: '19:00' } // 10h raw
+    expect(calcOvertimeHours(rec, effectiveStdHours(eightHourEmp, globalStdHours))).toBe(2)
+    expect(calcOvertimeHours(rec, effectiveStdHours(nineHourEmp, globalStdHours))).toBe(1)
+  })
+
+  it('the 15-minute grace period still applies to the 8h employee\'s own shortfall, unscaled', () => {
+    // 7h50m worked against an 8h target = 10 min short, within the flat 15-min grace.
+    const rec = { inTime: '09:00', outTime: '16:50' }
+    expect(calcStatus(rec, effectiveStdHours(eightHourEmp, globalStdHours), rec.dayType)).toBe('Present')
   })
 })
 
