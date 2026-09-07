@@ -3,6 +3,7 @@ import {
   adminFetchEmployees, adminCreateEmployee as apiCreateEmployee, adminUpdateEmployee as apiUpdateEmployee,
   adminToggleEmployeeStatus as apiToggleEmployeeStatus, adminDeleteEmployee as apiDeleteEmployee,
   adminSetEmploymentStatus as apiSetEmploymentStatus,
+  adminResetPunchDevice as apiResetPunchDevice,
 } from '../api/employees'
 import {
   adminFetchLeaves, adminDecideLeave as apiDecideLeave, adminFetchLeaveBalances,
@@ -90,6 +91,11 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
     await apiDeleteEmployee(token, id)
     setEmployees(prev => prev.filter(e => e.id !== id))
   }
+  async function resetPunchDevice(id) {
+    const updated = await apiResetPunchDevice(token, id)
+    setEmployees(prev => prev.map(e => (e.id === id ? updated : e)))
+    return updated
+  }
 
   // --- Leaves ---
   async function decideLeave(id, decision) {
@@ -176,7 +182,7 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
 
   return {
     employees, setEmployees, leaves, leaveBalances, auditLogs, adminRegs, holidays, sites, stdHours, adminEmail, birthdayMessage,
-    createEmployee, updateEmployee, setEmploymentStatus, toggleEmployeeStatus, deleteEmployee,
+    createEmployee, updateEmployee, setEmploymentStatus, toggleEmployeeStatus, deleteEmployee, resetPunchDevice,
     decideLeave, upsertLeaveBalance, bulkUpsertLeaveBalances, resetLeaveBalancesForNewFY, refreshLeaveBalances,
     decideRegularization, updateSettings, addHoliday, deleteHoliday,
     createSite, updateSite, deleteSite,

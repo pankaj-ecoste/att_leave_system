@@ -23,7 +23,7 @@ const FORM_FIELDS = [
 const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office', stdHoursOverride: '' }
 const EMPTY_ASSET = { assetType: '', serialNumber: '', assignedDate: '', status: '', assignedBy: '' }
 
-export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, onAudit }) {
+export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, resetPunchDevice, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, onAudit }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -90,6 +90,17 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
     try {
       const updated = await toggleEmployeeStatus(id)
       onAudit?.('EMP_STATUS', `Toggled ${updated.name}`, 'admin')
+      setErrMsg('')
+    } catch (err) { setErrMsg(err.message) }
+  }
+
+  async function resetDevice(e) {
+    // plan.md §18 — the employee's registered punch device is cleared so their next
+    // punch re-binds to whatever phone they use, for a real phone change/replacement.
+    if (!window.confirm(`Reset ${e.name}'s registered punch device? Their next punch will register whichever phone they use then.`)) return
+    try {
+      const updated = await resetPunchDevice(e.id)
+      onAudit?.('PUNCH_DEVICE_RESET', `Reset punch device for ${updated.name}`, 'admin')
       setErrMsg('')
     } catch (err) { setErrMsg(err.message) }
   }
@@ -278,6 +289,11 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                       {WORK_MODES.find(w => w.id === e.workMode)?.label || e.workMode}
                     </span>
                   )}
+                  {e.punchDeviceId && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/25" title={e.punchDeviceBoundAt ? `Registered ${e.punchDeviceBoundAt}` : undefined}>
+                      Device registered
+                    </span>
+                  )}
                 </div>
                 <p className="text-white/30 text-xs">{e.empNum && `#${e.empNum} · `}{e.company?.split(' ')[0]} · {e.dept || '—'}</p>
               </div>
@@ -286,6 +302,9 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
               <Button variant="secondary" className="text-xs" onClick={() => setForm({ ...e, pin: '' })}>Edit</Button>
               <Button variant="secondary" className="text-xs" onClick={() => openBalanceEditor(e)}>Leave Bal</Button>
               <Button variant="secondary" className="text-xs" onClick={() => openAssetEditor(e)}>Assets</Button>
+              {e.punchDeviceId && (
+                <Button variant="secondary" className="text-xs" onClick={() => resetDevice(e)}>Reset Device</Button>
+              )}
               {e.employmentStatus === 'Exited' && !e.assetsReturned && (
                 <Button variant="secondary" className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/30" onClick={() => returnAssets(e)}>Mark Assets Returned</Button>
               )}

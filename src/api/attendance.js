@@ -24,11 +24,12 @@ export async function employeeFetchAttendance(token, empId, { from, to } = {}) {
   return map
 }
 
-export async function employeePunch(token, empId, record) {
+export async function employeePunch(token, empId, record, deviceId) {
   const { data, error } = await supabase.rpc('employee_punch', {
     p_token: token,
     p_emp_id: empId,
     p_data: attendanceToRow(record),
+    p_device_id: deviceId,
   })
   if (error) throw error
   return rowToAttendance(data)

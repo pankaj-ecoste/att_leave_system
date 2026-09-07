@@ -50,6 +50,17 @@ export async function adminToggleEmployeeStatus(token, id) {
   return rowToEmployee(data)
 }
 
+// Clears the punch device binding (plan.md §18) so the employee's next punch re-binds
+// fresh — for a real phone change/replacement, not a routine action.
+export async function adminResetPunchDevice(token, id) {
+  const { data, error } = await supabase.rpc('admin_reset_punch_device', {
+    p_token: token,
+    p_emp_id: id,
+  })
+  if (error) throw error
+  return rowToEmployee(data)
+}
+
 export async function adminDeleteEmployee(token, id) {
   const { error } = await supabase.rpc('admin_delete_employee', { p_token: token, p_id: id })
   if (error) throw error

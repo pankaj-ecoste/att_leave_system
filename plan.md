@@ -1468,6 +1468,50 @@ the app uses: `app_settings_public` now returns the actual configured admin emai
 (`recruitment@ecoste.in`) and birthday message with no error, where before both silently
 came back null.
 
+## 18. Punch device binding — HR-reported PIN sharing / buddy punching (2026-09-07)
+
+**Reported by:** HR — staff are sharing their 4-digit PIN with a colleague, who then
+punches attendance on the friend's behalf from the friend's own phone.
+
+**Options discussed and why device binding was picked:**
+- IP-address or Wi-Fi based locking — rejected. Mobile data IPs change per session and
+  everyone on the same office Wi-Fi shares one IP, so this can't distinguish people.
+- GPS/geofencing — already built (`sites`, `haversine_m`, plan.md §5/§7). Doesn't help
+  here: the friend doing the punching is typically physically on-site too, so the
+  existing geofence check passes either way.
+- Selfie capture at punch — discussed as a stronger companion (device binding can be
+  beaten by clearing browser storage / reinstalling; a photo gives HR evidence even
+  then) but **not** in scope for this pass — user chose device binding only for now.
+  Worth revisiting later if binding alone doesn't hold up in practice.
+
+### Decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | Binding applies to the **punch action only**, not login. Viewing attendance/leave/balances from a second device (e.g. home PC) stays unrestricted — the actual complaint is about marking attendance for someone else, not general account access, and locking login too would create help-desk load for zero extra benefit |
+| 2 | Each browser install gets a random id (`crypto.randomUUID()`) generated once and kept in `localStorage`. First successful punch after this ships **auto-binds** that id to the employee — no separate "register your phone" step, so rollout is zero-effort for the ~131 people who aren't sharing PINs |
+| 3 | Once bound, a punch from a **different** device id is rejected outright (`raise exception`, same pattern as the existing geofence rejection) — not silently allowed-and-flagged. The point is to stop the punch from being recorded under someone else's attendance, not just to log it after the fact |
+| 4 | Every blocked attempt is written to `audit_logs` (`PUNCH_DEVICE_BLOCKED`) — this is the part that actually answers HR's question "who's doing this and how often," which a pure block alone wouldn't give them |
+| 5 | Admin gets a **"Reset registered device"** action per employee (Employees tab) for real phone changes/replacements — mirrors the existing `admin_set_employment_status` pattern. Resetting nulls the binding so the next punch re-binds fresh, and is itself audit-logged (`PUNCH_DEVICE_RESET`) |
+| 6 | Known limitation, accepted for this pass: clearing site data / a private window / reinstalling wipes the stored id, so a technically determined person can force a re-bind on their next punch. This raises the bar a lot over "just tell someone the PIN" without adding photo capture; revisit with selfie evidence (option above) if it turns out not to be enough |
+
+### Files touched (planned)
+
+- `supabase/migrations/0038_punch_device_binding.sql` — `employees.punch_device_id`
+  (text, null = unbound) and `employees.punch_device_bound_at` (timestamptz) columns;
+  `employee_punch` redefined with a new `p_device_id text` parameter that binds on
+  first use and rejects a mismatch; new `admin_reset_punch_device(p_token, p_emp_id)`
+  function
+- `src/lib/deviceId.js` — new small pure-ish helper, `getDeviceId()`: reads/creates the
+  `localStorage` id
+- `src/api/attendance.js` — `employeePunch` passes `p_device_id`
+- `src/hooks/useEmployeeAttendance.js` — punch call sites pass the device id; punch
+  errors (mismatch included) surface through the existing catch/error-message path
+  used for geofence rejections today, no new error-handling shape needed
+- `src/hooks/useAdminData.js`, `src/api/admin.js` — `adminResetPunchDevice(id)`
+- `src/features/admin/Employees.jsx` — "Reset registered device" button + a small
+  bound/unbound indicator per employee row
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

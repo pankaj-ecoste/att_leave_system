@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { employeeFetchAttendance, employeePunch } from '../api/attendance'
+import { getDeviceId } from '../lib/deviceId'
 import { employeeLogLocation, employeeLogOdLocation } from '../api/location'
 import { fetchEffectiveStdHours } from '../api/auth'
 import { attnKey } from '../api/mappers'
@@ -100,7 +101,7 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
   }
 
   async function persist(record) {
-    const saved = await employeePunch(token, record.empId, record)
+    const saved = await employeePunch(token, record.empId, record, getDeviceId())
     if (saved) setAttendance(prev => ({ ...prev, [attnKey(saved.empId, saved.date)]: saved }))
     return saved
   }

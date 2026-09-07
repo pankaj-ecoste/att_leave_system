@@ -32,6 +32,9 @@ export function rowToEmployee(row) {
     dateOfBirth: row.date_of_birth || null,
     assetsReturned: !!row.assets_returned,
     assetsReturnedAt: row.assets_returned_at || null,
+    // Punch device binding (plan.md §18) — null = not bound to a device yet.
+    punchDeviceId: row.punch_device_id || null,
+    punchDeviceBoundAt: row.punch_device_bound_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
