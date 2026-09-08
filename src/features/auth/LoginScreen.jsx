@@ -28,7 +28,9 @@ export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminL
     const result = await employeeLogin(selectedEmp.id, pin)
     setBusy(false)
     if (!result.token) {
-      if (result.error === 'locked') {
+      if (result.error === 'device_denied') {
+        setError('Access Denied — this is not your registered device. Contact HR to reset your device.')
+      } else if (result.error === 'locked') {
         const until = result.lockedUntil ? new Date(result.lockedUntil).toLocaleTimeString() : 'a few minutes'
         setError(`Too many incorrect attempts. Try again after ${until}.`)
       } else if (result.error === 'network') {

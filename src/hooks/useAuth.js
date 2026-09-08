@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { fetchDirectory, fetchAppSettings, employeeLogin as apiEmployeeLogin, employeeLogout as apiEmployeeLogout, adminLogin as apiAdminLogin, adminLogout as apiAdminLogout } from '../api/auth'
 import { fetchHolidays } from '../api/admin'
 import { fetchSites } from '../api/sites'
+import { getDeviceId } from '../lib/deviceId'
 
 const SESSION_KEY = 'hrms_session'
 
@@ -88,7 +89,7 @@ export function useAuth() {
   }, [])
 
   async function employeeLogin(empId, pin) {
-    const result = await apiEmployeeLogin(empId, pin)
+    const result = await apiEmployeeLogin(empId, pin, getDeviceId())
     return result // { token, error, lockedUntil }
   }
 

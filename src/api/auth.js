@@ -44,10 +44,11 @@ export async function fetchEffectiveStdHours(empId, fallback = 9) {
 // Employee login/session
 // ---------------------------------------------------------------------------
 
-export async function employeeLogin(employeeId, pin) {
+export async function employeeLogin(employeeId, pin, deviceId) {
   const { data, error } = await supabase.rpc('employee_login', {
     p_employee_id: employeeId,
     p_pin: pin,
+    p_device_id: deviceId,
   })
   if (error) {
     console.error(error)

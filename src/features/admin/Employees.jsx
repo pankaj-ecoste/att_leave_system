@@ -95,9 +95,10 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
   }
 
   async function resetDevice(e) {
-    // plan.md §18 — the employee's registered punch device is cleared so their next
-    // punch re-binds to whatever phone they use, for a real phone change/replacement.
-    if (!window.confirm(`Reset ${e.name}'s registered punch device? Their next punch will register whichever phone they use then.`)) return
+    // plan.md §18/§19 — the employee's registered device is cleared so their next
+    // login (and punch) re-binds to whatever phone they use, for a real phone
+    // change/replacement.
+    if (!window.confirm(`Reset ${e.name}'s registered device? Their next login and punch will register whichever phone they use then.`)) return
     try {
       const updated = await resetPunchDevice(e.id)
       onAudit?.('PUNCH_DEVICE_RESET', `Reset punch device for ${updated.name}`, 'admin')

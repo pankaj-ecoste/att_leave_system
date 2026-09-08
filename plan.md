@@ -1512,6 +1512,118 @@ punches attendance on the friend's behalf from the friend's own phone.
 - `src/features/admin/Employees.jsx` — "Reset registered device" button + a small
   bound/unbound indicator per employee row
 
+## 19. Punch device binding — stale-client incident, and extending the block to login (2026-09-08)
+
+**What happened the day after §18 shipped:** an employee (Shashank Soni) reported
+being unable to punch at all, screenshot showing:
+`Could not find the function public.employee_punch(p_data, p_emp_id, p_token) in the
+schema cache`. That is the exact signature of the **old 3-argument** `employee_punch`
+that migration 0038 deleted outright. Root cause: his phone was still running the
+pre-0038 app (browser/tab left open from before the deploy), so it kept calling a
+function that no longer exists — not a device-binding bug, a consequence of dropping
+an RPC signature with no compatibility path for already-open sessions. Fix for
+right-now is operational (ask staff to fully close/reopen the app once); the general
+fix (a "new version, please reload" check for tabs left open across a deploy) is
+flagged as a follow-up, not yet built. **This matters again below** — §19 is about to
+change `employee_login`'s signature too, and login happens far more often than punch,
+so the same mistake here would lock out *everyone*, not one employee, on the next
+deploy.
+
+**Also tested and confirmed working as designed, not a bug:** opening/viewing the
+employee panel from a second device after already punching in elsewhere is currently
+allowed — that was the explicit §18 decision #1 (binding applies to the punch action
+only). Nothing was actually punched from the second device in this test; the screen
+only *displayed* the Punch Out tile.
+
+**Decision: extend the block to login itself.** HR's staff are not technical enough
+to reliably notice "punch still works from my phone, so I'm fine" — the ask is
+simpler and stricter: opening the panel at all from an unregistered device should
+show **Access Denied**, full stop. Two ways to decide which device counts as "theirs"
+were discussed:
+
+- Bind on first **login** (chosen) — the very first login after this ships locks that
+  device in for everything, login and punch both. Simpler mental model for
+  non-technical staff, matches "access denied on open" literally.
+- Bind on first **punch** — login stays open until the real punch action, lower
+  rollout risk (see below) since a friend has to actually punch to trigger the lock,
+  not just open the app. **Not chosen** — HR prioritized simplicity over this smaller
+  window of risk.
+
+### Decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | `employee_login` gets a new `p_device_id` param, checked the same way `employee_punch` already does: if `employees.punch_device_id` is null, bind it here and let login through; if set and it doesn't match, **deny the login outright** (no dashboard, no data) rather than letting them in and only blocking the punch |
+| 2 | Reuses the same `punch_device_id` / `punch_device_bound_at` columns from migration 0038 — no new columns needed. An employee who already bound a device via a punch under 0038 keeps that binding; login enforcement just starts reading the same value |
+| 3 | Denial is a returned error result (`{ error: '...' }`), same shape `employee_login` already uses for the PIN-lockout case (0022) — not a raised exception — so the login screen's existing error-display path handles it with no new UI plumbing. Message: something like "This device is not registered for your account. Ask HR to reset your device." shown plainly on the login screen (non-dismissing, not a toast that fades — plan.md's plain-language/debuggable preference) |
+| 4 | The existing "Reset registered device" admin action (§18 #5) needs no logic change — clearing `punch_device_id` already unlocks the *next* login the same way it unlocks the next punch today. Its label/help text should be updated to say "login and punch" instead of just "punch" so admins understand the wider effect |
+| 5 | Known, accepted rollout risk (sharper version of §18 #6): whoever logs in **first** after this ships becomes the bound device for that PIN. If a colleague who's already been sharing someone's PIN opens the app before the real employee does — even just once — the colleague's phone binds, and the real employee is denied even at login until admin resets it. Mitigation: message all staff to log in once from their own phone as soon as this goes live, and watch Reset Device usage closely for the first couple of days |
+| 6 | Rollout-safety lesson from the stale-client incident above: `employee_login`'s signature is changing, and login is used every single day by everyone (unlike punch, twice a day). If any employee's browser is already open when this deploys, their next login attempt will hit the same "function not found" class of error — but for login, not punch. Mitigated by shipping §20 (auto-refresh) first/together with this |
+| 7 | The "Remember me on this device" 30-day session (0034) would otherwise let anyone who already has one — including a colleague already sharing a PIN — keep getting in with no device check until it naturally expires. HR chose to force this: the migration deletes all rows from `employee_sessions` the moment it's applied, so every employee (innocent ones included) has to enter their PIN once more that day, but the new check then covers 100% of staff immediately rather than phasing in over weeks. Admin sessions are untouched (out of scope, same as 0034) |
+
+### Files touched (planned)
+
+- `supabase/migrations/0039_login_device_binding.sql` — redefine `employee_login`
+  with `p_device_id text` param, bind-if-null / deny-if-mismatched logic mirroring
+  `employee_punch`'s (0038); drop the old 2-arg signature the same way 0038 dropped
+  the old 3-arg `employee_punch`
+- `src/api/auth.js` — `employeeLogin` passes `p_device_id` (via `getDeviceId()`,
+  already built in `src/lib/deviceId.js`)
+- `src/hooks/useAuth.js`, `src/features/auth/LoginScreen.jsx` — pass device id at
+  login; render the "Access Denied" message plainly, distinct from a wrong-PIN error
+- `src/features/admin/Employees.jsx` — update Reset Device button copy to mention
+  login, not just punch
+
+## 20. Auto-refresh on new deploy (2026-09-08)
+
+**Why:** directly answers §19 decision #6 — most staff run this as a home-screen icon
+("downloaded it as an app"), which tends to stay open/suspended in the background for
+days rather than getting freshly loaded each time it's tapped. That's exactly what
+caused the Shashank incident (§19) for punch; the same thing would break login the
+day §19 ships, and login is used far more often. Fix it once, generally, before
+changing login's signature.
+
+**How it will work:** no service worker (none exists today, keep it that way — less
+to debug). Instead:
+- The build writes a tiny `version.json` (just a build timestamp) into the deployed
+  static files as an ordinary, un-hashed file — unlike the JS bundle, it's cheap to
+  re-fetch and never itself gets cached meaningfully.
+- The running app remembers the build timestamp it was loaded with, and re-fetches
+  `version.json` (cache-busted, `cache: 'no-store'`) at two moments: whenever the tab
+  becomes visible again (covers reopening the home-screen icon after it was
+  backgrounded — the case that actually matters for this staff) and every few minutes
+  while the app is open.
+- If the fetched timestamp differs from the one it loaded with, **auto-reload** —
+  no dialog, no "click to update" button, matching decision #1 below. Staff aren't
+  technical enough to act on a prompt reliably (same reasoning as §19's login
+  decision), so this should just happen.
+- Skips the reload if a punch is actually in flight (reuses the existing
+  `isPunching`/`punchingRef` guard in `useEmployeeAttendance.js`) so a background
+  version check can never cut off a GPS capture or an in-progress punch save; it
+  checks again next interval instead.
+
+### Decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | Fully automatic — reload happens without asking, for the reason above. A brief, plain "Updating..." message shows for a second first so a staff member mid-tap isn't confused by the screen suddenly flashing, then it reloads |
+| 2 | Version source is a plain timestamp file written at build time, not the JS bundle's own hash — keeps the check itself tiny and independent of whether the JS changed shape |
+| 3 | Checked on tab-visible (the realistic "reopened the icon" moment for this staff) plus a periodic interval as a backup for a tab that's simply left open and never backgrounded |
+| 4 | Never interrupts an in-flight punch — checked against the same in-flight guard already used to ignore double-taps |
+| 5 | Ship this **before or together with** §19 (login device binding), not after — the whole point is to stop that change from repeating the stale-client incident |
+
+### Files touched (planned)
+
+- `scripts/write-version.mjs` — new tiny script, writes `public/version.json` with
+  the current build timestamp; wired in as a `prebuild` step (`npm run build` runs it
+  first)
+- `src/lib/versionCheck.js` — new module: reads the build timestamp baked in via
+  Vite's `define` at build time, polls `version.json`, triggers reload on mismatch
+  (skipping while a punch is in flight)
+- `src/App.jsx` (or `main.jsx`) — wires up the visibility-change listener + interval
+  once at app startup
+- `vite.config.js` — `define` to bake the build timestamp into the client bundle
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

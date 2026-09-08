@@ -14,6 +14,7 @@ import { useTeam } from './hooks/useTeam'
 import { useAdminAttendance } from './hooks/useAdminAttendance'
 import { useAdminData } from './hooks/useAdminData'
 import { useLeaveBalanceImport } from './hooks/useLeaveBalanceImport'
+import { useAutoRefresh } from './hooks/useAutoRefresh'
 
 // Shell only: routing between login / employee / admin, and wiring each role's hooks
 // into its feature tree. No business logic lives here — see lib/, api/ and hooks/.
@@ -38,6 +39,7 @@ export default function App() {
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
   const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail, auth.birthdayMessage, auth.setBirthdayMessage)
   const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
+  const updatingToLatest = useAutoRefresh(empAttendance.isPunching)
 
   // Resolve a remembered session (localStorage "remember me") once the directory has
   // loaded — replicates the old app's auto-login without racing the initial fetch.
@@ -52,6 +54,9 @@ export default function App() {
   }, [auth.restoredSession])
 
   if (auth.loading) return <Spinner />
+  // A newer version has been deployed since this tab was opened (plan.md §20) —
+  // reload is already scheduled, this just explains the brief flash to the user.
+  if (updatingToLatest) return <Spinner label="Updating..." sub="Loading the latest version" />
 
   if (showAdminLogin && auth.view !== 'admin') {
     return <AdminLogin adminLogin={auth.adminLogin} onBack={() => setShowAdminLogin(false)} />
