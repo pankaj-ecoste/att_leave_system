@@ -42,6 +42,12 @@ export function TeamPanel({
     } catch (err) { setErrMsg(err.message) }
   }
 
+  // regularization_requests has no emp_name column (unlike leave_applications, which
+  // stores it directly) — fall back to the team roster we already have in memory,
+  // same pattern LeaveApprovals.jsx (admin) uses for the same gap.
+  const teamById = Object.fromEntries(myTeam.map(e => [e.id, e]))
+  const nameFor = row => row.empName || teamById[row.empId]?.name || 'Unknown'
+
   const pendingLeaves = teamLeaves.filter(l => l.status === 'Pending')
   const pendingRegs = teamRegs.filter(r => r.status === 'Pending')
   // A manager's "Approved" is now fully final (plan.md §12 V3 decision 4 — manager and
@@ -116,7 +122,7 @@ export function TeamPanel({
               <div key={r.id} className="bg-white/5 border border-white/10 rounded-xl p-3 mb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-white font-medium text-sm">{r.empName}</p>
+                    <p className="text-white font-medium text-sm">{nameFor(r)}</p>
                     <p className="text-white/50 text-xs">{r.date} · <span className="font-mono">{r.requestedIn || '--:--'} — {r.requestedOut || '--:--'}</span></p>
                     <p className="text-white/30 text-xs mt-1 italic">{r.reason}</p>
                   </div>
@@ -133,7 +139,7 @@ export function TeamPanel({
                 {actioned.map((item, i) => (
                   <div key={i} className="flex items-center justify-between py-2 border-b border-white/5">
                     <div>
-                      <p className="text-white/50 text-xs font-medium">{item.empName} · {item.leaveType || `Correction ${item.date}`}</p>
+                      <p className="text-white/50 text-xs font-medium">{nameFor(item)} · {item.leaveType || `Correction ${item.date}`}</p>
                       <p className="text-white/20 text-xs">{item.date}</p>
                     </div>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${item.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>{item.status}</span>

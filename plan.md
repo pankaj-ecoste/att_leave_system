@@ -1624,6 +1624,40 @@ to debug). Instead:
   once at app startup
 - `vite.config.js` — `define` to bake the build timestamp into the client bundle
 
+## 21. Manager panel — Correction Requests missing employee name (HR-reported 2026-09-09)
+
+**Reported by team:** a manager with 19 direct reports sees Leave Requests with the
+employee's name, but Correction Requests (punch regularization requests) below it show
+only date/time and reason — no name — so there's no way to tell which team member the
+request belongs to. Screenshot showed "Mansi Verma" on a leave request card, but the
+two correction requests underneath it (dated 2026-09-07 and 2026-09-03) were blank.
+
+**Root cause:** `regularization_requests` never stores the employee's name — only
+`emp_id`. That's different from `leave_applications`, which stores `emp_name` directly
+on the row at apply time (why Leave Requests display fine). The manager's SQL function
+`manager_get_team_regularizations` (migration 0003) just does
+`select r.* from regularization_requests r ...`, so `emp_name` is never in the result,
+and `TeamPanel.jsx` renders `{r.empName}` as blank.
+
+The Admin panel has the exact same gap in `admin_get_regularizations`, but it doesn't
+show up there — `LeaveApprovals.jsx` already falls back to a client-side lookup against
+its full employee list (`r.empName || emp.name`, line ~56). `TeamPanel.jsx` never got
+that same fallback, so the manager view is the only place the bug is visible.
+
+### Decision locked in
+
+Frontend-only fix, no migration needed: mirror the admin panel's existing fallback
+pattern. The manager already has `myTeam` (his direct reports, each with `.name` and
+`.empNum`) loaded in memory — look up the employee by `r.empId` there when `r.empName`
+is missing.
+
+### Files touched (planned)
+
+- `src/features/manager/TeamPanel.jsx` — build a lookup from `myTeam` by `id`; apply
+  `r.empName || lookup[r.empId]?.name` in both the pending Correction Requests list and
+  the Previously Actioned list (the same array also holds actioned leave rows, which
+  already have `empName` — only the regularization branch needs the fallback)
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
