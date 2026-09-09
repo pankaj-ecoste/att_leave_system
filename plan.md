@@ -1658,6 +1658,43 @@ is missing.
   the Previously Actioned list (the same array also holds actioned leave rows, which
   already have `empName` — only the regularization branch needs the fallback)
 
+## 22. Casual Leave (full-day and half-day) must allow same-day application (HR-reported 2026-09-09)
+
+**Reported by team:** Casual Leave — including first-half/second-half half-day — can
+only be applied one day prior, never for today. HR wants same-day application allowed,
+same as it already works for Partial Leave (§12/migration 0031).
+
+**Root cause:** `employee_apply_leave` (currently defined in migration 0031) has a
+generic rule: any leave type not in the exempt list
+`{Sick Leave, Bereavement Leave, Work From Home, On Duty, LOP, Earned Leave,
+Partial Leave - 1 Hour, Partial Leave - 2 Hours}` must have `date >= current_date + 1`,
+else it's rejected with "% must be applied at least a day in advance". Casual Leave was
+never added to that exempt list when Partial Leave was (0031) — so it's the only leave
+type actually affected today. Half-day is only available for Sick/Casual/Earned Leave
+(a separate check), but Sick Leave is already exempt outright and Earned Leave has its
+own stricter 7-day-advance rule that runs first — so both full-day and half-day Casual
+Leave are the only cases actually blocked. The frontend (`LeaveApply.jsx`) never stops
+you from picking today's date for Casual Leave — the rejection only happens
+server-side, so this reads as a bug, not a deliberate limit.
+
+### Decision locked in
+
+Mirror the exact same treatment Partial Leave got in 0031: add `'Casual Leave'` to the
+exemption list, allow `date >= current_date` (today or any future date), reject only
+genuinely past dates ("Casual Leave cannot be applied for a past date"). No schema
+change, no frontend change needed (the date picker already allows today).
+
+### Files touched (planned)
+
+- `supabase/migrations/0040_casual_leave_same_day.sql` — new migration, redefines
+  `employee_apply_leave`: adds `'Casual Leave'` to the same-day-allowed branch
+  alongside Partial Leave, keeping every other rule (probation cap, half-day
+  eligibility, 18-month service check, balance check, Plant restriction, duplicate
+  check) exactly as-is
+- `scripts/apply-0040-casual-leave-same-day.mjs` — one-off apply script (repo's
+  established pattern since apply-migrations.mjs full-replay is broken at migration
+  0010 on prod — plan.md §13)
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
