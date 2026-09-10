@@ -1695,6 +1695,47 @@ change, no frontend change needed (the date picker already allows today).
   established pattern since apply-migrations.mjs full-replay is broken at migration
   0010 on prod — plan.md §13)
 
+## 23. Partial Leave (1hr/2hr) must not be capped by the Probation/Notice-Period "1 leave" rule (HR-reported 2026-09-10)
+
+**Reported by team:** An employee on Probation/Notice Period tried to apply for
+Partial Leave - 2 Hours and got "Only 1 leave is allowed during your Probation — apply
+as LOP instead", even though she still had quota left on the Partial Leave Tracker.
+Policy: the 1hr/2hr short leave types are available to **all** staff, Confirmed or
+Probation/Notice Period alike — capped only by their own monthly limit (2×1hr, 1×2hr
+per month, for everyone, unchanged by this fix), never by the yearly "1 leave" cap.
+
+**Root cause:** `employee_apply_leave` has always (since migration 0016) capped
+Probation/Notice-Period employees to 1 leave per financial year across every leave
+type except `LOP`, `Work From Home`, `On Duty` — both in the trigger condition and in
+the count query. Partial Leave - 1 Hour / 2 Hours was never added to that exemption
+list (0031 and 0040 exempted it from the *same-day* and *advance-notice* rules, not
+from this probation cap), so a Probation/Notice-Period employee who had already used
+their 1 confirmed-type leave this year gets blocked from partial leave too — a gap
+that's existed since the rule was introduced, only now surfaced because this employee
+hit it.
+
+### Decision locked in
+
+Add `'Partial Leave - 1 Hour', 'Partial Leave - 2 Hours'` to both places in the
+probation-cap block — the `v_leave_type not in (...)` guard and the
+`leave_type not in (...)` count query — same treatment as `LOP`/`Work From
+Home`/`On Duty`. Partial leave applications will (a) never themselves trigger the
+cap, and (b) never count against the cap for other leave types either. The existing
+monthly cap (2×1hr, 1×2hr, client-side in `useEmployeeLeave.js`/`LeaveApply.jsx`) is
+untouched and still applies to everyone. Every other rule in the function (same-day
+rules, half-day eligibility, 18-month service check, balance check, Plant
+restriction, duplicate-application check) stays exactly as-is.
+
+### Files touched (planned)
+
+- `supabase/migrations/0041_partial_leave_probation_exempt.sql` — new migration,
+  redefines `employee_apply_leave`: adds the two Partial Leave types to the
+  probation-cap exemption list (both occurrences)
+- `scripts/apply-0041-partial-leave-probation-exempt.mjs` — one-off apply script,
+  same verify-before/after pattern as 0038/0039/0040 (repo's established pattern
+  since apply-migrations.mjs full-replay is broken at migration 0010 on prod —
+  plan.md §13)
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
