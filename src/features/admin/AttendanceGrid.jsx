@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Select } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { COMPANIES, MONTHS, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag, explainShortfall, effectiveStdHours } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, calcStatus, todayIST, hasIncompleteHoursFlag, explainShortfall, effectiveStdHours } from '../../lib/datetime'
 import { fmtHrs, fmt2 } from '../../lib/format'
 
 function monthRange(month, year) {
@@ -50,7 +50,10 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
     const map = {}
     rows.forEach(r => {
       if (!map[r.empId]) map[r.empId] = { empId: r.empId, present: 0, halfDay: 0, leave: 0, absent: 0, wfh: 0, onDuty: 0, hrs: 0, ot: 0 }
-      const s = r.status || 'Absent'
+      const rowStdHours = effectiveStdHours(employees.find(e => e.id === r.empId), stdHours)
+      // Recomputed live rather than trusting the stored r.status — see
+      // AttendanceHistory.jsx for why (plan.md §15.2).
+      const s = calcStatus(r, rowStdHours, r.dayType)
       if (s === 'Present') map[r.empId].present++
       if (s === 'Half Day') map[r.empId].halfDay++
       if (s === 'Leave') map[r.empId].leave++
@@ -59,7 +62,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
       if (r.onDuty) map[r.empId].onDuty++
       const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
       map[r.empId].hrs += net
-      map[r.empId].ot += calcOvertimeHours(r, effectiveStdHours(employees.find(e => e.id === r.empId), stdHours))
+      map[r.empId].ot += calcOvertimeHours(r, rowStdHours)
     })
     return Object.values(map)
   })()
@@ -193,7 +196,7 @@ export function AttendanceGrid({ employees, attendanceHook, stdHours, updateStdH
                     <td className="py-2 pr-3 font-medium text-white/80 whitespace-nowrap">{fmtHrs(net)}</td>
                     <td className="py-2 pr-3 text-indigo-300 whitespace-nowrap">{ot > 0 ? fmtHrs(ot) : '--'}</td>
                     <td className="py-2 pr-3 whitespace-nowrap">
-                      <Badge status={r.status || 'Absent'} />
+                      <Badge status={calcStatus(r, rowStdHours, r.dayType)} />
                       {hasIncompleteHoursFlag(r, rowStdHours) && (
                         <span className="block mt-0.5 text-[10px] text-amber-400" title="Late punch-in — stdHours wasn't reached within the 9:00-19:00 work window">⚠ incomplete hrs</span>
                       )}

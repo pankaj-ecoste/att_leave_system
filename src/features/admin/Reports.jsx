@@ -9,7 +9,7 @@ import { adminFetchLeaves, adminFetchLeaveAccruals, adminFetchCompOffPayouts } f
 import { adminGetAllLocationLogs } from '../../api/location'
 import { attnKey } from '../../api/mappers'
 import { MONTHS, findLeaveType, ACCEPTABLE_GPS_ACCURACY_M } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST, hasIncompleteHoursFlag, effectiveStdHours } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, calcStatus, todayIST, hasIncompleteHoursFlag, effectiveStdHours } from '../../lib/datetime'
 import { fmt2 } from '../../lib/format'
 
 // Exports are the one place that must NOT be capped by whatever's on screen (plan.md
@@ -40,14 +40,17 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
     const map = await adminFetchAttendance(token, { from, to, limit: 100000 })
     const rows = Object.values(map).map(v => {
       const emp = employees.find(e => e.id === v.empId) || {}
+      const rowStdHours = effectiveStdHours(emp, stdHours)
       const raw = calcRawHrs(v.inTime, v.outTime)
       const deduct = v.leaveType ? findLeaveType(v.leaveType)?.deduct || 0 : 0
       const net = Math.max(0, raw - deduct)
       return {
         Date: v.date, 'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '',
         Designation: emp.jobTitle || '', Company: emp.company || '', 'Login Time': v.inTime || '', 'Logout Time': v.outTime || '',
-        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: calcOvertimeHours(v, effectiveStdHours(emp, stdHours)).toFixed(2),
-        Status: v.status || '', 'Leave Type': v.leaveType || '', 'Leave Reason': v.leaveReason || '',
+        'Raw Hours': raw.toFixed(2), 'Total Hours': net.toFixed(2), Overtime: calcOvertimeHours(v, rowStdHours).toFixed(2),
+        // Recomputed live, not the stored v.status — see AttendanceHistory.jsx for why
+        // (plan.md §15.2). Exports feed HR/payroll, so this matters more here than anywhere.
+        Status: calcStatus(v, rowStdHours, v.dayType), 'Leave Type': v.leaveType || '', 'Leave Reason': v.leaveReason || '',
         WFH: v.wfh ? 'Yes' : 'No', 'On Duty': v.onDuty ? 'Yes' : 'No', Location: v.inLocation || '', Remarks: '',
       }
     })
@@ -122,13 +125,15 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
           row[`${label} Out`] = rec?.outTime || ''
           if (!rec) continue
 
-          const status = rec.status || 'Absent'
+          // Recomputed live, not the stored rec.status — see AttendanceHistory.jsx.
+          const rowStdHours = effectiveStdHours(emp, stdHours)
+          const status = calcStatus(rec, rowStdHours, rec.dayType)
           if (status === 'Present') present++
           else if (status === 'Half Day') halfDay++
           else if (status === 'Leave' || status === 'Half Day Leave') leave++
           else if (status === 'Absent') absent++
           totalHours += Math.max(0, calcRawHrs(rec.inTime, rec.outTime))
-          totalOt += calcOvertimeHours(rec, effectiveStdHours(emp, stdHours))
+          totalOt += calcOvertimeHours(rec, rowStdHours)
         }
         row.Present = present
         row['Half Day'] = halfDay
@@ -216,7 +221,11 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
 
       // --- Summary ---
       const counts = { Present: 0, Absent: 0, 'Half Day': 0, Leave: 0, 'Half Day Leave': 0, WFH: 0, 'On Duty': 0, 'Week Off': 0, Holiday: 0 }
-      for (const r of attRows) counts[r.status] = (counts[r.status] || 0) + 1
+      // Recomputed live, not the stored r.status — see AttendanceHistory.jsx.
+      for (const r of attRows) {
+        const st = calcStatus(r, effectiveStdHours(empOf(r.empId), stdHours), r.dayType)
+        counts[st] = (counts[st] || 0) + 1
+      }
       const summaryRows = [
         { Metric: 'Report Date', Value: date },
         { Metric: 'Total Employees', Value: employees.filter(e => e.active).length },
@@ -230,15 +239,17 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
       let totalOt = 0
       const attendanceRows = attRows.map(v => {
         const emp = empOf(v.empId)
+        const rowStdHours = effectiveStdHours(emp, stdHours)
         const raw = calcRawHrs(v.inTime, v.outTime)
         const deduct = v.leaveType ? findLeaveType(v.leaveType)?.deduct || 0 : 0
         const net = Math.max(0, raw - deduct)
-        const ot = calcOvertimeHours(v, effectiveStdHours(emp, stdHours))
+        const ot = calcOvertimeHours(v, rowStdHours)
         totalOt += ot
         return {
           'Employee ID': emp.empNum || '', 'Employee Name': emp.name || '', Department: emp.dept || '', Company: emp.company || '',
           'In Time': v.inTime || '', 'Out Time': v.outTime || '', 'Raw Hours': raw.toFixed(2), 'Net Hours': net.toFixed(2), Overtime: ot.toFixed(2),
-          Status: v.status || '', 'Day Part': v.dayPart !== 'full' ? v.dayPart : '', 'Leave Type': v.leaveType || '',
+          // Recomputed live, not the stored v.status — see AttendanceHistory.jsx.
+          Status: calcStatus(v, rowStdHours, v.dayType), 'Day Part': v.dayPart !== 'full' ? v.dayPart : '', 'Leave Type': v.leaveType || '',
         }
       })
       if (totalOt > 0) summaryRows.push({ Metric: 'Total Overtime Hours', Value: totalOt.toFixed(2) })

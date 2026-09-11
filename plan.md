@@ -1736,6 +1736,113 @@ restriction, duplicate-application check) stays exactly as-is.
   since apply-migrations.mjs full-replay is broken at migration 0010 on prod —
   plan.md §13)
 
+## 24. Attendance status badges showing stale/wrong values — root cause fix, not another one-off backfill (HR-reported 2026-09-11)
+
+**Reported by team:** Same complaint reported repeatedly, on different employees/dates
+each time — the user's own words were "there is a repetitive issue... I have explained
+you again and again." Screenshot: an employee's Attendance History for 2026-09-09 shows
+"Half Day" for 09:29-18:30 (9h01m worked), even though stdHours is 9 — comfortably
+Present under the current grace-period rule.
+
+**Root cause:** `attendance.status` is computed **once**, at punch time (or an admin's
+manual edit), and stored. Every screen that shows a per-day status badge — except
+`useAdminAttendance.editCell`, which always recomputes on save — trusted that stored
+value directly (`r.status || 'Absent'`) or only recomputed when it was empty
+(`rec.status || calcStatus(...)`). So every time `calcStatus`'s logic was corrected —
+the 15-minute grace period, Partial Leave hour-credit, the late-punch-in work-window
+forgiveness, a stdHours change — every row punched *before* that fix kept showing
+whatever status was correct under the *old* logic, forever. This was a known, accepted
+trade-off (plan.md §15.2) with a precedent one-off fix
+(`scripts/backfill-status-after-std-hours-change.mjs`, 2026-09-01) — but a one-off
+script only patches the rows affected by *that* change; the next `calcStatus` fix
+creates a fresh batch of stale rows, which is exactly why the same complaint kept
+recurring on different dates. `AttendanceGrid.jsx`'s Daily Records row already made this
+visible as an inconsistency: it called `explainShortfall(r, rowStdHours)` live (correct,
+current logic) right next to a `Badge` showing the frozen `r.status` (stale) — the two
+could disagree on the same row.
+
+### Decision locked in
+
+Stop trusting the stored `status` column for display, everywhere a per-day badge or a
+status-based count is shown. Every such site now calls `calcStatus(rec, effectiveStdHours(emp, stdHours), rec.dayType)`
+live, using the record's own `inTime`/`outTime`/`leaveType`/`dayPart` (facts that don't
+need freezing) rather than a cached judgment. `calcStatus` is a pure function of those
+fields plus the *current* stdHours/dayType, so this always agrees with today's rules —
+no more one-off backfill script needed for a future `calcStatus` change, for anything
+the UI displays. The stored `status` column is still written on punch/edit (needed by
+the `refresh_attendance_monthly_summary` trigger's `count(*) filter (where status = ...)`
+aggregation, 0002_hrms_schema.sql) and is still shown as-is in `Database.jsx` (the
+admin's raw-table viewer — that page's whole purpose is showing the actual stored row,
+not a recomputed "what's true" view, so it's deliberately left alone).
+
+A one-time cleanup script also recomputes and corrects the stored `status` column itself
+(all-time, no date cutoff — unlike the narrower 2026-09-01 script, this isn't tied to
+one settings change) so the monthly-summary rollup and the raw-table viewer show correct
+values too, not just new reads going forward.
+
+### Files touched
+
+- `src/features/employee/AttendanceHistory.jsx` — per-day badge always live (was the
+  exact row in the reported screenshot)
+- `src/features/employee/MonthlySummary.jsx` — calendar cell color always live
+- `src/features/employee/EmployeeDashboard.jsx` — "Today's Status" badge always live;
+  passes `globalStdHours` down to `TeamPanel` for its own per-member recompute
+- `src/features/admin/AttendanceGrid.jsx` — Daily Records badge + All Employees Summary
+  counts always live
+- `src/features/admin/Dashboard.jsx` — today's tiles + table badges always live
+  (`todayRecordFor` now merges in a freshly computed status)
+- `src/features/manager/TeamPanel.jsx` — attendance-tab Present/Absent/Leave/Half Day
+  counts always live
+- `src/features/admin/Reports.jsx` — every export (Single Day, Date Range, Quick
+  Monthly, Monthly Register, Daily Report's Summary/Attendance sheets) always live —
+  this one matters most since exports feed HR/payroll
+- `scripts/backfill-attendance-status-live.mjs` — new one-off cleanup script,
+  same dry-run-by-default / `--apply` pattern as
+  `backfill-status-after-std-hours-change.mjs`, but all-time and unconditional (every
+  completed punch, not just rows after one settings change). **Run 2026-09-11: 80 rows
+  corrected.** Verified safe before running by cross-checking the actual stored data
+  behind every category of change (38 were `leave_type = Partial Leave - 1/2 Hour` rows
+  wrongly frozen at "Leave" — see the two SQL bugs below; ~10 were regularization-approved
+  days stuck at "Punched In"; the rest were pre-grace-period-rule punches with hours that
+  clearly meet stdHours). Confirmed no genuine full-day Leave (Casual/Earned/Sick/etc.)
+  was reclassified.
+
+### Two more root causes, found while verifying the backfill diff (same date)
+
+Tracing *why* rows were wrong (not just recomputing them) surfaced two live bugs in the
+functions that write `attendance.status` server-side — both confirmed against the actual
+deployed function bodies via `pg_get_functiondef`, not just the migration files (plan.md
+§17/§13 precedent: prod has silently drifted from migration files before).
+
+1. **`manager_decide_regularization` / `admin_decide_regularization`** (approving a
+   correction request): hardcoded `status = 'Present'` whenever an in-time was entered,
+   with no check against actual hours; on `ON CONFLICT` (a row already existed for that
+   date) never updated `status` at all — explains the "Punched In" rows stuck that way
+   even after an out-time was added by approving a regularization; and always
+   overwrote **both** `in_time` and `out_time` with the requested values even when the
+   regularization form only supplied one of the two (`AttendanceHistory.jsx`: "At least
+   one time is required") — a latent data-loss bug (could silently null out an
+   already-correct punch time on the other side) found while designing the fix, not
+   something previously reported.
+2. **`apply_leave_approval_effects`** (approving a leave application): forced
+   `status = 'Leave'` for anything except WFH/On Duty/half-day — including Partial
+   Leave - 1/2 Hours, which `LEAVE_TYPES` (constants.js) marks `present: true` because
+   the employee still works most of the day. This is what produced the 38 mis-stored
+   rows above, and would keep happening on every future Partial Leave approval.
+
+**Fix (migration 0042):** all three functions now pull the employee's effective
+stdHours (`std_hours_override` or the org default), merge with whatever's already on
+the attendance row for that date (instead of blindly overwriting), and compute status
+with the same grace-period + half-day-threshold rule `calcStatus` uses — Partial Leave
+additionally credits its 1-2 excused hours against the shortfall, mirroring
+calcStatus's `deduct` handling exactly.
+
+- `supabase/migrations/0042_regularization_and_partial_leave_status_fix.sql` — new
+  migration, redefines all three functions
+- `scripts/apply-0042-regularization-and-partial-leave-status-fix.mjs` — one-off apply
+  script, same verify-before/after pattern as 0038-0041. **Applied 2026-09-11**,
+  verified live via `pg_get_functiondef` before and after.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

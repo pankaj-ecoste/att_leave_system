@@ -48,7 +48,8 @@ export function MonthlySummary({ currentUser, attendance, stdHours, holidays }) 
           const isFuture = dateStr > today
           const isWeekend = new Date(y, m - 1, d).getDay() === 0 || new Date(y, m - 1, d).getDay() === 6
           const holiday = holidays.find(h => h.date === dateStr)
-          const status = rec.status || calcStatus(rec, stdHours, rec.dayType)
+          // Always live, never the stored rec.status — see AttendanceHistory.jsx for why.
+          const status = calcStatus(rec, stdHours, rec.dayType)
           const style = dayCellStyle(status, isWeekend && !rec.inTime, holiday, isFuture)
           return (
             <div key={d} className={`${style.bg} border ${style.border} rounded-lg p-1.5 text-center relative ${isToday ? 'ring-1 ring-indigo-400' : ''}`}>

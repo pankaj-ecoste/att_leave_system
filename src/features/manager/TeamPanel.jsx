@@ -3,7 +3,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
-import { calcRawHrs, todayIST } from '../../lib/datetime'
+import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { getLeaveDocumentUrl } from '../../api/documents'
 
@@ -11,7 +11,7 @@ import { getLeaveDocumentUrl } from '../../api/documents'
 // employee dashboard (one person can be both), not a separate login.
 export function TeamPanel({
   token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
-  teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
+  teamLocationLogs, teamLocationLoading, loadTeamLocationLogs, globalStdHours,
 }) {
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
@@ -167,10 +167,14 @@ export function TeamPanel({
                 </tr></thead>
                 <tbody>{myTeam.map(emp => {
                   const recs = Object.entries(teamAttn).filter(([k]) => k.startsWith(`${emp.id}_`)).map(([, v]) => v)
-                  const present = recs.filter(r => r.status === 'Present').length
-                  const absent = recs.filter(r => r.status === 'Absent').length
-                  const leave = recs.filter(r => ['Leave', 'WFH', 'On Duty'].includes(r.status)).length
-                  const half = recs.filter(r => r.status === 'Half Day').length
+                  // Recomputed live, not the stored r.status — see AttendanceHistory.jsx
+                  // (plan.md §15.2).
+                  const empStdHours = effectiveStdHours(emp, globalStdHours)
+                  const statuses = recs.map(r => calcStatus(r, empStdHours, r.dayType))
+                  const present = statuses.filter(s => s === 'Present').length
+                  const absent = statuses.filter(s => s === 'Absent').length
+                  const leave = statuses.filter(s => ['Leave', 'WFH', 'On Duty'].includes(s)).length
+                  const half = statuses.filter(s => s === 'Half Day').length
                   const hrs = recs.reduce((s, r) => s + calcRawHrs(r.inTime, r.outTime), 0)
                   return (
                     <tr key={emp.id} className="border-b border-white/5 hover:bg-white/5">

@@ -9,7 +9,7 @@ import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
-import { todayIST, explainShortfall, effectiveStdHours } from '../../lib/datetime'
+import { todayIST, explainShortfall, effectiveStdHours, calcStatus } from '../../lib/datetime'
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
@@ -34,7 +34,8 @@ export function EmployeeDashboard({
     { id: 'assets', label: 'My Assets' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
   ]
-  const status = todayRecord.status || 'Absent'
+  // Recomputed live, not the stored todayRecord.status — see AttendanceHistory.jsx.
+  const status = calcStatus(todayRecord, stdHours, todayRecord.dayType)
   const shortfallNote = explainShortfall(todayRecord, stdHours)
 
   return (
@@ -104,7 +105,7 @@ export function EmployeeDashboard({
         {empTab === 'policy' && <LeavePolicy />}
         {empTab === 'assets' && <MyAssets assets={myAssets} />}
         {empTab === 'team' && (
-          <TeamPanel {...team} />
+          <TeamPanel {...team} globalStdHours={globalStdHours} />
         )}
       </div>
     </div>

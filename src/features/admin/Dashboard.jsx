@@ -5,7 +5,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
-import { calcRawHrs, calcOvertimeHours, todayIST, effectiveStdHours } from '../../lib/datetime'
+import { calcRawHrs, calcOvertimeHours, calcStatus, todayIST, effectiveStdHours } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { adminGetAllLocationLogs } from '../../api/location'
 
@@ -19,9 +19,10 @@ const TILE_FILTERS = {
   // below it. The row badge still shows the specific status — only this tile's count
   // merges them. See plan.md §12 V3 decisions 2 and 3.
   present: r => r.status === 'Present' || r.status === 'Punched In' || r.status === 'On Duty',
-  // Mirrors the per-row table's own fallback (`r.status || 'Absent'`) — an employee with
-  // no attendance record at all today is still Absent, not invisible to this tile.
-  absent: r => (r.status || 'Absent') === 'Absent',
+  // r.status is always populated by todayRecordFor's live calcStatus call below — an
+  // employee with no attendance record at all today still resolves to Absent there, not
+  // invisible to this tile.
+  absent: r => r.status === 'Absent',
   leave: r => r.status === 'Leave',
   halfDay: r => r.status === 'Half Day',
   // Two different ways to be "WFH today": an approved WFH leave application for
@@ -75,7 +76,14 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
   // though the table further down already correctly defaulted them to Absent. Same
   // `attendance[...] || {}` lookup the table uses, so the tiles and the table can never
   // disagree again.
-  const todayRecordFor = e => attendance[`${e.id}_${today}`] || {}
+  // Status is always recomputed live from the record's own inTime/outTime/leaveType
+  // rather than trusted from the stored `status` column — that column is frozen at
+  // punch time, so any later fix to calcStatus (grace period, partial-leave credit, ...)
+  // would otherwise never reach an already-punched day (plan.md §15.2).
+  const todayRecordFor = e => {
+    const r = attendance[`${e.id}_${today}`] || {}
+    return { ...r, status: calcStatus(r, effectiveStdHours(e, stdHours), r.dayType) }
+  }
   const pendingLeaves = leaves.filter(l => l.status === 'Pending')
   const stats = {
     active: activeEmps.length,
@@ -183,7 +191,7 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
                       {['Employee', 'Emp Code', 'Manager', 'In', 'Out', 'Note (typed)', 'Location (GPS)', 'GPS Trail (2-hrly)', 'Status'].map(h => <th key={h} className="text-left py-2.5 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}
                     </tr></thead>
                     <tbody>{shownEmps.map(e => {
-                      const r = attendance[`${e.id}_${today}`] || {}
+                      const r = todayRecordFor(e)
                       const trail = gpsTrails[e.id] || []
                       return (
                         <tr key={e.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
@@ -203,7 +211,7 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
                               <span className="text-white/30">--</span>
                             )}
                           </td>
-                          <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
+                          <td className="py-2.5"><Badge status={r.status} /></td>
                         </tr>
                       )
                     })}</tbody>
@@ -214,7 +222,7 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
                       {['Employee', 'Emp Code', 'Dept', 'Shift', 'Manager', 'In', 'Out', 'Net Hrs', 'OT', 'Status'].map(h => <th key={h} className="text-left py-2.5 pr-4 text-white/30 font-medium uppercase tracking-wide">{h}</th>)}
                     </tr></thead>
                     <tbody>{shownEmps.map(e => {
-                      const r = attendance[`${e.id}_${today}`] || {}
+                      const r = todayRecordFor(e)
                       const net = Math.max(0, calcRawHrs(r.inTime, r.outTime))
                       const ot = calcOvertimeHours(r, effectiveStdHours(e, stdHours))
                       const sh = getShiftInfo(r, e)
@@ -229,7 +237,7 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
                           <td className="py-2.5 pr-4 font-mono text-red-400">{r.outTime || '--'}</td>
                           <td className="py-2.5 pr-4">{fmtHrs(net)}</td>
                           <td className="py-2.5 pr-4 text-indigo-300">{ot > 0 ? fmtHrs(ot) : '--'}</td>
-                          <td className="py-2.5"><Badge status={r.status || 'Absent'} /></td>
+                          <td className="py-2.5"><Badge status={r.status} /></td>
                         </tr>
                       )
                     })}</tbody>

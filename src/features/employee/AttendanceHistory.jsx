@@ -75,7 +75,13 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
             {myRecs.map(({ date, rec }) => {
               const isPlaceholder = rec.status === 'Holiday' || rec.status === 'Week Off'
               const raw = isPlaceholder ? 0 : calcRawHrs(rec.inTime, rec.outTime)
-              const st = isPlaceholder ? rec.status : (rec.status || calcStatus(rec, stdHours, rec.dayType))
+              // Always recomputed live, never trusting the stored `rec.status` — that
+              // column is frozen at punch time, so any later fix to calcStatus (grace
+              // period, partial-leave credit, work-window forgiveness, ...) would
+              // otherwise never reach a day that was already punched (plan.md §15.2 —
+              // this used to require a fresh one-off backfill script every single time
+              // that logic changed, e.g. scripts/backfill-status-after-std-hours-change.mjs).
+              const st = isPlaceholder ? rec.status : calcStatus(rec, stdHours, rec.dayType)
               const shortfallNote = isPlaceholder ? null : explainShortfall(rec, stdHours)
               return (
                 <div key={date} className="flex items-center gap-3 p-3 rounded-xl border bg-white/5 border-white/10">
