@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildLeaveNotifyMailto } from './notify'
+import { buildLeaveNotifyMailto, buildConfirmationGmailLink } from './notify'
 
 const base = {
   employeeName: 'Asha Rao',
@@ -31,5 +31,67 @@ describe('buildLeaveNotifyMailto', () => {
   it('names the half-day duration when dayPart is not full', () => {
     const link = buildLeaveNotifyMailto({ ...base, dayPart: 'first_half' })
     expect(decodeURIComponent(link.split('body=')[1])).toContain('First Half')
+  })
+})
+
+describe('buildConfirmationGmailLink', () => {
+  const confirmBase = {
+    employeeName: 'Asha Rao',
+    employeeEmail: 'asha@ecoste.in',
+    managerEmail: 'manager@ecoste.in',
+    adminEmail: 'admin@ecoste.in',
+    confirmedDate: '2026-09-14',
+    joiningDate: '2026-06-14',
+  }
+
+  it('always opens mail.google.com, not a generic mailto: link', () => {
+    const link = buildConfirmationGmailLink(confirmBase)
+    expect(link.startsWith('https://mail.google.com/mail/?')).toBe(true)
+  })
+
+  it('addresses the employee directly, cc-ing manager and admin', () => {
+    const link = buildConfirmationGmailLink(confirmBase)
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('to')).toBe('asha@ecoste.in')
+    expect(params.get('cc')).toBe('manager@ecoste.in,admin@ecoste.in')
+  })
+
+  it('falls back to whichever cc address is present when the other is missing', () => {
+    const link = buildConfirmationGmailLink({ ...confirmBase, managerEmail: null })
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('cc')).toBe('admin@ecoste.in')
+  })
+
+  it('omits cc entirely when neither manager nor admin email is on file', () => {
+    const link = buildConfirmationGmailLink({ ...confirmBase, managerEmail: null, adminEmail: null })
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.has('cc')).toBe(false)
+  })
+
+  it('includes the employee name and confirmed date in the subject/body', () => {
+    const link = buildConfirmationGmailLink(confirmBase)
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('su')).toContain('Asha Rao')
+    expect(params.get('body')).toContain('effective 2026-09-14')
+  })
+
+  it('names the original joining date, not the confirmation date, in the thank-you line', () => {
+    const link = buildConfirmationGmailLink(confirmBase)
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('body')).toContain('since joining on 2026-06-14')
+  })
+
+  it('drops the joining-date clause instead of printing "null" when joiningDate is missing', () => {
+    const link = buildConfirmationGmailLink({ ...confirmBase, joiningDate: null })
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('body')).not.toContain('null')
+    expect(params.get('body')).not.toContain('joining on')
+    expect(params.get('body')).toContain('Thank you for your hard work and dedication.')
+  })
+
+  it('leaves "to" blank instead of "null"/"undefined" when the employee has no email on file', () => {
+    const link = buildConfirmationGmailLink({ ...confirmBase, employeeEmail: null })
+    const params = new URLSearchParams(link.split('?')[1])
+    expect(params.get('to')).toBe('')
   })
 })

@@ -3,10 +3,9 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, WORK_MODES, getShiftInfo } from '../../lib/constants'
+import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, WORK_MODES, getShiftInfo, statusLabel } from '../../lib/constants'
 import { todayIST } from '../../lib/datetime'
-
-const PROBATION_ALERT_WINDOW_DAYS = 14
+import { buildConfirmationGmailLink } from '../../lib/notify'
 
 // Sub Dept and Cost Center dropped from the form per your request — the columns and
 // mapper still carry them through untouched for anyone imported with values already,
@@ -23,7 +22,7 @@ const FORM_FIELDS = [
 const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office', stdHoursOverride: '' }
 const EMPTY_ASSET = { assetType: '', serialNumber: '', assignedDate: '', status: '', assignedBy: '' }
 
-export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, resetPunchDevice, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, onAudit }) {
+export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, resetPunchDevice, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, adminEmail, onAudit }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -32,6 +31,11 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
   const [assetEditor, setAssetEditor] = useState(null) // { empId, empName, assets: [], form: {...} | null }
   const [assetMsg, setAssetMsg] = useState('')
   const [errMsg, setErrMsg] = useState('')
+  // plan.md §25 — set right after an admin moves someone Probation -> Confirmed
+  // ("Fixed"), holding what the Gmail confirmation link needs; cleared once sent or
+  // dismissed. Not persisted — this is a one-time nudge, not a tracked "email sent"
+  // state.
+  const [justConfirmed, setJustConfirmed] = useState(null)
 
   const q = search.trim().toLowerCase()
   const filtered = employees.filter(e =>
@@ -40,14 +44,18 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
     (!q || e.name.toLowerCase().includes(q) || (e.empNum || '').toLowerCase().includes(q))
   )
 
-  // Phase 2 — "admin alert when probation is nearing its end" (plan.md).
+  // plan.md §25 — fires once probation is actually complete, not N days early
+  // (revises the Phase 2 "admin alert when probation is nearing its end" banner).
   const today = todayIST()
-  const alertCutoff = new Date(today)
-  alertCutoff.setDate(alertCutoff.getDate() + PROBATION_ALERT_WINDOW_DAYS)
-  const alertCutoffStr = alertCutoff.toISOString().slice(0, 10)
   const probationEnding = employees.filter(e =>
-    e.employmentStatus === 'Probation' && e.probationEndDate && e.probationEndDate <= alertCutoffStr
+    e.employmentStatus === 'Probation' && e.probationEndDate && e.probationEndDate <= today
   )
+
+  function noteJustConfirmed(updated) {
+    if (!updated || updated.employmentStatus !== 'Confirmed') return
+    const manager = updated.managerEmpId ? employees.find(x => x.id === updated.managerEmpId) : null
+    setJustConfirmed({ empId: updated.id, empName: updated.name, empEmail: updated.email, managerEmail: manager?.email, joiningDate: updated.joiningDate })
+  }
 
   async function save() {
     if (!form.name || !form.company) return
@@ -60,8 +68,9 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
         // employment_status is admin-only and has its own function (admin_set_employment_status)
         // — admin_update_employee deliberately can't change it, so it's a separate call.
         if (form.employmentStatus && form.employmentStatus !== before?.employmentStatus) {
-          await setEmploymentStatus(form.id, form.employmentStatus)
+          const statusUpdated = await setEmploymentStatus(form.id, form.employmentStatus)
           onAudit?.('EMPLOYMENT_STATUS', `${updated.name} -> ${form.employmentStatus}`, 'admin')
+          if (before?.employmentStatus === 'Probation') noteJustConfirmed(statusUpdated)
         }
       } else {
         const created = await createEmployee(form)
@@ -80,8 +89,9 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
 
   async function confirmEmployee(e) {
     try {
-      await setEmploymentStatus(e.id, 'Confirmed')
+      const updated = await setEmploymentStatus(e.id, 'Confirmed')
       onAudit?.('EMPLOYMENT_STATUS', `${e.name} -> Confirmed`, 'admin')
+      noteJustConfirmed(updated)
       setErrMsg('')
     } catch (err) { setErrMsg(err.message) }
   }
@@ -189,7 +199,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
             <option value="">All Companies</option>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
           </Select>
           <Select className="w-auto py-2" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="">All Statuses</option>{EMPLOYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            <option value="">All Statuses</option>{EMPLOYMENT_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
           </Select>
           <Button className="text-xs" onClick={() => setForm({ ...EMPTY_FORM })}>+ Add Employee</Button>
         </div>
@@ -197,15 +207,37 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
 
       {errMsg && <p className="text-red-400 text-sm mb-3">{errMsg}</p>}
 
+      {justConfirmed && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 mb-4 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <p className="text-emerald-300 text-xs">{justConfirmed.empName} is now Fixed — send them the confirmation email?</p>
+            {!justConfirmed.empEmail && (
+              <p className="text-amber-300 text-xs mt-1">No email on file for {justConfirmed.empName} — the "To" field will open blank, add it in Gmail before sending.</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <a
+              href={buildConfirmationGmailLink({ employeeName: justConfirmed.empName, employeeEmail: justConfirmed.empEmail, managerEmail: justConfirmed.managerEmail, adminEmail, confirmedDate: today, joiningDate: justConfirmed.joiningDate })}
+              target="_blank" rel="noopener noreferrer"
+              onClick={() => setJustConfirmed(null)}
+              className="text-center rounded-lg px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all active:scale-95"
+            >
+              Send Confirmation Email
+            </a>
+            <Button variant="secondary" className="text-xs py-1.5 px-3" onClick={() => setJustConfirmed(null)}>Dismiss</Button>
+          </div>
+        </div>
+      )}
+
       {probationEnding.length > 0 && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4">
           <p className="text-amber-300 text-xs font-semibold mb-2">
-            {probationEnding.length} employee{probationEnding.length !== 1 ? 's' : ''} on probation ending within {PROBATION_ALERT_WINDOW_DAYS} days
+            {probationEnding.length} employee{probationEnding.length !== 1 ? 's' : ''} completed 3 months on probation — change their tag to Fixed
           </p>
           <div className="space-y-1">
             {probationEnding.map(e => (
               <div key={e.id} className="flex items-center justify-between text-xs">
-                <span className="text-white/70">{e.name} — ends {e.probationEndDate}{e.probationEndDate < today ? ' (overdue)' : ''}</span>
+                <span className="text-white/70">{e.name} — probation ended {e.probationEndDate}</span>
                 <Button variant="secondary" className="text-xs py-0.5 px-2" onClick={() => confirmEmployee(e)}>Confirm now</Button>
               </div>
             ))}
@@ -255,7 +287,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
             <div>
               <Label>Employment Status (admin only)</Label>
               <Select value={form.employmentStatus || 'Probation'} onChange={e => setForm(p => ({ ...p, employmentStatus: e.target.value }))}>
-                {EMPLOYMENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                {EMPLOYMENT_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </Select>
             </div>
             <div>
@@ -283,7 +315,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
                 <div className="flex items-center gap-2">
                   <p className="text-white text-sm font-medium">{e.name}</p>
                   <span className={`text-xs px-1.5 py-0.5 rounded-full ${e.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>{e.active ? 'Active' : 'Inactive'}</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-white/50">{e.employmentStatus}</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-white/10 text-white/50">{statusLabel(e.employmentStatus)}</span>
                   {(() => { const sh = getShiftInfo(null, e); return sh.id !== 'none' && <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: sh.color + '33', color: sh.color, border: `1px solid ${sh.color}55` }}>{sh.label}</span> })()}
                   {e.workMode && e.workMode !== 'office' && (
                     <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/25">

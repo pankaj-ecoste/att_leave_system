@@ -1843,6 +1843,108 @@ calcStatus's `deduct` handling exactly.
   script, same verify-before/after pattern as 0038-0041. **Applied 2026-09-11**,
   verified live via `pg_get_functiondef` before and after.
 
+## 25. Probation-completion notice + one-click confirmation email (team-requested 2026-09-14)
+
+**Requested by team:** When a staff member completes their 3-month probation, the
+admin panel should notify the admin so they change that employee's tag from Probation
+to "Fixed". When the admin makes that change, they should be taken straight to a
+pre-filled email (subject/body/to/cc already filled in) so all they have to do is
+click Send.
+
+**What already existed (found during investigation):** most of the plumbing is
+already built.
+- `probation_end_date` is auto-set to joining date + 3 months at employee creation
+  (`admin_create_employee`, 0036) — no new date logic needed.
+- `Employees.jsx` already shows an amber banner for probation employees, with a
+  "Confirm now" button that calls `admin_set_employment_status` — but today it fires
+  **14 days before** `probation_end_date` (`PROBATION_ALERT_WINDOW_DAYS`), not on
+  completion.
+- `EMPLOYMENT_STATUSES` has no "Fixed" value — only `Probation / Confirmed / Notice
+  Period / Exited`. "Fixed" is HR's name for what this app already calls "Confirmed".
+- `src/lib/notify.js` already has a working `mailto:`-link pattern (used on the
+  employee's Leave Apply screen) that this reuses, not reinvents.
+
+### Decisions locked in (discussed with user before coding)
+
+1. **"Fixed" = "Confirmed", display-only.** No new status value, no DB/constraint
+   change. The stored value stays `'Confirmed'` everywhere (SQL functions, filters,
+   audit log); only the text shown to the admin (status badge + dropdown option +
+   filter option) is relabeled "Fixed". Lowest-risk option — avoids touching every
+   place that already checks for the literal string `'Confirmed'`.
+2. **Notify only on actual completion, not 14 days early.** The existing early-warning
+   banner is replaced (not supplemented) by one that fires once
+   `probation_end_date <= today` — i.e. the 3 months are actually done.
+   `PROBATION_ALERT_WINDOW_DAYS` goes away.
+3. **Email recipients:** To: the employee. Cc: their reporting manager + the admin
+   notification email (`app_settings.admin_email`, already surfaced as `adminEmail`
+   throughout the app). If an employee has no manager on file, Cc is just the admin
+   email (same "filter(Boolean)" pattern `notify.js` already uses for the leave email).
+4. **Link type: Gmail web compose, not a plain `mailto:`.** The team specifically said
+   "direct them to Gmail" — a plain `mailto:` opens whichever mail app is the PC's
+   default (could be Outlook), not necessarily Gmail. Using
+   `https://mail.google.com/mail/?view=cm&fs=1&to=...&cc=...&su=...&body=...` guarantees
+   it always opens Gmail's own compose window in a browser tab, pre-filled, regardless
+   of the admin's machine. (This is a deliberate difference from the leave-notify
+   `mailto:` link — kept separate as its own function rather than changed in place,
+   since that one still needs to respect whatever mail client the *employee* actually
+   uses.)
+5. **Trigger: a button, not an automatic redirect.** Consistent with how the existing
+   Leave Apply notify works (employee clicks "Notify via Email", nothing opens on its
+   own) — after the admin changes an employee's status from Probation to
+   Confirmed/Fixed and it saves successfully, a "Send Confirmation Email" prompt
+   appears (covers both the banner's "Confirm now" button and the Edit-form dropdown +
+   Save path — both go through the same `setEmploymentStatus` call). Nothing is sent
+   automatically; the admin clicks the prompt, the Gmail tab opens pre-filled, they
+   click Send there themselves.
+
+### Files touched (planned)
+
+- `src/lib/constants.js` — add a small `EMPLOYMENT_STATUS_LABELS` map (`Confirmed` ->
+  `Fixed`) and a `statusLabel()` helper; `EMPLOYMENT_STATUSES` itself (the stored
+  values) is unchanged.
+- `src/lib/notify.js` — add `buildConfirmationGmailLink({ employeeName, employeeEmail,
+  managerEmail, adminEmail, confirmedDate })`, a pure function (no network/DOM, same
+  testable shape as `buildLeaveNotifyMailto`) returning the Gmail compose URL.
+- `src/lib/notify.test.js` — tests for the new function.
+- `src/features/admin/Employees.jsx` — probation banner condition changed from
+  "within `PROBATION_ALERT_WINDOW_DAYS` days" to "`probationEndDate <= today`"; banner
+  copy updated; status badge/dropdown/filter use `statusLabel()` for display; both
+  `confirmEmployee()` and the status-change branch of `save()` track a
+  "just confirmed this employee" bit of local state that renders the "Send
+  Confirmation Email" button (using the new Gmail link) until dismissed or clicked.
+- `src/features/admin/AdminPanel.jsx` — pass `adminEmail={admin.adminEmail}` into
+  `<Employees>` (not currently passed).
+
+No database migration needed — `probation_end_date`, `employment_status`, and every
+employee's `email` already exist and are already fetched.
+
+### Email copy (finalized 2026-09-14 — HR's own template, one placeholder fix)
+
+HR shared their existing confirmation-letter wording to reuse verbatim. Their draft had
+two placeholder tokens, `DOJ` and `PC`, swapped (confirmed with the user): `DOJ` in
+"effective DOJ" should have been the probation-completion date, and `PC` in "since
+joining on PC" should have been the actual Date of Joining. Corrected version, as
+implemented in `buildConfirmationGmailLink`:
+
+> Dear {employeeName},
+>
+> We are pleased to inform you that you have successfully completed your probation
+> period, effective {confirmedDate}, and your full-time employment is now confirmed.
+>
+> All other terms and conditions outlined in your original offer letter remain
+> unchanged.
+>
+> Thank you for your hard work and dedication since joining on {joiningDate}. We look
+> forward to your continued success with us.
+>
+> Congratulations!
+>
+> Best regards,
+> HR
+
+`joiningDate` is the employee's own `joiningDate` field (already fetched with every
+employee row); `confirmedDate` is `todayIST()` at the moment the admin sends it.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

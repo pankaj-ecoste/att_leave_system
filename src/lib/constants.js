@@ -93,6 +93,15 @@ export const DAY_TYPES = { WORKING: 'working', WEEK_OFF: 'week_off', HOLIDAY: 'h
 
 export const EMPLOYMENT_STATUSES = ['Probation', 'Confirmed', 'Notice Period', 'Exited']
 
+// plan.md §25 — HR calls the post-probation status "Fixed"; the stored value and every
+// server-side check stay 'Confirmed' (lowest-risk option, nothing else changes), this
+// only relabels what the admin sees.
+export const EMPLOYMENT_STATUS_LABELS = { Confirmed: 'Fixed' }
+
+export function statusLabel(status) {
+  return EMPLOYMENT_STATUS_LABELS[status] || status
+}
+
 // OS / FS / WFH (plan.md §6B) — the tag admin sets per employee at creation, driving
 // which punch tiles they see. 'office' matches the employees.work_mode column default.
 // 'both' (Office + Field) is a fourth, non-abbreviated combination: office tiles plus
