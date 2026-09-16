@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Spinner } from './components/ui/Spinner'
 import { LoginScreen } from './features/auth/LoginScreen'
 import { AdminLogin } from './features/auth/AdminLogin'
 import { EmployeeDashboard } from './features/employee/EmployeeDashboard'
-import { AdminPanel } from './features/admin/AdminPanel'
 import { useAuth } from './hooks/useAuth'
 import { useEmployeeAttendance } from './hooks/useEmployeeAttendance'
 import { useEmployeeLeave } from './hooks/useEmployeeLeave'
@@ -15,6 +14,12 @@ import { useAdminAttendance } from './hooks/useAdminAttendance'
 import { useAdminData } from './hooks/useAdminData'
 import { useLeaveBalanceImport } from './hooks/useLeaveBalanceImport'
 import { useAutoRefresh } from './hooks/useAutoRefresh'
+
+// Lazy-loaded: plan.md §26 — AdminPanel (and the exceljs/xlsx libs it pulls in via
+// Reports/Database/Imports) were bloating the bundle every employee downloads on
+// login, even though most never open it. Splitting it into its own chunk, fetched
+// only when auth.view === 'admin', changes nothing about what AdminPanel does.
+const AdminPanel = lazy(() => import('./features/admin/AdminPanel').then(m => ({ default: m.AdminPanel })))
 
 // Shell only: routing between login / employee / admin, and wiring each role's hooks
 // into its feature tree. No business logic lives here — see lib/, api/ and hooks/.
@@ -65,13 +70,15 @@ export default function App() {
   if (auth.view === 'admin') {
     return (
       <ErrorBoundary>
-        <AdminPanel
-          token={auth.adminToken}
-          onLogout={async () => { await auth.adminLogout(); setShowAdminLogin(false) }}
-          admin={admin}
-          attendanceHook={adminAttendance}
-          imports={{ leaveBalance: leaveBalanceImport }}
-        />
+        <Suspense fallback={<Spinner />}>
+          <AdminPanel
+            token={auth.adminToken}
+            onLogout={async () => { await auth.adminLogout(); setShowAdminLogin(false) }}
+            admin={admin}
+            attendanceHook={adminAttendance}
+            imports={{ leaveBalance: leaveBalanceImport }}
+          />
+        </Suspense>
       </ErrorBoundary>
     )
   }

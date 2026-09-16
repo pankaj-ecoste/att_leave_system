@@ -1945,6 +1945,34 @@ implemented in `buildConfirmationGmailLink`:
 `joiningDate` is the employee's own `joiningDate` field (already fetched with every
 employee row); `confirmedDate` is `todayIST()` at the moment the admin sends it.
 
+## 26. Admin bundle code-splitting — 2MB single JS chunk (found during health audit 2026-09-16)
+
+**Found during a general health/security/performance audit,** not HR-reported. `npm
+run build` produces one 1,996 kB JS file (586 kB gzipped); Vite itself warns about
+chunks over 500 kB. Every visitor — including an employee who only ever opens
+PunchPanel — downloads the entire admin surface up front: `AdminPanel` and everything
+it imports (`Reports.jsx`, `Database.jsx`, `Imports.jsx`, and the `exceljs`/`xlsx`
+libraries they pull in), because `App.jsx` imports `AdminPanel` eagerly at the top of
+the file alongside the employee screens.
+
+**Production caution (explicit user instruction, 2026-09-16): this app is live in
+production. This change must not alter any other function.** It is a pure loading-
+mechanism change — *when* `AdminPanel`'s code is fetched, not what it does. Scope is
+deliberately narrow:
+
+1. `src/App.jsx` — replace the static `import { AdminPanel } from
+   './features/admin/AdminPanel'` with `React.lazy(() => import(...))`, and wrap the
+   `<AdminPanel>` render site in `<Suspense>` with a fallback (reuse the existing
+   `<Spinner>` already imported in this file — no new UI component).
+2. No change to `AdminPanel.jsx` itself, its children, any hook, any API/RPC call, or
+   any prop passed in — the component tree and behavior are identical, only loaded
+   asynchronously.
+3. Employee-facing path (`LoginScreen` → `EmployeeDashboard`) is untouched and stays
+   eagerly loaded, since that's the code almost every visitor needs immediately.
+4. Verify after: production build (`npm run build`) shows a separate `AdminPanel`
+   chunk and a smaller main chunk; existing test suite (`npm test`, 76 tests) still
+   passes; manually confirm both employee login and admin login still work.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
