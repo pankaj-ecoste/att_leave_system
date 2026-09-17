@@ -1973,6 +1973,56 @@ deliberately narrow:
    chunk and a smaller main chunk; existing test suite (`npm test`, 76 tests) still
    passes; manually confirm both employee login and admin login still work.
 
+## 27. Employee number silently blanked (HR-reported 2026-09-17)
+
+**Reported:** Aryan Negi's employee number showed as blank (not the usual "--" placeholder
+shown for a genuinely empty field elsewhere in the app).
+
+**Confirmed via direct DB query:** `emp_num` was a true SQL `NULL`, not whitespace — one
+row only (`ea0b8e11-1f31-45c5-a0ad-f46d8af0aaf4`, joined 2026-08-26). Audit trail
+(`audit_logs`) showed it was already `NULL` immediately after `EMPLOYEE_CREATE` on
+2026-08-29 — `admin_create_employee` always auto-assigns `emp_num` server-side
+(`max(emp_num::int)+1`, migration 0030) from a value the client can't influence, and that
+computation can't itself produce NULL, so this was a one-off (no other employee was
+created in the same window, ruling out a double-submit race) rather than a reproducible
+bug in the create path as it exists today. No other employee is affected.
+
+**A real, separate gap found while investigating, fixed as a guardrail regardless:**
+`admin_update_employee`'s `emp_num` line was `coalesce(p_data->>'empNum', emp_num)` — the
+only field in that function without a `nullif`, unlike `joining_date`, `shift_type`,
+`work_mode`, `date_of_birth` (all `coalesce(nullif(p_data->>'x', ''), x)`). The Edit
+Employee form (`src/features/admin/Employees.jsx`) has a free-text "Emp Number" box for
+existing employees; the client mapper (`employeeToPayload`, `src/api/mappers.js`) turns a
+fully-empty box into `null` before sending, which this coalesce handles fine — but it
+never trims, so a box left with just a stray space would survive as a truthy, non-null
+string and silently overwrite the real number with something that renders as blank. Not
+what caused Aryan Negi's case, but a genuine latent hole worth closing before it causes
+the next one.
+
+**Fix:** `supabase/migrations/0043_emp_num_blank_guard_and_backfill.sql` redefines
+`admin_update_employee` with `emp_num=coalesce(nullif(btrim(p_data->>'empNum'), ''),
+emp_num)`, matching the pattern already used by every other optional field in this
+function — blank or whitespace-only input now always means "leave it alone". No other
+field or function touched.
+
+Same migration backfills any row currently sitting blank (NULL or whitespace-only
+`emp_num`, excluding soft-deleted rows) using the identical `max(emp_num::int)+1` logic
+`admin_create_employee` uses for new hires, processed one at a time in joining-date order
+so two blank rows in the same run can't collide on the same number. Applied via
+`scripts/apply-0043-emp-num-blank-guard-and-backfill.mjs` (full-replay `apply-
+migrations.mjs` is broken at migration 0010 on prod — see §13); the script prints every
+row it's about to touch before writing anything. **Applied to production 2026-09-17:**
+Aryan Negi assigned `1257` (next after the prior max, `1256`) — confirmed zero blank rows
+remain, `admin_update_employee` confirmed live with the fix.
+
+**Also noted, not fixed (out of scope for this fix):** `emp_num` has only a plain
+(non-unique) btree index, `idx_employees_emp_num` — nothing in the schema stops two
+employees from ending up with the same number. The `max(emp_num::int)+1` assignment
+approach also has a known, documented, accepted race-condition risk between two
+simultaneous creates (migration 0030's comment) that a unique constraint would turn into a
+loud error instead of a silent duplicate. Flagging for a future pass, not touched here per
+the "don't disturb any working flow" instruction for this fix.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
