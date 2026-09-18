@@ -1,29 +1,57 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, lazy, Suspense } from 'react'
+import * as XLSX from 'xlsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
-import { getTravelSelfieUrl } from '../../api/travel'
+import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { PhotoViewerModal } from '../../components/PhotoViewerModal'
+import { todayIST } from '../../lib/datetime'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
 const TIER_LABELS = { manager: 'Manager', executive: 'Executive' }
 
-function SelfieThumb({ path }) {
-  const [url, setUrl] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    getTravelSelfieUrl(path).then(u => { if (!cancelled) setUrl(u) }).catch(() => {})
-    return () => { cancelled = true }
-  }, [path])
-  if (!url) return <div className="w-12 h-12 rounded-lg bg-white/5 shrink-0" />
-  return <img src={url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+// Day-wise visit detail + a cumulative summary sheet — same lightweight xlsx pattern
+// Reports.jsx already uses for plain tabular exports (json_to_sheet, not the styled
+// exceljs path, since this isn't a multi-column-per-day register).
+function downloadTravelReport(row, journey, rate) {
+  const visitRows = journey.map(v => ({
+    Date: v.date,
+    Time: new Date(v.capturedAt).toLocaleTimeString(),
+    'Site / Client': v.siteNote,
+    'Distance (km)': v.legDistanceKm.toFixed(2),
+    Adjusted: v.distanceOverridden ? `Yes — ${v.overrideReason || ''}` : '',
+    'Expense Note': v.expenseNote || '',
+    'Expense Amount (₹)': v.expenseAmount != null ? v.expenseAmount.toFixed(2) : '',
+  }))
+  const totalKm = journey.reduce((s, v) => s + v.legDistanceKm, 0)
+  const totalExpense = journey.reduce((s, v) => s + (v.expenseAmount || 0), 0)
+  const distanceAmount = totalKm * rate
+  const summaryRows = [{
+    Employee: row.empName,
+    'Emp #': row.empNum || '',
+    'Rate Tier': TIER_LABELS[row.taRateTier] || row.taRateTier || '',
+    'Rate (₹/km)': rate,
+    Period: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
+    'Total Visits': journey.length,
+    'Total Distance (km)': totalKm.toFixed(2),
+    'Distance Amount (₹)': distanceAmount.toFixed(2),
+    'Total Expenses (₹)': totalExpense.toFixed(2),
+    'Grand Total (₹)': (distanceAmount + totalExpense).toFixed(2),
+  }]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visitRows), 'Visits (day-wise)')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
+  XLSX.writeFile(wb, `travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}_${todayIST()}.xlsx`)
 }
 
 // plan.md §28 — admin's Travel Allowance screen: rate tiers per eligible employee, the
-// two ₹/km rates, per-employee journey review with map + distance override, and
-// settling (pay + purge). Own file, own hook (useAdminTravel) — nothing existing here
-// was touched to add this tab (plan.md §28, "do not alter any running function").
+// two ₹/km rates, per-employee journey review with map + distance override + expense
+// receipts, a downloadable day-wise/cumulative report, and settling (pay + purge). Own
+// file, own hook (useAdminTravel) — nothing existing here was touched to add this tab
+// (plan.md §28, "do not alter any running function").
 export function Travel({ travel, onAudit }) {
   const { overview, taSettings, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements, overrideDistance, settle } = travel
   const [rateForm, setRateForm] = useState(null)
@@ -33,6 +61,7 @@ export function Travel({ travel, onAudit }) {
   const [detailLoading, setDetailLoading] = useState(false)
   const [showMap, setShowMap] = useState(false)
   const [overrideVisit, setOverrideVisit] = useState(null)
+  const [viewerUrl, setViewerUrl] = useState(null)
   const [msg, setMsg] = useState('')
 
   async function expand(empId) {
@@ -76,11 +105,25 @@ export function Travel({ travel, onAudit }) {
     }
   }
 
+  function rateFor(row) {
+    return row.taRateTier === 'manager' ? taSettings.managerRatePerKm : taSettings.executiveRatePerKm
+  }
+
+  function download(row) {
+    if (journey.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
+    downloadTravelReport(row, journey, rateFor(row))
+  }
+
   async function doSettle(row) {
     if (!row.taRateTier) { setMsg('Set a rate tier before settling.'); return }
-    const rate = row.taRateTier === 'manager' ? taSettings.managerRatePerKm : taSettings.executiveRatePerKm
-    const amount = (row.totalKm * rate).toFixed(2)
-    if (!window.confirm(`Settle ${row.empName}: ${row.totalKm.toFixed(1)} km × ₹${rate}/km = ₹${amount}?\n\nThis pays out and permanently deletes their selfies/points, keeping only this summary.`)) return
+    const rate = rateFor(row)
+    const distanceAmount = row.totalKm * rate
+    const grandTotal = (distanceAmount + row.totalExpense).toFixed(2)
+    if (!window.confirm(
+      `Settle ${row.empName}: ${row.totalKm.toFixed(1)} km × ₹${rate}/km = ₹${distanceAmount.toFixed(2)}`
+      + (row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)} expenses` : '')
+      + ` = ₹${grandTotal}?\n\nMake sure you've downloaded the report first — this pays out and permanently deletes their selfies/receipts/points, keeping only this summary.`
+    )) return
     try {
       const settlement = await settle(row.empId)
       onAudit?.('TRAVEL_SETTLED', `${row.empName} — ${settlement.totalKm.toFixed(1)}km, ₹${settlement.amount}`, 'admin')
@@ -92,6 +135,7 @@ export function Travel({ travel, onAudit }) {
 
   return (
     <div className="space-y-4">
+      <PhotoViewerModal url={viewerUrl} onClose={() => setViewerUrl(null)} />
       <Card>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -148,8 +192,10 @@ export function Travel({ travel, onAudit }) {
                     <option value="manager">Manager</option>
                     <option value="executive">Executive</option>
                   </select>
-                  <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km</p>
-                  <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
+                  <div className="text-right">
+                    <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km{row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)}` : ''}</p>
+                    <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
+                  </div>
                   <Button variant="secondary" className="text-xs" onClick={() => expand(row.empId)}>
                     {expandedEmp === row.empId ? 'Hide' : 'Review'}
                   </Button>
@@ -160,11 +206,16 @@ export function Travel({ travel, onAudit }) {
                   <div className="p-3 border-t border-white/10">
                     {detailLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
                       <>
-                        {journey.length > 0 && (
-                          <button className="text-indigo-400 text-xs underline underline-offset-2 mb-2" onClick={() => setShowMap(!showMap)}>
-                            {showMap ? 'Hide map' : 'View map'}
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          {journey.length > 0 && (
+                            <button className="text-indigo-400 text-xs underline underline-offset-2" onClick={() => setShowMap(!showMap)}>
+                              {showMap ? 'Hide map' : 'View map'}
+                            </button>
+                          )}
+                          <Button variant="secondary" className="text-xs" disabled={journey.length === 0} onClick={() => download(row)}>
+                            ⬇ Download Report
+                          </Button>
+                        </div>
                         {showMap && (
                           <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
                             <div className="mb-3">
@@ -175,11 +226,15 @@ export function Travel({ travel, onAudit }) {
                         <div className="space-y-2">
                           {journey.map(v => (
                             <div key={v.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
-                              <SelfieThumb path={v.photoPath} />
+                              <TravelPhotoThumb path={v.photoPath} onOpen={setViewerUrl} className="w-12 h-12" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-white text-sm truncate">{v.siteNote}</p>
                                 <p className="text-white/30 text-xs">{v.date} {new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km{v.distanceOverridden ? ` (adjusted: ${v.overrideReason})` : ''}</p>
+                                {v.expenseAmount != null && (
+                                  <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
+                                )}
                               </div>
+                              {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setViewerUrl} className="w-10 h-10" />}
                               <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: v.legDistanceKm, reason: '' })}>Adjust</Button>
                             </div>
                           ))}
@@ -206,7 +261,7 @@ export function Travel({ travel, onAudit }) {
                             <p className="text-white/40 text-xs font-medium uppercase tracking-wide mb-2">Past Payouts</p>
                             {settlements.map(s => (
                               <div key={s.id} className="flex items-center justify-between py-1.5 text-xs border-b border-white/5">
-                                <span className="text-white/60">{s.periodStart} – {s.periodEnd} · {s.totalKm.toFixed(1)} km · {TIER_LABELS[s.rateTier] || s.rateTier}</span>
+                                <span className="text-white/60">{s.periodStart} – {s.periodEnd} · {s.totalKm.toFixed(1)} km{s.expenseAmount > 0 ? ` + ₹${s.expenseAmount.toFixed(2)} expenses` : ''} · {TIER_LABELS[s.rateTier] || s.rateTier}</span>
                                 <span className="text-emerald-400 font-medium">₹{s.amount.toFixed(2)}</span>
                               </div>
                             ))}

@@ -1,26 +1,16 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
+import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { getLeaveDocumentUrl } from '../../api/documents'
-import { getTravelSelfieUrl } from '../../api/travel'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
-
-function TravelSelfieThumb({ path }) {
-  const [url, setUrl] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    getTravelSelfieUrl(path).then(u => { if (!cancelled) setUrl(u) }).catch(() => {})
-    return () => { cancelled = true }
-  }, [path])
-  if (!url) return <div className="w-10 h-10 rounded-lg bg-white/5 shrink-0" />
-  return <img src={url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
-}
 
 // The manager view for anyone with direct reports — appears as a tab inside the
 // employee dashboard (one person can be both), not a separate login.
@@ -37,6 +27,7 @@ export function TeamPanel({
   const [travelJourney, setTravelJourney] = useState([])
   const [travelJourneyLoading, setTravelJourneyLoading] = useState(false)
   const [showTravelMap, setShowTravelMap] = useState(false)
+  const [travelViewerUrl, setTravelViewerUrl] = useState(null)
 
   function selectTab(t) {
     setTab(t)
@@ -98,6 +89,7 @@ export function TeamPanel({
 
   return (
     <div className="space-y-4">
+      <PhotoViewerModal url={travelViewerUrl} onClose={() => setTravelViewerUrl(null)} />
       <Card>
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="text-white font-semibold">My Team <span className="text-white/30 text-sm font-normal">({myTeam.length} direct reports)</span></h2>
@@ -268,7 +260,7 @@ export function TeamPanel({
                         <p className="text-white font-medium text-sm">{row.empName}</p>
                         <p className="text-white/30 text-xs">{row.taRateTier ? row.taRateTier[0].toUpperCase() + row.taRateTier.slice(1) : 'No tier set'}</p>
                       </div>
-                      <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km</p>
+                      <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km{row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)}` : ''}</p>
                       <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
                       <Button variant="secondary" className="text-xs" onClick={() => expandTravel(row.empId)}>
                         {expandedTravelEmp === row.empId ? 'Hide' : 'View'}
@@ -293,11 +285,15 @@ export function TeamPanel({
                             <div className="space-y-2">
                               {travelJourney.map(v => (
                                 <div key={v.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
-                                  <TravelSelfieThumb path={v.photoPath} />
+                                  <TravelPhotoThumb path={v.photoPath} onOpen={setTravelViewerUrl} className="w-10 h-10" />
                                   <div className="flex-1 min-w-0">
                                     <p className="text-white text-sm truncate">{v.siteNote}</p>
                                     <p className="text-white/30 text-xs">{v.date} {new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km</p>
+                                    {v.expenseAmount != null && (
+                                      <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
+                                    )}
                                   </div>
+                                  {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setTravelViewerUrl} className="w-8 h-8" />}
                                 </div>
                               ))}
                               {travelJourney.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}

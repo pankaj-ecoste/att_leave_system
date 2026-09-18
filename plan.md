@@ -2136,6 +2136,40 @@ control in both cases); (2) the `travel-selfies` SELECT policy permitting bucket
 enumeration — byte-identical policy shape to `leave-documents`' own SELECT policy, not a
 new or wider hole, just a new bucket using the same already-shipped design.
 
+### Follow-up after first click-through (2026-09-18, migration 0046)
+
+Three refinements from your live feedback on the admin review screen:
+
+1. **Photos are now clickable, full-size, with a Back button** — new shared
+   `TravelPhotoThumb`/`PhotoViewerModal` components replace what were three
+   near-identical inline thumbnail copies (employee/manager/admin), so this is fixed
+   consistently in one place instead of three.
+2. **Optional additional expense per visit** (toll, lunch, etc.) — a second field
+   alongside the mandatory site name; entering an amount or note makes a **receipt
+   photo mandatory** before the visit can be saved (rear camera, `capture="environment"`,
+   vs. the front-camera selfie). Enforced server-side in `employee_add_travel_visit`
+   (amount/note without a photo path is rejected), not just in the UI. The expense
+   amount is added on top of the distance-based pay at settlement — itemized separately
+   (`travel_settlements.expense_amount`) so the ₹/km portion and the reimbursed-expense
+   portion both stay visible in the audit trail, not merged into one opaque number.
+3. **Downloadable day-wise + cumulative report** — admin's "Review" panel gets a
+   Download Report button producing a two-sheet .xlsx (day-wise visit detail, then a
+   cumulative summary: total km, distance amount, total expenses, grand total) using the
+   same lightweight `xlsx`/`json_to_sheet` pattern Reports.jsx already uses for its plain
+   exports. Settling still resets the cumulative and clears the day-wise cards for both
+   admin and the employee (already how `admin_settle_travel_period` worked) — the
+   download button doesn't gate settling, it's just placed right next to it so the
+   natural flow is download-then-settle.
+
+A real bug caught before applying 0046, not shipped: the settlement's storage cleanup
+concatenated two arrays (`array_agg(photo_path) || array_agg(expense_photo_path) filter
+(...)`) — in Postgres, `array || NULL` is `NULL`, and the filtered aggregate returns
+`NULL` whenever a period has zero expense receipts (the common case), which would have
+silently nulled out the *entire* path list and skipped deleting every ordinary selfie
+too. Fixed with `coalesce(..., '{}'::text[])` on both sides before concatenating,
+verified with a standalone SQL check in the apply script before trusting it against real
+data.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

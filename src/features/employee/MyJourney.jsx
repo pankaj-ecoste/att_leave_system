@@ -2,22 +2,12 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Spinner } from '../../components/ui/Spinner'
-import { getTravelSelfieUrl } from '../../api/travel'
+import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { attnKey } from '../../api/mappers'
 
 // Only fetched when a map is actually opened (plan.md §28 decision 9).
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
-
-function SelfieThumb({ path, className }) {
-  const [url, setUrl] = useState(null)
-  useEffect(() => {
-    let cancelled = false
-    getTravelSelfieUrl(path).then(u => { if (!cancelled) setUrl(u) }).catch(() => {})
-    return () => { cancelled = true }
-  }, [path])
-  if (!url) return <div className={`${className} bg-white/5 animate-pulse`} />
-  return <img src={url} alt="Site visit selfie" className={className} />
-}
 
 function dayPoints(dateVisits, attendanceRecord) {
   const points = []
@@ -32,17 +22,26 @@ function dayPoints(dateVisits, attendanceRecord) {
 }
 
 // plan.md §28 — "My Journey": camera-only selfie + mandatory site note per client
-// visit, today's/open-period list grouped by day, cumulative distance, and a lazy map.
-// Only rendered for Field / Office+Field staff — gated by the caller (EmployeeDashboard)
-// using the same requiresFieldNote() check the punch screen already uses.
+// visit, an optional additional expense (toll/lunch/etc — receipt photo mandatory the
+// moment one is entered), today's/open-period list grouped by day, cumulative
+// distance + expense total, and a lazy map. Only rendered for Field / Office+Field
+// staff — gated by the caller (EmployeeDashboard) using the same requiresFieldNote()
+// check the punch screen already uses.
 export function MyJourney({ currentUser, attendance, journey, summary, settlements, loading, addingVisit, locationStatus, addVisit }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [siteNote, setSiteNote] = useState('')
+  const [showExpense, setShowExpense] = useState(false)
+  const [expenseNote, setExpenseNote] = useState('')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseFile, setExpenseFile] = useState(null)
   const [err, setErr] = useState('')
   const [openMapDate, setOpenMapDate] = useState(null)
   const [selectedVisitId, setSelectedVisitId] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [expensePreviewUrl, setExpensePreviewUrl] = useState(null)
+  const [viewerUrl, setViewerUrl] = useState(null)
   const fileInputRef = useRef(null)
+  const expenseInputRef = useRef(null)
 
   useEffect(() => {
     if (!pendingFile) { setPreviewUrl(null); return }
@@ -50,6 +49,13 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [pendingFile])
+
+  useEffect(() => {
+    if (!expenseFile) { setExpensePreviewUrl(null); return }
+    const url = URL.createObjectURL(expenseFile)
+    setExpensePreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [expenseFile])
 
   function pickPhoto() {
     fileInputRef.current?.click()
@@ -61,13 +67,34 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     if (file) { setPendingFile(file); setErr('') }
   }
 
+  function onExpenseFileChosen(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) { setExpenseFile(file); setErr('') }
+  }
+
+  function resetForm() {
+    setPendingFile(null)
+    setSiteNote('')
+    setShowExpense(false)
+    setExpenseNote('')
+    setExpenseAmount('')
+    setExpenseFile(null)
+    setErr('')
+  }
+
   async function save() {
     if (!siteNote.trim()) { setErr('Enter the client/site name'); return }
+    const hasExpense = expenseNote.trim() || expenseAmount
+    if (hasExpense) {
+      const amt = Number(expenseAmount)
+      if (!expenseAmount || !Number.isFinite(amt) || amt <= 0) { setErr('Enter a valid expense amount'); return }
+      if (!expenseFile) { setErr('A receipt photo is required for an additional expense'); return }
+    }
     try {
       setErr('')
-      await addVisit(pendingFile, siteNote.trim())
-      setPendingFile(null)
-      setSiteNote('')
+      await addVisit(pendingFile, siteNote.trim(), hasExpense ? { note: expenseNote.trim(), amount: Number(expenseAmount), file: expenseFile } : null)
+      resetForm()
     } catch (e) {
       setErr(e.message)
     }
@@ -81,16 +108,21 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
 
   return (
     <div className="space-y-4">
+      <PhotoViewerModal url={viewerUrl} onClose={() => setViewerUrl(null)} />
       <Card>
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-white/50 text-xs uppercase tracking-wide">Travel Since Last Payout</p>
             <p className="text-2xl font-bold text-white mt-1">{summary.totalKm.toFixed(1)} km</p>
-            <p className="text-white/30 text-xs mt-0.5">{summary.visitCount} site visit{summary.visitCount === 1 ? '' : 's'}{summary.firstDate ? ` · since ${summary.firstDate}` : ''}</p>
+            <p className="text-white/30 text-xs mt-0.5">
+              {summary.visitCount} site visit{summary.visitCount === 1 ? '' : 's'}{summary.firstDate ? ` · since ${summary.firstDate}` : ''}
+              {summary.totalExpense > 0 && ` · ₹${summary.totalExpense.toFixed(2)} expenses`}
+            </p>
           </div>
           <Button onClick={pickPhoto} disabled={addingVisit}>{addingVisit ? 'Saving...' : '+ Add Visit'}</Button>
         </div>
         <input ref={fileInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={onFileChosen} />
+        <input ref={expenseInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onExpenseFileChosen} />
         {locationStatus && <p className="text-indigo-300 text-xs">{locationStatus}</p>}
 
         {pendingFile && (
@@ -105,10 +137,42 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
                 />
               </div>
             </div>
+
+            {!showExpense ? (
+              <button className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2 mt-3" onClick={() => setShowExpense(true)}>
+                + Add expense (toll, lunch, etc.)
+              </button>
+            ) : (
+              <div className="mt-3 pt-3 border-t border-white/10">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-white/50 text-xs">Additional Expense</p>
+                  <button className="text-white/30 hover:text-white/60 text-xs" onClick={() => { setShowExpense(false); setExpenseNote(''); setExpenseAmount(''); setExpenseFile(null) }}>Remove</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-400"
+                    value={expenseNote} onChange={e => setExpenseNote(e.target.value)} placeholder="e.g. Toll, lunch"
+                  />
+                  <input
+                    type="number" min="0" step="0.01"
+                    className="bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-400"
+                    value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} placeholder="Amount (₹)"
+                  />
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  {expensePreviewUrl && <img src={expensePreviewUrl} alt="Receipt preview" className="w-10 h-10 rounded-lg object-cover shrink-0" />}
+                  <Button variant="secondary" className="text-xs" onClick={() => expenseInputRef.current?.click()}>
+                    {expenseFile ? 'Retake Receipt Photo' : 'Add Receipt Photo *'}
+                  </Button>
+                </div>
+                <p className="text-white/20 text-xs mt-1">A receipt photo is required for any additional expense</p>
+              </div>
+            )}
+
             {err && <p className="text-red-400 text-xs mt-2">{err}</p>}
             <div className="flex gap-2 mt-3">
               <Button className="flex-1 text-xs" disabled={addingVisit} onClick={save}>{addingVisit ? 'Saving...' : 'Save Visit'}</Button>
-              <Button variant="secondary" className="text-xs" onClick={() => { setPendingFile(null); setSiteNote(''); setErr('') }}>Cancel</Button>
+              <Button variant="secondary" className="text-xs" onClick={resetForm}>Cancel</Button>
             </div>
           </div>
         )}
@@ -146,11 +210,15 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
             <div className="space-y-2">
               {visits.map(v => (
                 <div key={v.id} className={`flex items-center gap-3 p-2 rounded-xl border ${selectedVisitId === v.id ? 'border-amber-400/50 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}>
-                  <SelfieThumb path={v.photoPath} className="w-12 h-12 rounded-lg object-cover shrink-0" />
+                  <TravelPhotoThumb path={v.photoPath} onOpen={setViewerUrl} className="w-12 h-12" />
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium truncate">{v.siteNote}</p>
                     <p className="text-white/30 text-xs">{new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km{v.distanceOverridden ? ' (adjusted)' : ''}</p>
+                    {v.expenseAmount != null && (
+                      <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
+                    )}
                   </div>
+                  {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setViewerUrl} className="w-10 h-10" />}
                 </div>
               ))}
             </div>
@@ -166,7 +234,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
               <div key={s.id} className="flex items-center justify-between py-2 border-b border-white/5 text-xs">
                 <div>
                   <p className="text-white/70">{s.periodStart} – {s.periodEnd}</p>
-                  <p className="text-white/30">{s.totalKm.toFixed(1)} km · ₹{s.ratePerKm}/km</p>
+                  <p className="text-white/30">{s.totalKm.toFixed(1)} km · ₹{s.ratePerKm}/km{s.expenseAmount > 0 ? ` + ₹${s.expenseAmount.toFixed(2)} expenses` : ''}</p>
                 </div>
                 <p className="text-emerald-400 font-medium">₹{s.amount.toFixed(2)}</p>
               </div>

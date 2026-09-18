@@ -348,15 +348,19 @@ export function rowToTravelVisit(row) {
     siteNote: row.site_note,
     photoPath: row.photo_path,
     legDistanceKm: Number(row.leg_distance_km),
+    expenseNote: row.expense_note || null,
+    expenseAmount: row.expense_amount != null ? Number(row.expense_amount) : null,
+    expensePhotoPath: row.expense_photo_path || null,
     distanceOverridden: !!row.distance_overridden,
     overrideReason: row.override_reason,
   }
 }
 
 export function rowToTravelSummary(row) {
-  if (!row) return { totalKm: 0, visitCount: 0, firstDate: null, lastDate: null }
+  if (!row) return { totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }
   return {
     totalKm: Number(row.total_km || 0),
+    totalExpense: Number(row.total_expense || 0),
     visitCount: Number(row.visit_count || 0),
     firstDate: row.first_date,
     lastDate: row.last_date,
@@ -373,6 +377,7 @@ export function rowToTravelOverviewRow(row) {
     workMode: row.work_mode,
     taRateTier: row.ta_rate_tier || null,
     totalKm: Number(row.total_km || 0),
+    totalExpense: Number(row.total_expense || 0),
     visitCount: Number(row.visit_count || 0),
     firstDate: row.first_date,
     lastDate: row.last_date,
@@ -390,6 +395,7 @@ export function rowToTravelSettlement(row) {
     rateTier: row.rate_tier,
     ratePerKm: Number(row.rate_per_km),
     amount: Number(row.amount),
+    expenseAmount: Number(row.expense_amount || 0),
     approvedByAdmin: row.approved_by_admin,
     paidAt: row.paid_at,
   }

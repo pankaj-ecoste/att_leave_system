@@ -118,7 +118,7 @@ const CALLS = [
   ['admin_get_leave_accruals', { p_token: FAKE_UUID }],
   ['admin_get_comp_off_payouts', { p_token: FAKE_UUID }],
   // Travel Allowance (plan.md §28, 0044_travel_allowance.sql).
-  ['employee_add_travel_visit', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_date: TODAY, p_lat: 0, p_lon: 0, p_accuracy_m: 10, p_site_note: 'test', p_photo_path: 'test/selfie.jpg' }],
+  ['employee_add_travel_visit', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_date: TODAY, p_lat: 0, p_lon: 0, p_accuracy_m: 10, p_site_note: 'test', p_photo_path: 'test/selfie.jpg', p_expense_note: 'toll', p_expense_amount: 50, p_expense_photo_path: 'test/receipt.jpg' }],
   ['employee_get_travel_journey', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['employee_get_travel_summary', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['employee_get_travel_settlements', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],

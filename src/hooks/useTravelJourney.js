@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getLocation } from './useGeolocation'
 import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
-  employeeGetTravelSettlements, uploadTravelSelfie,
+  employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt,
 } from '../api/travel'
 import { todayIST } from '../lib/datetime'
 
@@ -13,7 +13,7 @@ import { todayIST } from '../lib/datetime'
 // ineligible employee (the server rejects it either way).
 export function useTravelJourney(token, empId) {
   const [journey, setJourney] = useState([])
-  const [summary, setSummary] = useState({ totalKm: 0, visitCount: 0, firstDate: null, lastDate: null })
+  const [summary, setSummary] = useState({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null })
   const [settlements, setSettlements] = useState([])
   const [loading, setLoading] = useState(false)
   const [addingVisit, setAddingVisit] = useState(false)
@@ -39,14 +39,18 @@ export function useTravelJourney(token, empId) {
   }, [token, empId])
 
   useEffect(() => {
-    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); return }
+    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); return }
     reload()
   }, [token, empId, reload])
 
-  // file is the camera-captured Blob/File, siteNote the mandatory client/site name.
-  // GPS is captured live at the moment of this call — never reused from an earlier
-  // reading (plan.md §28 decision 2: "GPS captured at that instant").
-  async function addVisit(file, siteNote) {
+  // file is the camera-captured selfie Blob/File, siteNote the mandatory client/site
+  // name. GPS is captured live at the moment of this call — never reused from an
+  // earlier reading (plan.md §28 decision 2: "GPS captured at that instant").
+  // expense is optional: { note, amount, file } — the server rejects amount/note
+  // without a receipt file, but the UI (MyJourney.jsx) already enforces this before
+  // ever calling addVisit, so the error path here is a defensive backstop, not the
+  // primary guard.
+  async function addVisit(file, siteNote, expense) {
     setLocationStatus('Getting your location...')
     return new Promise((resolve, reject) => {
       getLocation(async (_label, err, meta) => {
@@ -59,9 +63,11 @@ export function useTravelJourney(token, empId) {
           setAddingVisit(true)
           setLocationStatus('Saving...')
           const photoPath = await uploadTravelSelfie(file)
+          const expensePhotoPath = expense?.file ? await uploadTravelReceipt(expense.file) : null
           const visit = await employeeAddTravelVisit(token, empId, {
             date: todayIST(), lat: meta.lat, lon: meta.lon, accuracyM: meta.accuracy,
             siteNote, photoPath,
+            expenseNote: expense?.note || null, expenseAmount: expense?.amount ?? null, expensePhotoPath,
           })
           await reload()
           resolve(visit)

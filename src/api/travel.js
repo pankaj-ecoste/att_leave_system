@@ -8,10 +8,13 @@ import {
 // (no public URL), read via a short-lived signed URL.
 const TRAVEL_SELFIES_BUCKET = 'travel-selfies'
 
-export async function uploadTravelSelfie(file) {
+function extFor(file) {
+  return file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+}
+
+async function uploadTravelPhoto(file, kind) {
   const id = crypto.randomUUID()
-  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-  const path = `${id}/selfie.${ext}`
+  const path = `${id}/${kind}.${extFor(file)}`
   const { error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).upload(path, file, {
     cacheControl: '3600',
     upsert: false,
@@ -20,7 +23,19 @@ export async function uploadTravelSelfie(file) {
   return path
 }
 
-export async function getTravelSelfieUrl(path, expiresInSeconds = 300) {
+export function uploadTravelSelfie(file) {
+  return uploadTravelPhoto(file, 'selfie')
+}
+
+// Receipt photo for an optional additional expense (toll/lunch/etc) logged alongside a
+// visit — mandatory the moment an expense is entered (enforced server-side, see
+// 0046_travel_expenses_and_summary.sql).
+export function uploadTravelReceipt(file) {
+  return uploadTravelPhoto(file, 'receipt')
+}
+
+// Kind-agnostic — used for both the selfie and, if present, the expense receipt photo.
+export async function getTravelPhotoUrl(path, expiresInSeconds = 300) {
   const { data, error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).createSignedUrl(path, expiresInSeconds)
   if (error) throw error
   return data.signedUrl
@@ -30,10 +45,13 @@ export async function getTravelSelfieUrl(path, expiresInSeconds = 300) {
 // Employee
 // ---------------------------------------------------------------------------
 
-export async function employeeAddTravelVisit(token, empId, { date, lat, lon, accuracyM, siteNote, photoPath }) {
+export async function employeeAddTravelVisit(token, empId, {
+  date, lat, lon, accuracyM, siteNote, photoPath, expenseNote, expenseAmount, expensePhotoPath,
+}) {
   const { data, error } = await supabase.rpc('employee_add_travel_visit', {
     p_token: token, p_emp_id: empId, p_date: date, p_lat: lat, p_lon: lon,
     p_accuracy_m: accuracyM ?? null, p_site_note: siteNote, p_photo_path: photoPath,
+    p_expense_note: expenseNote || null, p_expense_amount: expenseAmount ?? null, p_expense_photo_path: expensePhotoPath || null,
   })
   if (error) throw error
   return rowToTravelVisit(data)
