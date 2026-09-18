@@ -35,6 +35,9 @@ export function rowToEmployee(row) {
     // Punch device binding (plan.md §18) — null = not bound to a device yet.
     punchDeviceId: row.punch_device_id || null,
     punchDeviceBoundAt: row.punch_device_bound_at || null,
+    // Travel Allowance rate tier (plan.md §28) — null = admin hasn't set one yet, so
+    // this employee can't be settled until they do.
+    taRateTier: row.ta_rate_tier || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -327,6 +330,76 @@ export function siteToPayload(site) {
     longitude: site.longitude,
     radiusM: site.radiusM,
     active: site.active,
+  }
+}
+
+// Travel Allowance (plan.md §28)
+
+export function rowToTravelVisit(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    date: row.date,
+    capturedAt: row.captured_at,
+    lat: Number(row.lat),
+    lon: Number(row.lon),
+    accuracyM: row.accuracy_m != null ? Number(row.accuracy_m) : null,
+    siteNote: row.site_note,
+    photoPath: row.photo_path,
+    legDistanceKm: Number(row.leg_distance_km),
+    distanceOverridden: !!row.distance_overridden,
+    overrideReason: row.override_reason,
+  }
+}
+
+export function rowToTravelSummary(row) {
+  if (!row) return { totalKm: 0, visitCount: 0, firstDate: null, lastDate: null }
+  return {
+    totalKm: Number(row.total_km || 0),
+    visitCount: Number(row.visit_count || 0),
+    firstDate: row.first_date,
+    lastDate: row.last_date,
+  }
+}
+
+// admin_get_travel_overview / manager_get_team_travel_summary rows — a summary row per
+// employee, not a single aggregate, so this stays separate from rowToTravelSummary.
+export function rowToTravelOverviewRow(row) {
+  return {
+    empId: row.emp_id,
+    empName: row.emp_name,
+    empNum: row.emp_num,
+    workMode: row.work_mode,
+    taRateTier: row.ta_rate_tier || null,
+    totalKm: Number(row.total_km || 0),
+    visitCount: Number(row.visit_count || 0),
+    firstDate: row.first_date,
+    lastDate: row.last_date,
+  }
+}
+
+export function rowToTravelSettlement(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    totalKm: Number(row.total_km),
+    rateTier: row.rate_tier,
+    ratePerKm: Number(row.rate_per_km),
+    amount: Number(row.amount),
+    approvedByAdmin: row.approved_by_admin,
+    paidAt: row.paid_at,
+  }
+}
+
+export function rowToTaSettings(row) {
+  if (!row) return { managerRatePerKm: 0, executiveRatePerKm: 0 }
+  return {
+    managerRatePerKm: Number(row.manager_rate_per_km || 0),
+    executiveRatePerKm: Number(row.executive_rate_per_km || 0),
   }
 }
 

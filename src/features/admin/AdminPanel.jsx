@@ -9,6 +9,7 @@ import { Reports } from './Reports'
 import { Database } from './Database'
 import { Settings } from './Settings'
 import { Sites } from './Sites'
+import { Travel } from './Travel'
 import { todayIST } from '../../lib/datetime'
 
 const TABS = [
@@ -17,12 +18,13 @@ const TABS = [
   { id: 'leaves', label: 'Leaves' },
   { id: 'employees', label: 'Employees' },
   { id: 'sites', label: 'Sites' },
+  { id: 'travel', label: 'Travel' },
   { id: 'reports', label: 'Reports' },
   { id: 'database', label: 'Database' },
   { id: 'settings', label: 'Settings' },
 ]
 
-export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, onAudit }) {
+export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, onAudit, travel }) {
   const [tab, setTab] = useState('dashboard')
 
   return (
@@ -59,6 +61,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         {tab === 'leaves' && <LeaveApprovals employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
         {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} resetPunchDevice={admin.resetPunchDevice} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} adminEmail={admin.adminEmail} onAudit={onAudit} />}
         {tab === 'sites' && <Sites sites={admin.sites} createSite={admin.createSite} updateSite={admin.updateSite} deleteSite={admin.deleteSite} onAudit={onAudit} />}
+        {tab === 'travel' && <Travel travel={travel} onAudit={onAudit} />}
         {tab === 'reports' && <Reports token={token} employees={admin.employees} stdHours={admin.stdHours} holidays={admin.holidays} onAudit={onAudit} />}
         {tab === 'database' && <Database token={token} employees={admin.employees} attendanceHook={attendanceHook} leaves={admin.leaves} leaveBalances={admin.leaveBalances} auditLogs={admin.auditLogs} />}
         {tab === 'settings' && (

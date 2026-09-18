@@ -2023,6 +2023,119 @@ simultaneous creates (migration 0030's comment) that a unique constraint would t
 loud error instead of a silent duplicate. Flagging for a future pass, not touched here per
 the "don't disturb any working flow" instruction for this fix.
 
+## 28. Travel Allowance (TA) verification — client-visit journey tracking (discussed 2026-09-18)
+
+**Problem statement:** Field and Field+Office staff visit client sites and the company
+pays them travel allowance for the distance covered, but there is currently no way to
+cross-verify a claimed distance is genuine — admin has no evidence beyond the employee's
+own number.
+
+**Options discussed and why the chosen approach was picked:**
+- **True continuous background GPS tracking (the "exact route driven")** — this is what
+  would actually answer "did they really travel that far, by that route," but a website
+  cannot do it reliably: the OS freezes page JS the moment the screen locks or the
+  browser goes to the background, which is most of a real commute (phone in pocket/
+  mount). Same known limitation already documented at §4 risk item 7. Only a properly
+  installed native app with an OS-level background-location permission can do this
+  honestly — that's a separate, longer-term effort running alongside this app, not
+  something to half-build here. Revisit there.
+- **Foreground breadcrumb trail** (frequent pings, like the existing 2-hourly silent
+  tracking but every 1–2 minutes, while the app happens to be open between punch-in and
+  punch-out) — considered and rejected for this pass. It has the same background-tracking
+  ceiling as above (still gaps whenever the screen's off), so it doesn't actually deliver
+  "the exact route," while adding real battery/data cost and more code surface that can
+  go subtly wrong. Not worth it for a partial answer.
+- **Routing-API (real road distance) between checkpoints** — more accurate than a
+  straight line, but a metered, paid external dependency (Mapbox/ORS/Google Directions)
+  with free tiers that cap out as staff grow. Deferred — start with free straight-line
+  distance; only add this if staff actually dispute the calculated number in practice.
+- **Flat "road-factor" multiplier** (straight-line × a constant, to roughly approximate
+  road distance) — considered, rejected. With only ~20 field staff, individual disputes
+  are cheap to resolve one at a time via admin's manual override instead of a blanket
+  correction applied to everyone.
+- **Rejecting a selfie at capture if GPS accuracy is poor** — considered, rejected.
+  Legitimate visits happen anywhere at a site (entry gate, sitting inside, upper floors),
+  where weak GPS accuracy is often just physics (concrete blocks satellite signal), not
+  low effort. Rejecting would block genuine visits, not fake ones. Accuracy is still
+  stored per selfie as passive context, never a gate.
+- **Reusing `employees.designation` to decide the Manager/Executive TA rate** — rejected.
+  That field is messy imported bio-device text (e.g. "Sr. Executive"), unreliable to key
+  a pay rate off. Uses a new, explicit admin-set field instead — same pattern as the
+  existing per-employee `std_hours` override (§16).
+
+### Decisions locked in
+
+| # | Decision |
+|---|---|
+| 1 | **Eligible employees:** Field-tagged and Field+Office-tagged staff only (existing work-mode tags, §6B). Pure office staff don't get this feature |
+| 2 | **Capturing a visit:** camera-only live selfie (no gallery picker — closes off using an old/staged photo), GPS captured at that instant wherever it reads, plus a **mandatory** site/client name text field, saved as one "visit" entry. Only while punched in that day — no backdating |
+| 3 | **Distance:** straight-line (haversine — reuses the existing `haversine_m` used for geofencing). Chain for the day = punch-in location → visit 1 → visit 2 → … → punch-out location, legs summed to a daily total, added to a **running cumulative total per employee** that persists across days until settled |
+| 4 | **No GPS-accuracy gating.** `accuracy_m` is stored with every visit purely as context for admin — verification is a human check: does the typed site name plausibly match the captured location (shown as an address/map pin), and does the resulting distance look right |
+| 5 | **Disputes/corrections:** admin can manually override one leg's calculated distance with a **mandatory reason**, logged for audit. No blanket correction formula |
+| 6 | **Rate tiers:** admin explicitly tags each eligible employee **Manager** or **Executive** (new clean field). **₹/km per tier is admin-configurable from Settings and changeable at any time** — same posture as the admin PIN and other `app_settings` values |
+| 7 | **Settlement:** no formal employee-submitted claim. The running journey (photos, sites, cumulative km) is visible at any time to the employee (their own), their **manager** (read-only, team view — mirrors the existing team location-log visibility), and admin. Admin decides when to settle (typically every 2–3 days): computes total km × the employee's tier rate = amount, marks it paid |
+| 8 | **Retention on settlement:** once a period is marked paid, the heavy data (selfie photos, individual visit rows, the map trail) is **deleted**. One lightweight summary row survives per settlement — employee, date range, total km, rate used, amount, approved by, paid at — as the audit trail if the payment is ever questioned later. Mirrors the retention posture already used for `location_logs` (§4 risk note: 90-day auto-delete) |
+| 9 | **Map/detail view:** staff (their own) and admin/manager (their team's) can open a day's journey as a route line connecting the selfie points; clicking a point shows the photo, captured time, and the site note. New dependency: **Leaflet + OpenStreetMap tiles** (free, no API key — no map library exists in the app today), **lazy-loaded** only when the journey view opens, same posture as the already-lazy-loaded AdminPanel (§26), so it doesn't add weight to the main bundle |
+| 10 | **Explicitly deferred, not built this pass:** routing-API road distance, foreground breadcrumb/continuous tracking, GPS-accuracy-based rejection, road-factor multiplier. All revisit-if-needed — most are properly solved once the native app can do real OS-level background tracking |
+
+### Files touched (planned, not yet built)
+
+- `supabase/migrations/0044_travel_allowance.sql` —
+  - `travel_visits` (id, emp_id, date, captured_at, lat, lon, accuracy_m, site_note,
+    photo_path, leg_distance_km, distance_overridden bool, override_reason text)
+  - `travel_settlements` (id, emp_id, period_start, period_end, total_km, rate_tier,
+    rate_per_km, amount, approved_by_admin, paid_at) — the retained lightweight summary
+  - `employees.ta_rate_tier` (text: `manager` / `executive` / null, admin-set)
+  - `app_settings` additions for the two ₹/km rates
+  - new private storage bucket `travel-selfies` (same pattern as `leave-documents`,
+    image mime types only)
+  - new functions: `employee_add_travel_visit`, `employee_get_today_journey`,
+    `admin_get_employee_journey`, `manager_get_team_journey`,
+    `admin_override_visit_distance`, `admin_set_ta_rate_tier`, `admin_settle_travel_period`
+    (computes total, writes the settlement row, deletes visit rows + bucket files, resets
+    the running cumulative to zero)
+- `package.json` — new `leaflet` dependency (lazy-loaded chunk)
+- `src/hooks/useTravelJourney.js` — employee-side: add-visit selfie flow, today's
+  journey, cumulative total
+- `src/hooks/useAdminTravel.js` (or extend `useAdminData.js`) — admin review, rate-tier
+  assignment, settle action
+- `src/features/employee/...` — "My Journey" section on the employee panel
+- `src/features/admin/Travel.jsx` — per-employee journey review + settlement screen
+- `src/features/manager/...` — read-only team journey view, mirrors the existing team
+  location-log view
+
+### Built, shipped, then security-reviewed (2026-09-18)
+
+Migrations 0044 (the feature above) and 0045 (a same-day fix) are both live on
+production, verified via the same "hash every pre-existing function before/after, abort
+if anything not in this migration's own scope changed" guardrail script used for every
+migration in this project.
+
+A security review (3 candidate findings, independently re-verified against false-positive
+criteria) caught one real issue before calling this done: 0044's `travel-selfies` storage
+bucket had an **anon DELETE policy scoped only by `bucket_id`, no ownership/path check**
+— since this app has no real Supabase Auth (the anon key is public, shipped in the client
+bundle), that policy was the *entire* access check. Anyone holding the public key could
+delete any employee's TA-evidence selfie directly via the Storage API, fully bypassing
+`admin_settle_travel_period`'s admin-token check. The precedent bucket (`leave-documents`,
+0019) never had a delete policy at all — this wasn't a repeat of an already-accepted
+pattern, it was new. **Fixed in 0045:** the anon delete policy is dropped entirely, and
+`admin_settle_travel_period` now deletes the `storage.objects` rows itself, inside the
+same SECURITY DEFINER call that already bypasses `travel_visits`'/`travel_settlements`'
+RLS — no client-side delete capability needed or granted at all. `deleteTravelSelfies()`
+(api/travel.js) and its caller in `useAdminTravel.js`'s `settle()` were removed as
+dead code once the DB did the deletion atomically.
+
+Two other candidate findings were reviewed and ruled out, both because they turned out to
+restate an already-accepted, pre-existing pattern rather than something this PR newly
+introduced: (1) `employee_add_travel_visit` trusting a client-supplied `photo_path` with
+no existence check — identical, unchanged posture to `employee_apply_leave`'s
+`document_path` handling since 0019 (client claims a path in an unguessable-UUID bucket,
+a human reviews the actual file before approving payment/leave — the same mitigating
+control in both cases); (2) the `travel-selfies` SELECT policy permitting bucket
+enumeration — byte-identical policy shape to `leave-documents`' own SELECT policy, not a
+new or wider hole, just a new bucket using the same already-shipped design.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

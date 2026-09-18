@@ -7,9 +7,11 @@ import { LeavePolicy } from './LeavePolicy'
 import { MonthlySummary } from './MonthlySummary'
 import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
+import { MyJourney } from './MyJourney'
 import { TeamPanel } from '../manager/TeamPanel'
 import { statusStyle } from '../../lib/format'
 import { todayIST, explainShortfall, effectiveStdHours, calcStatus } from '../../lib/datetime'
+import { requiresFieldNote } from '../../lib/constants'
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
@@ -18,7 +20,7 @@ export function EmployeeDashboard({
   attendance, todayRecord, stdHours: globalStdHours, adminEmail, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
   holidays, sites, directory, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
-  team, isBirthdayToday, birthdayMessage, myAssets,
+  team, isBirthdayToday, birthdayMessage, myAssets, travel,
 }) {
   // Resolved once here (this employee's own override if set, plan.md §16) and passed
   // down to every child below as `stdHours` — none of them need to know about the
@@ -30,6 +32,7 @@ export function EmployeeDashboard({
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },
     { id: 'overtime', label: 'Overtime' },
+    ...(requiresFieldNote(currentUser.workMode) ? [{ id: 'journey', label: 'My Journey' }] : []),
     { id: 'policy', label: 'Leave Policy' },
     { id: 'assets', label: 'My Assets' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
@@ -101,6 +104,9 @@ export function EmployeeDashboard({
         )}
         {empTab === 'overtime' && (
           <MyOvertime currentUser={currentUser} attendance={attendance} stdHours={stdHours} />
+        )}
+        {empTab === 'journey' && (
+          <MyJourney currentUser={currentUser} attendance={attendance} {...travel} />
         )}
         {empTab === 'policy' && <LeavePolicy />}
         {empTab === 'assets' && <MyAssets assets={myAssets} />}

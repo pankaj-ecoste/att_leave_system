@@ -1,22 +1,42 @@
-import { useState } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { Spinner } from '../../components/ui/Spinner'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { getLeaveDocumentUrl } from '../../api/documents'
+import { getTravelSelfieUrl } from '../../api/travel'
+
+const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
+
+function TravelSelfieThumb({ path }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    getTravelSelfieUrl(path).then(u => { if (!cancelled) setUrl(u) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [path])
+  if (!url) return <div className="w-10 h-10 rounded-lg bg-white/5 shrink-0" />
+  return <img src={url} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+}
 
 // The manager view for anyone with direct reports — appears as a tab inside the
 // employee dashboard (one person can be both), not a separate login.
 export function TeamPanel({
   token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
   teamLocationLogs, teamLocationLoading, loadTeamLocationLogs, globalStdHours,
+  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney,
 }) {
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
   const [locDate, setLocDate] = useState(todayIST())
   const [errMsg, setErrMsg] = useState('')
+  const [expandedTravelEmp, setExpandedTravelEmp] = useState(null)
+  const [travelJourney, setTravelJourney] = useState([])
+  const [travelJourneyLoading, setTravelJourneyLoading] = useState(false)
+  const [showTravelMap, setShowTravelMap] = useState(false)
 
   function selectTab(t) {
     setTab(t)
@@ -24,6 +44,22 @@ export function TeamPanel({
     // P3-15 — the manager's own team's location log, scoped server-side to direct
     // reports only (manager_get_team_location_logs).
     if (t === 'location') loadTeamLocationLogs(locDate)
+    // plan.md §28 — read-only team Travel Allowance view.
+    if (t === 'travel') loadTeamTravelSummary()
+  }
+
+  async function expandTravel(empId) {
+    if (expandedTravelEmp === empId) { setExpandedTravelEmp(null); return }
+    setExpandedTravelEmp(empId)
+    setShowTravelMap(false)
+    setTravelJourneyLoading(true)
+    try {
+      setTravelJourney(await loadTeamTravelJourney(empId))
+    } catch (err) {
+      setErrMsg(err.message)
+    } finally {
+      setTravelJourneyLoading(false)
+    }
   }
 
   async function handleDecide(fn, id, status) {
@@ -69,7 +105,7 @@ export function TeamPanel({
         </div>
         {errMsg && <p className="text-red-400 text-xs mb-3">{errMsg}</p>}
         <div className="flex gap-2 mb-4 flex-wrap">
-          {[['requests', 'Requests'], ['attendance', 'Attendance'], ['location', 'Location'], ['members', 'Members']].map(([t, l]) => (
+          {[['requests', 'Requests'], ['attendance', 'Attendance'], ['location', 'Location'], ['travel', 'Travel'], ['members', 'Members']].map(([t, l]) => (
             <button key={t} onClick={() => selectTab(t)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${tab === t ? 'bg-indigo-600/30 border-indigo-500/40 text-white' : 'bg-white/5 border-white/10 text-white/50'}`}>{l}</button>
           ))}
         </div>
@@ -214,6 +250,64 @@ export function TeamPanel({
                     </tr>
                   ))}</tbody>
                 </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'travel' && (
+          <>
+            {teamTravelSummary.length === 0 ? (
+              <p className="text-white/30 text-sm text-center py-8">{teamTravelLoading ? 'Loading...' : 'No Field / Office+Field staff on your team'}</p>
+            ) : (
+              <div className="space-y-2">
+                {teamTravelSummary.map(row => (
+                  <div key={row.empId} className="border border-white/10 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 p-3 bg-white/5 flex-wrap">
+                      <div className="flex-1 min-w-[140px]">
+                        <p className="text-white font-medium text-sm">{row.empName}</p>
+                        <p className="text-white/30 text-xs">{row.taRateTier ? row.taRateTier[0].toUpperCase() + row.taRateTier.slice(1) : 'No tier set'}</p>
+                      </div>
+                      <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km</p>
+                      <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
+                      <Button variant="secondary" className="text-xs" onClick={() => expandTravel(row.empId)}>
+                        {expandedTravelEmp === row.empId ? 'Hide' : 'View'}
+                      </Button>
+                    </div>
+                    {expandedTravelEmp === row.empId && (
+                      <div className="p-3 border-t border-white/10">
+                        {travelJourneyLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
+                          <>
+                            {travelJourney.length > 0 && (
+                              <button className="text-indigo-400 text-xs underline underline-offset-2 mb-2" onClick={() => setShowTravelMap(!showTravelMap)}>
+                                {showTravelMap ? 'Hide map' : 'View map'}
+                              </button>
+                            )}
+                            {showTravelMap && (
+                              <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
+                                <div className="mb-3">
+                                  <JourneyMap points={travelJourney.map(v => ({ id: v.id, lat: v.lat, lon: v.lon, label: v.siteNote, kind: 'visit' }))} />
+                                </div>
+                              </Suspense>
+                            )}
+                            <div className="space-y-2">
+                              {travelJourney.map(v => (
+                                <div key={v.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
+                                  <TravelSelfieThumb path={v.photoPath} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white text-sm truncate">{v.siteNote}</p>
+                                    <p className="text-white/30 text-xs">{v.date} {new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km</p>
+                                  </div>
+                                </div>
+                              ))}
+                              {travelJourney.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </>

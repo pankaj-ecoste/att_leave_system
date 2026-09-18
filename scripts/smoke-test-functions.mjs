@@ -117,6 +117,21 @@ const CALLS = [
   // excluded from this list) — only the two read-only admin RPCs are smoke-tested here.
   ['admin_get_leave_accruals', { p_token: FAKE_UUID }],
   ['admin_get_comp_off_payouts', { p_token: FAKE_UUID }],
+  // Travel Allowance (plan.md §28, 0044_travel_allowance.sql).
+  ['employee_add_travel_visit', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_date: TODAY, p_lat: 0, p_lon: 0, p_accuracy_m: 10, p_site_note: 'test', p_photo_path: 'test/selfie.jpg' }],
+  ['employee_get_travel_journey', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['employee_get_travel_summary', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['employee_get_travel_settlements', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['manager_get_team_travel_summary', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID }],
+  ['manager_get_team_travel_journey', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_get_travel_overview', { p_token: FAKE_UUID }],
+  ['admin_get_employee_travel_journey', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_get_travel_settlements', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_set_ta_rate_tier', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_tier: 'manager' }],
+  ['admin_get_ta_settings', { p_token: FAKE_UUID }],
+  ['admin_update_ta_settings', { p_token: FAKE_UUID, p_manager_rate: 10, p_executive_rate: 8 }],
+  ['admin_override_travel_visit_distance', { p_token: FAKE_UUID, p_visit_id: FAKE_UUID, p_new_km: 5, p_reason: 'test' }],
+  ['admin_settle_travel_period', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
 ]
 
 async function main() {

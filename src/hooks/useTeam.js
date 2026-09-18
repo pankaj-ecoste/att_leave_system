@@ -3,6 +3,7 @@ import { employeeGetMyTeam } from '../api/employees'
 import { managerGetTeamLeaves, managerDecideLeave as apiManagerDecideLeave } from '../api/leave'
 import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideRegularization as apiManagerDecideReg } from '../api/attendance'
 import { managerGetTeamLocationLogs } from '../api/location'
+import { managerGetTeamTravelSummary, managerGetTeamTravelJourney } from '../api/travel'
 
 // "My Team" — appears automatically for anyone with direct reports (the manager view
 // lives inside the employee dashboard, not a separate login, since one person is both).
@@ -14,6 +15,9 @@ export function useTeam(token, empId, onAudit) {
   const [teamLoading, setTeamLoading] = useState(false)
   const [teamLocationLogs, setTeamLocationLogs] = useState([])
   const [teamLocationLoading, setTeamLocationLoading] = useState(false)
+  // plan.md §28 — read-only team Travel Allowance view.
+  const [teamTravelSummary, setTeamTravelSummary] = useState([])
+  const [teamTravelLoading, setTeamTravelLoading] = useState(false)
 
   useEffect(() => {
     if (!token || !empId) {
@@ -59,6 +63,21 @@ export function useTeam(token, empId, onAudit) {
     }
   }
 
+  async function loadTeamTravelSummary() {
+    try {
+      setTeamTravelLoading(true)
+      setTeamTravelSummary(await managerGetTeamTravelSummary(token, empId))
+    } catch (e) {
+      console.error('loadTeamTravelSummary:', e)
+    } finally {
+      setTeamTravelLoading(false)
+    }
+  }
+
+  async function loadTeamTravelJourney(memberEmpId) {
+    return managerGetTeamTravelJourney(token, empId, memberEmpId)
+  }
+
   async function decideLeave(leaveId, status) {
     try {
       // Trust the server's returned row rather than the status passed in — it carries
@@ -84,5 +103,6 @@ export function useTeam(token, empId, onAudit) {
   return {
     myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
     teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
+    teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney,
   }
 }

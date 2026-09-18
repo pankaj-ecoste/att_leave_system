@@ -10,8 +10,10 @@ import { useEmployeeLeave } from './hooks/useEmployeeLeave'
 import { useEmployeeBirthday } from './hooks/useEmployeeBirthday'
 import { useEmployeeAssets } from './hooks/useEmployeeAssets'
 import { useTeam } from './hooks/useTeam'
+import { useTravelJourney } from './hooks/useTravelJourney'
 import { useAdminAttendance } from './hooks/useAdminAttendance'
 import { useAdminData } from './hooks/useAdminData'
+import { useAdminTravel } from './hooks/useAdminTravel'
 import { useLeaveBalanceImport } from './hooks/useLeaveBalanceImport'
 import { useAutoRefresh } from './hooks/useAutoRefresh'
 
@@ -40,10 +42,12 @@ export default function App() {
   const isBirthdayToday = useEmployeeBirthday(auth.employeeToken, auth.currentUser?.id)
   const myAssets = useEmployeeAssets(auth.employeeToken, auth.currentUser?.id)
   const team = useTeam(auth.employeeToken, auth.currentUser?.id)
+  const travel = useTravelJourney(auth.employeeToken, auth.currentUser?.id)
 
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
   const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail, auth.birthdayMessage, auth.setBirthdayMessage)
   const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
+  const adminTravel = useAdminTravel(auth.adminToken)
   const updatingToLatest = useAutoRefresh(empAttendance.isPunching)
 
   // Resolve a remembered session (localStorage "remember me") once the directory has
@@ -77,6 +81,7 @@ export default function App() {
             admin={admin}
             attendanceHook={adminAttendance}
             imports={{ leaveBalance: leaveBalanceImport }}
+            travel={adminTravel}
           />
         </Suspense>
       </ErrorBoundary>
@@ -119,7 +124,10 @@ export default function App() {
             teamAttn: team.teamAttn, teamLoading: team.teamLoading, loadTeamAttendance: team.loadTeamAttendance,
             teamLocationLogs: team.teamLocationLogs, teamLocationLoading: team.teamLocationLoading, loadTeamLocationLogs: team.loadTeamLocationLogs,
             decideLeave: team.decideLeave, decideRegularization: team.decideRegularization,
+            teamTravelSummary: team.teamTravelSummary, teamTravelLoading: team.teamTravelLoading,
+            loadTeamTravelSummary: team.loadTeamTravelSummary, loadTeamTravelJourney: team.loadTeamTravelJourney,
           }}
+          travel={travel}
         />
       </ErrorBoundary>
     )
