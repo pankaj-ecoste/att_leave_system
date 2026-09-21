@@ -2170,6 +2170,44 @@ too. Fixed with `coalesce(..., '{}'::text[])` on both sides before concatenating
 verified with a standalone SQL check in the apply script before trusting it against real
 data.
 
+## 29. Reports silently dropped 1 Sep — Supabase's hidden 1000-row cap (HR-reported 2026-09-21)
+
+**Symptom:** staff/admin screens showed 1 Sep correctly, but every downloaded report was
+missing most of 1 Sep's rows.
+
+**Root cause:** Supabase's API caps ONE response at ~1000 rows ("max rows"), silently, no
+matter what `p_limit` the client sends — so `limit: 100000` was never honoured.
+`admin_get_attendance` sorts newest-date-first, September had 1,054 rows (~60/day), so the
+1000 quota was filled by 21 Sep → 2 Sep and the last 54 rows — all 1 Sep (only 5 of its 59
+survived) — were cut. Verified read-only against the live DB. It was a time bomb: it
+appeared the day the month crossed ~1000 rows and would have eaten one more day every
+day, then recurred every month from ~day 17.
+
+**Fix (permanent, three parts):**
+1. `src/lib/paging.js` `fetchAllPages` — asks for the next batch until the DB returns an
+   empty batch (or the caller's `limit` total is reached). Advances by rows *actually
+   received* and stops only on an *empty* batch — a short batch is exactly what a capped
+   server returns, so "short = done" would re-introduce the bug. `limit` now means "total
+   rows wanted", not "one request's size".
+2. Wired into `adminFetchAttendance`, `adminFetchLeaves`, `adminFetchLeaveBalances`
+   (`src/api/`). Leave balances had 840 rows — 160 from hitting the same cap; leaves 249.
+3. Migration `0047` — sort tiebreakers (`a.emp_id` on attendance, `id` on leaves) so batched
+   LIMIT/OFFSET can't duplicate or skip a row when two rows tie on the sort key. Applied via
+   `scripts/apply-0047-stable-sort-for-paged-admin-reads.mjs` (full-replay is broken, §13).
+
+**Checked and safe (no change):** `admin_get_all_location_logs` (max 113 rows/day),
+`admin_get_leave_accruals` and audit logs (deliberate "most recent 500"),
+`employee_get_attendance`/`manager_get_team_attendance` (one person / one team, one month).
+
+**Tests:** `src/lib/paging.test.js` simulates a server that clamps every response to N rows
+(1054-row case, cap smaller than page size, exact multiples, `limit`, offset, errors).
+Also ran the real paging code against the live September data with a 1000-row cap:
+1,054 fetched, 1,054 distinct, 59 for 1 Sep.
+
+**Rule going forward:** never call an `admin_get_*` list RPC directly with a big
+`p_limit` from the client — go through a `fetchAllPages`-wrapped function. Any NEW
+"fetch everything for a range" RPC needs a total (unique) ORDER BY.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

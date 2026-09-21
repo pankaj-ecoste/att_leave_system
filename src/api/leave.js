@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllPages } from '../lib/paging'
 import { rowToLeave, rowToLeaveBalance, rowToLeaveAccrual, rowToCompOffPayout } from './mappers'
 
 // ---------------------------------------------------------------------------
@@ -80,17 +81,22 @@ export async function managerDecideLeave(token, managerId, leaveId, status) {
 // Admin — paginated per plan.md §8B (old admin_get_all_leaves returned every row)
 // ---------------------------------------------------------------------------
 
+// `limit` = total rows wanted, fetched in batches (Supabase caps one request at ~1000
+// rows regardless of p_limit — see lib/paging.js, plan.md §29).
 export async function adminFetchLeaves(token, { status, from, to, limit = 500, offset = 0 } = {}) {
-  const { data, error } = await supabase.rpc('admin_get_leaves', {
-    p_token: token,
-    p_status: status || null,
-    p_from: from || null,
-    p_to: to || null,
-    p_limit: limit,
-    p_offset: offset,
-  })
-  if (error) throw error
-  return (data || []).map(rowToLeave)
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_leaves', {
+      p_token: token,
+      p_status: status || null,
+      p_from: from || null,
+      p_to: to || null,
+      p_limit: count,
+      p_offset: start,
+    })
+    if (error) throw error
+    return page
+  }, { limit, offset })
+  return data.map(rowToLeave)
 }
 
 export async function adminDecideLeave(token, leaveId, decision) {
@@ -103,14 +109,19 @@ export async function adminDecideLeave(token, leaveId, decision) {
   return rowToLeave(data)
 }
 
+// Same batching as adminFetchLeaves. 840 rows today (2026-09-21) — close enough to the
+// ~1000 cap that a handful of new hires would have silently truncated it.
 export async function adminFetchLeaveBalances(token, { financialYear, limit = 1000, offset = 0 } = {}) {
-  const { data, error } = await supabase.rpc('admin_get_leave_balances', {
-    p_token: token,
-    p_financial_year: financialYear || null,
-    p_limit: limit,
-    p_offset: offset,
-  })
-  if (error) throw error
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_leave_balances', {
+      p_token: token,
+      p_financial_year: financialYear || null,
+      p_limit: count,
+      p_offset: start,
+    })
+    if (error) throw error
+    return page
+  }, { limit, offset })
   return leaveBalanceMap(data)
 }
 

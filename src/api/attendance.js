@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllPages } from '../lib/paging'
 import { rowToAttendance, attendanceToRow, attendanceToBulkRow, attnKey, rowToRegularization } from './mappers'
 
 // ---------------------------------------------------------------------------
@@ -40,19 +41,25 @@ export async function employeePunch(token, empId, record, deviceId) {
 // row in the table with no limit; at 300 staff that's ~109,500 rows/year in one call).
 // ---------------------------------------------------------------------------
 
+// `limit` is the most rows the caller wants IN TOTAL — not one request's size. Supabase
+// caps a single request at ~1000 rows no matter what p_limit says, so this fetches in
+// batches via fetchAllPages (plan.md §29). Never call the RPC directly with a big limit.
 export async function adminFetchAttendance(token, { from, to, company, empId, limit = 500, offset = 0 } = {}) {
-  const { data, error } = await supabase.rpc('admin_get_attendance', {
-    p_token: token,
-    p_from: from || null,
-    p_to: to || null,
-    p_company: company || null,
-    p_emp_id: empId || null,
-    p_limit: limit,
-    p_offset: offset,
-  })
-  if (error) throw error
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_attendance', {
+      p_token: token,
+      p_from: from || null,
+      p_to: to || null,
+      p_company: company || null,
+      p_emp_id: empId || null,
+      p_limit: count,
+      p_offset: start,
+    })
+    if (error) throw error
+    return page
+  }, { limit, offset })
   const map = {}
-  for (const row of data || []) {
+  for (const row of data) {
     const rec = rowToAttendance(row)
     map[attnKey(rec.empId, rec.date)] = rec
   }
