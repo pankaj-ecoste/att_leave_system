@@ -80,7 +80,7 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
               // period, partial-leave credit, work-window forgiveness, ...) would
               // otherwise never reach a day that was already punched (plan.md §15.2 —
               // this used to require a fresh one-off backfill script every single time
-              // that logic changed, e.g. scripts/backfill-status-after-std-hours-change.mjs).
+              // that logic changed, e.g. scripts/data-fixes/backfill-status-after-std-hours-change.mjs).
               const st = isPlaceholder ? rec.status : calcStatus(rec, stdHours, rec.dayType)
               const shortfallNote = isPlaceholder ? null : explainShortfall(rec, stdHours)
               return (

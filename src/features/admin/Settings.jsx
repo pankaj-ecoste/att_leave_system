@@ -108,7 +108,7 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         <Input type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" className="mb-2 tracking-widest" value={confirmPin} onChange={e => setConfirmPin(e.target.value)} placeholder="Re-enter new PIN" />
         {pinMsg && <div className={`rounded-xl p-2.5 mb-3 text-sm ${pinMsg.startsWith('PIN updated') ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>{pinMsg}</div>}
         <Button className="text-xs" onClick={changePin}>Update PIN</Button>
-        <p className="text-white/20 text-xs mt-3">Forgotten the PIN entirely? Ask your developer to run <code className="text-white/40">scripts/reset-admin-pin.mjs</code> against the database directly — it's the documented recovery path since there's a single shared admin PIN, not individual admin accounts.</p>
+        <p className="text-white/20 text-xs mt-3">Forgotten the PIN entirely? Ask your developer to run <code className="text-white/40">scripts/setup/reset-admin-pin.mjs</code> against the database directly — it's the documented recovery path since there's a single shared admin PIN, not individual admin accounts.</p>
       </Card>
 
       <Card>
