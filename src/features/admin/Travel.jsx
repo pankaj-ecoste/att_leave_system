@@ -7,9 +7,8 @@ import { Spinner } from '../../components/ui/Spinner'
 import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { adminFetchAttendance } from '../../api/attendance'
-import { attnKey } from '../../api/mappers'
+import { dayPoints, effectiveLegKm, effectiveReturnLegKm } from '../../lib/travelPoints'
 import { haversineMeters } from '../../lib/geo'
-import { dayPoints } from '../../lib/travelPoints'
 import { todayIST } from '../../lib/datetime'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
@@ -24,10 +23,15 @@ function groupByDate(journey) {
   return Object.keys(byDate).sort()
 }
 
+const SOURCE_LABELS = { routed: 'Road distance', estimated: 'Estimate (straight-line)', adjusted: 'Manually adjusted' }
+
 // Day-wise Punch In -> visits -> Punch Out, then a cumulative summary sheet — same
 // lightweight xlsx pattern Reports.jsx already uses for plain tabular exports
 // (json_to_sheet, not the styled exceljs path). Mirrors exactly what the on-screen
 // TravelDayChain and the map show, so the report never looks like a different feature.
+// Distance column uses the same effective-distance priority as the screen: a manual
+// adjustment wins, then the refined road distance once available, else the original
+// instant straight-line estimate — the Source column says plainly which one it is.
 function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
   const rows = []
   let totalKm = 0
@@ -37,23 +41,25 @@ function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
     const visits = journeyByDate[date]
     const record = attnByDate[date]
     if (record?.inTime) {
-      rows.push({ Date: date, Time: record.inTime, Type: 'Punch In', 'Site / Client': record.inLocation || '', 'Distance (km)': '', 'Expense Note': '', 'Expense Amount (₹)': '' })
+      rows.push({ Date: date, Time: record.inTime, Type: 'Punch In', 'Site / Client': record.inLocation || '', 'Distance (km)': '', Source: '', 'Expense Note': '', 'Expense Amount (₹)': '' })
     }
     let lastLat = record?.inLat, lastLon = record?.inLon
     for (const v of visits) {
+      const leg = effectiveLegKm(v)
       rows.push({
         Date: date, Time: new Date(v.capturedAt).toLocaleTimeString(), Type: 'Visit', 'Site / Client': v.siteNote,
-        'Distance (km)': v.legDistanceKm.toFixed(2), 'Expense Note': v.expenseNote || '',
+        'Distance (km)': leg.km.toFixed(2), Source: SOURCE_LABELS[leg.source], 'Expense Note': v.expenseNote || '',
         'Expense Amount (₹)': v.expenseAmount != null ? v.expenseAmount.toFixed(2) : '',
       })
-      totalKm += v.legDistanceKm
+      totalKm += leg.km
       totalExpense += v.expenseAmount || 0
       lastLat = v.lat; lastLon = v.lon
     }
     if (record?.outTime) {
-      const returnKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
-      rows.push({ Date: date, Time: record.outTime, Type: 'Punch Out', 'Site / Client': record.outLocation || '', 'Distance (km)': returnKm.toFixed(2), 'Expense Note': '', 'Expense Amount (₹)': '' })
-      totalKm += returnKm
+      const fallbackKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
+      const returnLeg = effectiveReturnLegKm(record, fallbackKm)
+      rows.push({ Date: date, Time: record.outTime, Type: 'Punch Out', 'Site / Client': record.outLocation || '', 'Distance (km)': returnLeg.km.toFixed(2), Source: SOURCE_LABELS[returnLeg.source], 'Expense Note': '', 'Expense Amount (₹)': '' })
+      totalKm += returnLeg.km
     }
   }
 
@@ -78,18 +84,33 @@ function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
 // file, own hook (useAdminTravel) — nothing existing here was touched to add this tab
 // (plan.md §28, "do not alter any running function").
 export function Travel({ token, travel, onAudit }) {
-  const { overview, taSettings, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements, overrideDistance, settle } = travel
+  const {
+    overview, taSettings, orsKeyStatus, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overrideDistance, refineDistances, setOrsApiKey, settle, reload,
+  } = travel
   const [rateForm, setRateForm] = useState(null)
+  const [orsKeyInput, setOrsKeyInput] = useState(null)
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
   const [attnByDate, setAttnByDate] = useState({})
   const [settlements, setSettlements] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
+  const [refining, setRefining] = useState(false)
   const [showMap, setShowMap] = useState(false)
   const [mapDate, setMapDate] = useState(null)
   const [overrideVisit, setOverrideVisit] = useState(null)
   const [viewerUrl, setViewerUrl] = useState(null)
   const [msg, setMsg] = useState('')
+
+  async function fetchAttnByDate(empId, from, to) {
+    const attn = await adminFetchAttendance(token, { empId, from, to })
+    const byDate = {}
+    for (const [key, rec] of Object.entries(attn)) {
+      const [, date] = key.split('_')
+      byDate[date] = rec
+    }
+    return byDate
+  }
 
   async function expand(row) {
     if (expandedEmp === row.empId) { setExpandedEmp(null); return }
@@ -103,13 +124,7 @@ export function Travel({ token, travel, onAudit }) {
       setJourney(j)
       setSettlements(s)
       if (row.firstDate && row.lastDate) {
-        const attn = await adminFetchAttendance(token, { empId: row.empId, from: row.firstDate, to: row.lastDate })
-        const byDate = {}
-        for (const [key, rec] of Object.entries(attn)) {
-          const [, date] = key.split('_')
-          byDate[date] = rec
-        }
-        setAttnByDate(byDate)
+        setAttnByDate(await fetchAttnByDate(row.empId, row.firstDate, row.lastDate))
       } else {
         setAttnByDate({})
       }
@@ -118,6 +133,30 @@ export function Travel({ token, travel, onAudit }) {
     } finally {
       setDetailLoading(false)
     }
+
+    // Best-effort road-distance refinement (plan.md §28 follow-up) — runs after the
+    // instant estimates are already on screen, so opening Review never waits on an
+    // external service. If it refines anything, re-pull the journey/attendance/overview
+    // so the more accurate numbers replace the estimates without a manual refresh.
+    if (orsKeyStatus.isSet && row.firstDate && row.lastDate) {
+      setRefining(true)
+      try {
+        const count = await refineDistances(row.empId)
+        if (count > 0) {
+          const [j2, attn2] = await Promise.all([
+            loadEmployeeJourney(row.empId),
+            fetchAttnByDate(row.empId, row.firstDate, row.lastDate),
+          ])
+          setJourney(j2)
+          setAttnByDate(attn2)
+          await reload()
+        }
+      } catch (e) {
+        console.error('refineDistances:', e)
+      } finally {
+        setRefining(false)
+      }
+    }
   }
 
   async function saveRates() {
@@ -125,6 +164,16 @@ export function Travel({ token, travel, onAudit }) {
       await updateRates(Number(rateForm.managerRatePerKm), Number(rateForm.executiveRatePerKm))
       onAudit?.('TA_RATES_UPDATED', 'Travel Allowance rates updated', 'admin')
       setRateForm(null)
+    } catch (e) {
+      setMsg(e.message)
+    }
+  }
+
+  async function saveOrsKey() {
+    try {
+      await setOrsApiKey(orsKeyInput.trim())
+      onAudit?.('ORS_API_KEY_UPDATED', orsKeyInput.trim() ? 'Road-routing key set' : 'Road-routing key cleared', 'admin')
+      setOrsKeyInput(null)
     } catch (e) {
       setMsg(e.message)
     }
@@ -210,6 +259,35 @@ export function Travel({ token, travel, onAudit }) {
       </Card>
 
       <Card>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-white font-semibold">Road Distance (routing)</h3>
+            <p className="text-white/30 text-xs mt-1">
+              The straight-line estimate can undercount real road distance by a lot in a city — this fills in the actual routed
+              distance via OpenRouteService whenever you open Review, before you settle. Free key at openrouteservice.org (no card needed).
+            </p>
+          </div>
+          {orsKeyInput == null && <Button variant="secondary" className="text-xs whitespace-nowrap" onClick={() => setOrsKeyInput('')}>{orsKeyStatus.isSet ? 'Update Key' : 'Set Key'}</Button>}
+        </div>
+        {orsKeyInput != null ? (
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+            <Label>OpenRouteService API Key</Label>
+            <Input type="password" autoFocus value={orsKeyInput} onChange={e => setOrsKeyInput(e.target.value)} placeholder="Paste your ORS API key" />
+            <div className="flex gap-2 mt-2">
+              <Button className="text-xs" onClick={saveOrsKey}>Save</Button>
+              <Button variant="secondary" className="text-xs" onClick={() => setOrsKeyInput(null)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm">
+            {orsKeyStatus.isSet
+              ? <span className="text-emerald-400">Configured — road distances refine automatically on Review</span>
+              : <span className="text-white/40">Not configured — showing the instant straight-line estimate only</span>}
+          </p>
+        )}
+      </Card>
+
+      <Card>
         <h3 className="text-white font-semibold mb-3">Field Staff Journeys</h3>
         {msg && <p className="text-red-400 text-xs mb-3">{msg}</p>}
         {loading && overview.length === 0 ? (
@@ -252,6 +330,7 @@ export function Travel({ token, travel, onAudit }) {
                           <Button variant="secondary" className="text-xs" disabled={journey.length === 0} onClick={() => download(row)}>
                             ⬇ Download Report
                           </Button>
+                          {refining && <span className="text-indigo-300 text-xs">Refining road distances...</span>}
                         </div>
                         {dates.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
                         {dates.map(date => {
@@ -280,7 +359,7 @@ export function Travel({ token, travel, onAudit }) {
                                 attendanceRecord={record}
                                 onOpenPhoto={setViewerUrl}
                                 renderVisitExtra={v => (
-                                  <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: v.legDistanceKm, reason: '' })}>Adjust</Button>
+                                  <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: effectiveLegKm(v).km, reason: '' })}>Adjust</Button>
                                 )}
                               />
                             </div>

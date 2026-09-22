@@ -152,6 +152,29 @@ export async function adminOverrideTravelVisitDistance(token, visitId, newKm, re
   return rowToTravelVisit(data)
 }
 
+// plan.md §28 follow-up — road-distance refinement (real accuracy fix after the
+// straight-line estimate came in ~30% short vs Google Maps on a real trip). Best-effort:
+// returns how many legs it managed to refine, never throws for an individual leg
+// failing (the server-side function already swallows those).
+export async function adminRefineTravelDistances(token, empId) {
+  const { data, error } = await supabase.rpc('admin_refine_travel_distances', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return data
+}
+
+// The ORS API key itself is never returned by any function — only whether one is set.
+export async function adminGetOrsApiKeyStatus(token) {
+  const { data, error } = await supabase.rpc('admin_get_ors_api_key_status', { p_token: token })
+  if (error) throw error
+  const row = data?.[0]
+  return { isSet: !!row?.is_set, updatedAt: row?.updated_at || null }
+}
+
+export async function adminSetOrsApiKey(token, key) {
+  const { error } = await supabase.rpc('admin_set_ors_api_key', { p_token: token, p_key: key })
+  if (error) throw error
+}
+
 // Settles the employee's whole current open period. The photos are deleted server-side
 // inside the RPC itself (0045_travel_selfies_delete_policy_fix.sql) — there is no anon
 // delete policy on the bucket, so the client never has (or needs) the ability to remove

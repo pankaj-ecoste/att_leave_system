@@ -133,6 +133,9 @@ const CALLS = [
   ['admin_update_ta_settings', { p_token: FAKE_UUID, p_manager_rate: 10, p_executive_rate: 8 }],
   ['admin_override_travel_visit_distance', { p_token: FAKE_UUID, p_visit_id: FAKE_UUID, p_new_km: 5, p_reason: 'test' }],
   ['admin_settle_travel_period', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_refine_travel_distances', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_set_ors_api_key', { p_token: FAKE_UUID, p_key: 'test' }],
+  ['admin_get_ors_api_key_status', { p_token: FAKE_UUID }],
 ]
 
 async function main() {

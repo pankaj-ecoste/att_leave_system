@@ -18,3 +18,24 @@ export function dayPoints(dateVisits, attendanceRecord) {
   }
   return points
 }
+
+// plan.md §28 follow-up (2026-09-22) — which distance number to actually show for one
+// visit's leg. A human override always wins (admin already looked at this one and
+// corrected it); otherwise prefer the refined road distance once admin's review has
+// computed it; the original instant straight-line estimate is always there as the
+// fallback until then. `source` drives a small badge so it's never ambiguous which
+// kind of number someone's looking at.
+export function effectiveLegKm(visit) {
+  if (visit.distanceOverridden) return { km: visit.legDistanceKm, source: 'adjusted' }
+  if (visit.roadLegKm != null) return { km: visit.roadLegKm, source: 'routed' }
+  return { km: visit.legDistanceKm, source: 'estimated' }
+}
+
+// Same idea for the day's last-visit -> punch-out leg, which isn't its own row —
+// `clientFallbackKm` is the haversine distance the caller already computed for display
+// before a refine has ever run (mirrors the server's own fallback in
+// travel_summary_for_employee so the two never disagree).
+export function effectiveReturnLegKm(attendanceRecord, clientFallbackKm) {
+  if (attendanceRecord?.travelReturnRoadKm != null) return { km: attendanceRecord.travelReturnRoadKm, source: 'routed' }
+  return { km: clientFallbackKm, source: 'estimated' }
+}

@@ -2241,6 +2241,53 @@ copies into `src/lib/travelPoints.js` — deliberately NOT re-exported from
 ever reached via a lazy `import()`; sharing the helper from there would have dragged
 Leaflet back into the main bundle for every screen that just needed the point list.
 
+## 31. Travel Allowance — real road distance, not just straight-line (2026-09-22)
+
+**Trigger:** Puneet Sharma's punch-in → Supernova leg showed 10.7km in the app; Google
+Maps shows ~15km for the same trip. Exactly the risk flagged when this feature was first
+discussed (plan.md §28) — straight-line distance is always ≤ real road distance, and can
+be off by a lot in a city. With real evidence of a ~30% gap, decided to fix it at the
+source (real road-routing) rather than lean on admin manually adjusting every leg.
+
+**Design — instant capture stays instant, accuracy comes later:** the employee's save
+flow is completely untouched — still haversine at insert time, no external call, can't
+fail or slow down on a weak field connection. A **refinement** runs separately, only
+when admin opens Review (before settling), calling OpenRouteService's routing API
+server-side (same posture as `reverse_geocode`, 0005 — an external call that's a
+convenience, never something that can break the main flow; catches any failure and just
+leaves the estimate in place). A human override (Adjust) always wins over both.
+
+**New in migration 0048:**
+- `travel_visits.road_leg_km` / `attendance.travel_return_road_km` — nullable, null =
+  "not refined yet, still the instant estimate." Both non-breaking column additions.
+- `road_distance_km()` — the actual ORS call, internal only, returns null on any
+  failure (no key configured, network error, bad response — all the same "just don't
+  refine this one" outcome).
+- `admin_refine_travel_distances(token, empId)` — batch-fills every still-null,
+  not-manually-adjusted leg for one employee's open journey; safe to call repeatedly
+  (only touches what's still null).
+- `travel_summary_for_employee` updated in place (same output columns, no drop needed):
+  priority is manual override → refined road distance → original estimate.
+- The ORS API key is stored server-side only (`travel_routing_settings`, no anon table
+  grants at all) and is **never returned by any function**, even to admin — only
+  whether one is set (`admin_get_ors_api_key_status`) — the first external API key this
+  app has needed to store, so started the "don't expose it even to the legitimate
+  operator's own network tab" habit here.
+
+Verified with real production data before considering this done: with no key
+configured, `travel_summary_for_employee(Puneet)` returned the exact same 19.7299...km
+as before the migration — confirms zero behavioural change until admin actually sets a
+key, so this was safe to deploy immediately rather than wait on getting one.
+
+**Frontend:** admin's Travel tab gets a "Road Distance (routing)" card to set/update the
+key (never shows it back once saved); opening Review triggers a best-effort refine, and
+`TravelDayChain` now shows a small label on every distance — *road distance* (refined),
+*~ estimate* (still straight-line), or *adjusted* (a human corrected it) — so it's never
+ambiguous which kind of number someone's looking at. The downloadable report gained the
+same Source column. `effectiveLegKm()`/`effectiveReturnLegKm()` (`lib/travelPoints.js`)
+are the one place that decides the priority, used by the on-screen chain, the map-day
+total, and the report alike, so they can't drift apart.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

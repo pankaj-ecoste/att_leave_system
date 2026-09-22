@@ -3,6 +3,7 @@ import {
   adminGetTravelOverview, adminGetEmployeeTravelJourney, adminGetTravelSettlements,
   adminSetTaRateTier, adminGetTaSettings, adminUpdateTaSettings,
   adminOverrideTravelVisitDistance, adminSettleTravelPeriod,
+  adminRefineTravelDistances, adminGetOrsApiKeyStatus, adminSetOrsApiKey,
 } from '../api/travel'
 
 // plan.md §28 — admin side of Travel Allowance. Deliberately its own hook, not folded
@@ -11,18 +12,21 @@ import {
 export function useAdminTravel(token) {
   const [overview, setOverview] = useState([])
   const [taSettings, setTaSettings] = useState({ managerRatePerKm: 0, executiveRatePerKm: 0 })
+  const [orsKeyStatus, setOrsKeyStatus] = useState({ isSet: false, updatedAt: null })
   const [loading, setLoading] = useState(false)
 
   const reload = useCallback(async () => {
     if (!token) return
     try {
       setLoading(true)
-      const [ov, settings] = await Promise.all([
+      const [ov, settings, keyStatus] = await Promise.all([
         adminGetTravelOverview(token),
         adminGetTaSettings(token),
+        adminGetOrsApiKeyStatus(token),
       ])
       setOverview(ov)
       setTaSettings(settings)
+      setOrsKeyStatus(keyStatus)
     } catch (e) {
       console.error('loadTravelOverview:', e)
     } finally {
@@ -57,6 +61,18 @@ export function useAdminTravel(token) {
     return adminOverrideTravelVisitDistance(token, visitId, newKm, reason)
   }
 
+  // Best-effort — returns how many legs it managed to refine. Never throws for a
+  // single leg failing (server already swallows those); a genuine token/network
+  // failure still surfaces so the caller can show it.
+  async function refineDistances(empId) {
+    return adminRefineTravelDistances(token, empId)
+  }
+
+  async function setOrsApiKey(key) {
+    await adminSetOrsApiKey(token, key)
+    setOrsKeyStatus(await adminGetOrsApiKeyStatus(token))
+  }
+
   // Settlement (paid-amount record + photo/point cleanup) all happens atomically
   // server-side inside admin_settle_travel_period (0045_travel_selfies_delete_policy_fix.sql).
   async function settle(empId) {
@@ -65,5 +81,8 @@ export function useAdminTravel(token) {
     return settlement
   }
 
-  return { overview, taSettings, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements, overrideDistance, settle, reload }
+  return {
+    overview, taSettings, orsKeyStatus, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overrideDistance, refineDistances, setOrsApiKey, settle, reload,
+  }
 }

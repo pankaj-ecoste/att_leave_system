@@ -133,6 +133,9 @@ export function rowToAttendance(row) {
     outMatchedSiteId: row.out_matched_site_id,
     outDistanceM: row.out_distance_m != null ? Number(row.out_distance_m) : null,
     outInsideGeofence: row.out_inside_geofence,
+    // Refined road distance for the day's last-visit -> punch-out leg (plan.md §28
+    // follow-up) — null until admin's review has refined it.
+    travelReturnRoadKm: row.travel_return_road_km != null ? Number(row.travel_return_road_km) : null,
     appInTime: row.app_in_time ? row.app_in_time.slice(0, 5) : null,
     appOutTime: row.app_out_time ? row.app_out_time.slice(0, 5) : null,
     bioInTime: row.bio_in_time ? row.bio_in_time.slice(0, 5) : null,
@@ -348,6 +351,11 @@ export function rowToTravelVisit(row) {
     siteNote: row.site_note,
     photoPath: row.photo_path,
     legDistanceKm: Number(row.leg_distance_km),
+    // Refined road distance (plan.md §28 follow-up) — null until admin's review has
+    // triggered a refine and it succeeded. Prefer this over legDistanceKm for display
+    // once present; effectiveLegKm() in lib/travelPoints.js is the one place that
+    // decides which number to actually show.
+    roadLegKm: row.road_leg_km != null ? Number(row.road_leg_km) : null,
     expenseNote: row.expense_note || null,
     expenseAmount: row.expense_amount != null ? Number(row.expense_amount) : null,
     expensePhotoPath: row.expense_photo_path || null,
