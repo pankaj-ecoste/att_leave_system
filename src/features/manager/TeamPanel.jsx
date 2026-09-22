@@ -8,7 +8,7 @@ import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
-import { getLeaveDocumentUrl } from '../../api/documents'
+import { managerGetLeaveDocumentUrl } from '../../api/documents'
 import { dayPoints } from '../../lib/travelPoints'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
@@ -16,9 +16,10 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 // The manager view for anyone with direct reports — appears as a tab inside the
 // employee dashboard (one person can be both), not a separate login.
 export function TeamPanel({
-  token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
+  token, managerId, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
   teamLocationLogs, teamLocationLoading, loadTeamLocationLogs, globalStdHours,
-  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance,
+  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance, fetchPhotoUrl,
+  teamError,
 }) {
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
@@ -76,7 +77,7 @@ export function TeamPanel({
 
   async function viewDocument(path) {
     try {
-      const url = await getLeaveDocumentUrl(path)
+      const url = await managerGetLeaveDocumentUrl(token, managerId, path)
       window.open(url, '_blank', 'noopener')
     } catch (err) { setErrMsg(err.message) }
   }
@@ -107,7 +108,7 @@ export function TeamPanel({
           <h2 className="text-white font-semibold">My Team <span className="text-white/30 text-sm font-normal">({myTeam.length} direct reports)</span></h2>
           {teamLoading && <span className="text-white/30 text-xs">Loading...</span>}
         </div>
-        {errMsg && <p className="text-red-400 text-xs mb-3">{errMsg}</p>}
+        {(errMsg || teamError) && <p className="text-red-400 text-xs mb-3">{errMsg || teamError}</p>}
         <div className="flex gap-2 mb-4 flex-wrap">
           {[['requests', 'Requests'], ['attendance', 'Attendance'], ['location', 'Location'], ['travel', 'Travel'], ['members', 'Members']].map(([t, l]) => (
             <button key={t} onClick={() => selectTab(t)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${tab === t ? 'bg-indigo-600/30 border-indigo-500/40 text-white' : 'bg-white/5 border-white/10 text-white/50'}`}>{l}</button>
@@ -305,7 +306,7 @@ export function TeamPanel({
                                     </div>
                                   </Suspense>
                                 )}
-                                <TravelDayChain visits={visits} attendanceRecord={record} onOpenPhoto={setTravelViewerUrl} />
+                                <TravelDayChain visits={visits} attendanceRecord={record} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setTravelViewerUrl} />
                               </div>
                             )
                           })

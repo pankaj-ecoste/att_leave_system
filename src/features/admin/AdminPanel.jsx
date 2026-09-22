@@ -51,6 +51,11 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
         </div>
       </div>
       <div className="max-w-7xl mx-auto p-4 space-y-4">
+        {/* plan.md §33.7 — attendanceHook.fetchRange used to only log a failed fetch
+            to the console; the screen kept showing stale/empty data with no
+            indication anything went wrong. One banner here covers all three screens
+            that share this hook (Dashboard, Attendance grid, Database). */}
+        {attendanceHook.error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{attendanceHook.error}</p>}
         {tab === 'dashboard' && <Dashboard token={token} employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
         {tab === 'attendance' && (
           <>
@@ -58,7 +63,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
             <AttendanceGrid employees={admin.employees} attendanceHook={attendanceHook} stdHours={admin.stdHours} updateStdHours={v => admin.updateSettings(v)} holidays={admin.holidays} />
           </>
         )}
-        {tab === 'leaves' && <LeaveApprovals employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
+        {tab === 'leaves' && <LeaveApprovals token={token} employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
         {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} resetPunchDevice={admin.resetPunchDevice} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} adminEmail={admin.adminEmail} onAudit={onAudit} />}
         {tab === 'sites' && <Sites sites={admin.sites} createSite={admin.createSite} updateSite={admin.updateSite} deleteSite={admin.deleteSite} onAudit={onAudit} />}
         {tab === 'travel' && <Travel token={token} travel={travel} onAudit={onAudit} />}

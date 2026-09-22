@@ -17,7 +17,7 @@ function SourceBadge({ source }) {
 // visits, not the punch-in/punch-out bookends the line implies). Renders one day's full
 // chain: Punch In -> visit 1 -> visit 2 -> ... -> Punch Out -> day total, consistently
 // in one place instead of three near-identical copies.
-export function TravelDayChain({ visits, attendanceRecord, onOpenPhoto, selectedVisitId, onSelectVisit, renderVisitExtra }) {
+export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpenPhoto, selectedVisitId, onSelectVisit, renderVisitExtra }) {
   const lastVisit = visits[visits.length - 1]
   const returnFallbackKm = (lastVisit && attendanceRecord?.outLat != null)
     ? haversineMeters(lastVisit.lat, lastVisit.lon, attendanceRecord.outLat, attendanceRecord.outLon) / 1000
@@ -45,7 +45,7 @@ export function TravelDayChain({ visits, attendanceRecord, onOpenPhoto, selected
             className={`flex items-center gap-3 p-2 rounded-xl border ${selectedVisitId === v.id ? 'border-amber-400/50 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}
             onClick={() => onSelectVisit?.(v.id)}
           >
-            <TravelPhotoThumb path={v.photoPath} onOpen={onOpenPhoto} className="w-12 h-12" />
+            <TravelPhotoThumb path={v.photoPath} fetchUrl={fetchPhotoUrl} onOpen={onOpenPhoto} className="w-12 h-12" />
             <div className="flex-1 min-w-0">
               <p className="text-white text-sm font-medium truncate">{v.siteNote}</p>
               <p className="text-white/30 text-xs">
@@ -56,7 +56,7 @@ export function TravelDayChain({ visits, attendanceRecord, onOpenPhoto, selected
                 <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
               )}
             </div>
-            {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={onOpenPhoto} className="w-10 h-10" />}
+            {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} fetchUrl={fetchPhotoUrl} onOpen={onOpenPhoto} className="w-10 h-10" />}
             {renderVisitExtra?.(v)}
           </div>
         )

@@ -16,9 +16,19 @@ export async function uploadLeaveDocument(file) {
   return path
 }
 
-// Short-lived signed URL — the bucket is private, so a plain public URL won't work.
-export async function getLeaveDocumentUrl(path, expiresInSeconds = 300) {
-  const { data, error } = await supabase.storage.from(LEAVE_DOCUMENTS_BUCKET).createSignedUrl(path, expiresInSeconds)
+// plan.md §33.2 — signing now happens server-side, inside a token-checked database
+// function, instead of the browser being trusted to sign its own links: anon no longer
+// has a read policy on this bucket at all (migration 0053), so these are the only way
+// in. Split by role because each needs a different ownership check (admin: any
+// document; manager: only a direct report's).
+export async function adminGetLeaveDocumentUrl(token, path) {
+  const { data, error } = await supabase.rpc('admin_get_leave_document_url', { p_token: token, p_path: path })
   if (error) throw error
-  return data.signedUrl
+  return data
+}
+
+export async function managerGetLeaveDocumentUrl(token, managerId, path) {
+  const { data, error } = await supabase.rpc('manager_get_leave_document_url', { p_token: token, p_manager_id: managerId, p_path: path })
+  if (error) throw error
+  return data
 }

@@ -96,6 +96,29 @@ function loadCombinedSql() {
   return { files, sql: stripComments(combined) }
 }
 
+// plan.md §33.8c — two migration numbers (0034, 0047) were each accidentally reused
+// for a second, unrelated file weeks apart. Harmless today (no migration-tracking
+// table exists; every apply is a one-off verified script, never a naive alphabetical
+// replay) and both are already applied to production, already documented, and don't
+// conflict in content — not worth the risk of renaming a live-applied file and
+// desyncing plan.md/PROGRESS.md's own references to it by name. Allowlisted so the
+// guardrail stays clean for these two known exceptions; any NEW accidental reuse
+// still fails loudly, which is the actual goal — stop this mistake from recurring
+// silently, not retroactively rewrite history.
+const KNOWN_DUPLICATE_MIGRATION_NUMBERS = new Set(['0034', '0047'])
+
+function findUnexpectedDuplicateMigrationNumbers(files) {
+  const byNumber = {}
+  for (const f of files) {
+    const m = f.match(/^(\d+)_/)
+    if (!m) continue
+    ;(byNumber[m[1]] ||= []).push(f)
+  }
+  return Object.entries(byNumber).filter(
+    ([num, fs]) => fs.length > 1 && !KNOWN_DUPLICATE_MIGRATION_NUMBERS.has(num)
+  )
+}
+
 function parseCreateTables(sql, tables) {
   const re = /create table (?:if not exists )?(?:"?public"?\.)?"?(\w+)"?\s*\(/gi
   let m
@@ -289,6 +312,14 @@ function main() {
   if (files.length === 0) {
     console.error('No migration files found in', MIGRATIONS_DIR)
     process.exit(2)
+  }
+
+  const unexpectedDuplicates = findUnexpectedDuplicateMigrationNumbers(files)
+  if (unexpectedDuplicates.length > 0) {
+    console.error('\n✗ Migration number reused (not one of the known, already-applied exceptions):\n')
+    for (const [num, fs] of unexpectedDuplicates) console.error(`  ${num}: ${fs.join(', ')}`)
+    console.error('\nGive one of these a fresh, unused number before applying it.')
+    process.exit(1)
   }
 
   const tables = parseTables(sql)

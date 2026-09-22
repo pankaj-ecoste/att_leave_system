@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react'
+import { useState, useCallback, lazy, Suspense } from 'react'
 import * as XLSX from 'xlsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -7,6 +7,7 @@ import { Spinner } from '../../components/ui/Spinner'
 import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { adminFetchAttendance } from '../../api/attendance'
+import { adminGetTravelPhotoUrl } from '../../api/travel'
 import { dayPoints, effectiveLegKm, effectiveReturnLegKm } from '../../lib/travelPoints'
 import { haversineMeters } from '../../lib/geo'
 import { todayIST } from '../../lib/datetime'
@@ -85,7 +86,7 @@ function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
 // (plan.md §28, "do not alter any running function").
 export function Travel({ token, travel, onAudit }) {
   const {
-    overview, taSettings, orsKeyStatus, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overview, taSettings, orsKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
     overrideDistance, refineDistances, setOrsApiKey, settle, reload,
   } = travel
   const [rateForm, setRateForm] = useState(null)
@@ -97,6 +98,9 @@ export function Travel({ token, travel, onAudit }) {
   const [detailLoading, setDetailLoading] = useState(false)
   const [refining, setRefining] = useState(false)
   const [showMap, setShowMap] = useState(false)
+  // plan.md §33.2 — memoized so TravelPhotoThumb's fetch effect only re-runs when the
+  // path changes, not on every one of this screen's frequent local re-renders.
+  const fetchPhotoUrl = useCallback(path => adminGetTravelPhotoUrl(token, path), [token])
   const [mapDate, setMapDate] = useState(null)
   const [overrideVisit, setOverrideVisit] = useState(null)
   const [viewerUrl, setViewerUrl] = useState(null)
@@ -298,7 +302,7 @@ export function Travel({ token, travel, onAudit }) {
 
       <Card>
         <h3 className="text-white font-semibold mb-3">Field Staff Journeys</h3>
-        {msg && <p className="text-red-400 text-xs mb-3">{msg}</p>}
+        {(msg || loadError) && <p className="text-red-400 text-xs mb-3">{msg || loadError}</p>}
         {loading && overview.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-4">Loading...</p>
         ) : overview.length === 0 ? (
@@ -366,6 +370,7 @@ export function Travel({ token, travel, onAudit }) {
                               <TravelDayChain
                                 visits={visits}
                                 attendanceRecord={record}
+                                fetchPhotoUrl={fetchPhotoUrl}
                                 onOpenPhoto={setViewerUrl}
                                 renderVisitExtra={v => (
                                   <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: effectiveLegKm(v).km, reason: '' })}>Adjust</Button>

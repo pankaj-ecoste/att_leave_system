@@ -14,11 +14,16 @@ export function useAdminTravel(token) {
   const [taSettings, setTaSettings] = useState({ managerRatePerKm: 0, executiveRatePerKm: 0 })
   const [orsKeyStatus, setOrsKeyStatus] = useState({ isSet: false, updatedAt: null })
   const [loading, setLoading] = useState(false)
+  // plan.md §33.7 — a failed fetch used to only log to the console; the screen kept
+  // showing whatever was already loaded (or an empty list) with no indication anything
+  // went wrong, indistinguishable from "nobody's travelled yet."
+  const [error, setError] = useState(null)
 
   const reload = useCallback(async () => {
     if (!token) return
     try {
       setLoading(true)
+      setError(null)
       const [ov, settings, keyStatus] = await Promise.all([
         adminGetTravelOverview(token),
         adminGetTaSettings(token),
@@ -29,6 +34,7 @@ export function useAdminTravel(token) {
       setOrsKeyStatus(keyStatus)
     } catch (e) {
       console.error('loadTravelOverview:', e)
+      setError(`Could not load travel data: ${e.message}`)
     } finally {
       setLoading(false)
     }
@@ -86,7 +92,7 @@ export function useAdminTravel(token) {
   }
 
   return {
-    overview, taSettings, orsKeyStatus, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overview, taSettings, orsKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
     overrideDistance, refineDistances, setOrsApiKey, settle, reload,
   }
 }

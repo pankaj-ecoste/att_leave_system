@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllPages } from '../lib/paging'
 
 // `latLon` is the reverse-geocoded address text — a display label only. Real numeric
 // coordinates (`meta` = { lat, lon, accuracy } from useGeolocation) are stored
@@ -38,11 +39,19 @@ export async function adminGetOdLogs(token, empId, date) {
   return (data || []).map(r => ({ id: r.id, latLon: r.lat_lon, ts: r.ts, lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m }))
 }
 
+// plan.md §33.3 — was a single unbounded request (no p_limit at all); a busy day's
+// worth of 2-hourly auto-tracking across ~300 staff can plausibly exceed Supabase's
+// silent ~1000-row response cap, the same bug class §29 already fixed for attendance/
+// leaves/leave balances. Batched via fetchAllPages now that migration 0054 added
+// p_limit/p_offset and a stable sort (captured_at, id) to the RPC.
 export async function adminGetAllLocationLogs(token, date) {
-  const { data, error } = await supabase.rpc('admin_get_all_location_logs', {
-    p_token: token, p_date: date,
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_all_location_logs', {
+      p_token: token, p_date: date, p_limit: count, p_offset: start,
+    })
+    if (error) throw error
+    return page
   })
-  if (error) throw error
   return (data || []).map(r => ({
     id: r.id, empId: r.emp_id, empName: r.emp_name, empNum: r.emp_num,
     date: r.date, latLon: r.lat_lon, type: r.type, capturedAt: r.captured_at,

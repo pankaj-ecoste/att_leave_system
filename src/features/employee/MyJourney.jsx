@@ -16,7 +16,7 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 // distance + expense total, and a lazy map. Only rendered for Field / Office+Field
 // staff — gated by the caller (EmployeeDashboard) using the same requiresFieldNote()
 // check the punch screen already uses.
-export function MyJourney({ currentUser, attendance, journey, summary, settlements, loading, addingVisit, locationStatus, addVisit }) {
+export function MyJourney({ currentUser, attendance, journey, summary, settlements, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [siteNote, setSiteNote] = useState('')
   const [showExpense, setShowExpense] = useState(false)
@@ -192,7 +192,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
                 </div>
               </Suspense>
             )}
-            <TravelDayChain visits={visits} attendanceRecord={record} onOpenPhoto={setViewerUrl} selectedVisitId={selectedVisitId} onSelectVisit={setSelectedVisitId} />
+            <TravelDayChain visits={visits} attendanceRecord={record} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setViewerUrl} selectedVisitId={selectedVisitId} onSelectVisit={setSelectedVisitId} />
           </Card>
         )
       })}

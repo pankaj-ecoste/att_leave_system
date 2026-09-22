@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import * as XLSX from 'xlsx'
 import { adminCreateEmployee, adminUpdateEmployee } from '../api/employees'
 import { adminFetchImportedSheet, adminSetImportedSheet, adminClearImportedSheet } from '../api/imports'
 import { gField, findEmpInSnap } from '../lib/importHelpers'
@@ -48,6 +47,11 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
   async function handleImport(file) {
     setStatus('Loading...')
     try {
+      // plan.md §33.4 — xlsx is a heavy library with no place in the bundle every
+      // employee downloads on login; this hook is wired in at App.jsx's top level
+      // (it has to be — it's a React hook, can't be called conditionally), but the
+      // library itself only needs to load the moment an admin actually imports a file.
+      const XLSX = await import('xlsx')
       const ab = await file.arrayBuffer()
       const wb = XLSX.read(ab, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
@@ -124,6 +128,7 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
 
   async function exportSheet() {
     if (!sheet) return
+    const XLSX = await import('xlsx')
     const ws = XLSX.utils.json_to_sheet(sheet.rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')

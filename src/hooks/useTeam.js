@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { employeeGetMyTeam } from '../api/employees'
 import { managerGetTeamLeaves, managerDecideLeave as apiManagerDecideLeave } from '../api/leave'
 import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideRegularization as apiManagerDecideReg } from '../api/attendance'
 import { managerGetTeamLocationLogs } from '../api/location'
-import { managerGetTeamTravelSummary, managerGetTeamTravelJourney, managerGetTeamTravelAttendance } from '../api/travel'
+import {
+  managerGetTeamTravelSummary, managerGetTeamTravelJourney, managerGetTeamTravelAttendance,
+  managerGetTeamTravelPhotoUrl,
+} from '../api/travel'
 
 // "My Team" — appears automatically for anyone with direct reports (the manager view
 // lives inside the employee dashboard, not a separate login, since one person is both).
@@ -18,6 +21,11 @@ export function useTeam(token, empId, onAudit) {
   // plan.md §28 — read-only team Travel Allowance view.
   const [teamTravelSummary, setTeamTravelSummary] = useState([])
   const [teamTravelLoading, setTeamTravelLoading] = useState(false)
+  // plan.md §33.7 — these 4 loaders used to only log a failed fetch to the console; the
+  // screen kept showing whatever was already loaded (or nothing) with no indication
+  // anything went wrong, indistinguishable from "empty team"/"no records." One shared
+  // error state is enough — TeamPanel shows whichever load most recently failed.
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (!token || !empId) {
@@ -27,6 +35,7 @@ export function useTeam(token, empId, onAudit) {
     ;(async () => {
       try {
         setTeamLoading(true)
+        setError(null)
         const team = await employeeGetMyTeam(token, empId)
         setMyTeam(team)
         if (team.length === 0) return
@@ -38,6 +47,7 @@ export function useTeam(token, empId, onAudit) {
         setTeamRegs(regs)
       } catch (e) {
         console.error('loadMyTeam:', e)
+        setError(`Could not load your team: ${e.message}`)
       } finally {
         setTeamLoading(false)
       }
@@ -46,18 +56,22 @@ export function useTeam(token, empId, onAudit) {
 
   async function loadTeamAttendance(month, year) {
     try {
+      setError(null)
       setTeamAttn(await managerGetTeamAttendance(token, empId, month, year))
     } catch (e) {
       console.error('loadTeamAttendance:', e)
+      setError(`Could not load team attendance: ${e.message}`)
     }
   }
 
   async function loadTeamLocationLogs(date) {
     try {
       setTeamLocationLoading(true)
+      setError(null)
       setTeamLocationLogs(await managerGetTeamLocationLogs(token, empId, date))
     } catch (e) {
       console.error('loadTeamLocationLogs:', e)
+      setError(`Could not load team location logs: ${e.message}`)
     } finally {
       setTeamLocationLoading(false)
     }
@@ -66,9 +80,11 @@ export function useTeam(token, empId, onAudit) {
   async function loadTeamTravelSummary() {
     try {
       setTeamTravelLoading(true)
+      setError(null)
       setTeamTravelSummary(await managerGetTeamTravelSummary(token, empId))
     } catch (e) {
       console.error('loadTeamTravelSummary:', e)
+      setError(`Could not load team travel summary: ${e.message}`)
     } finally {
       setTeamTravelLoading(false)
     }
@@ -110,9 +126,14 @@ export function useTeam(token, empId, onAudit) {
     }
   }
 
+  // plan.md §33.2 — bound here (token/empId already in scope) rather than in
+  // TravelPhotoThumb itself, which only ever sees a plain path.
+  const fetchPhotoUrl = useCallback(path => managerGetTeamTravelPhotoUrl(token, empId, path), [token, empId])
+
   return {
     myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
     teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
     teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance,
+    fetchPhotoUrl, error,
   }
 }

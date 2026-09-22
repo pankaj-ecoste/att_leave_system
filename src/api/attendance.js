@@ -155,10 +155,19 @@ export async function managerDecideRegularization(token, managerId, regId, statu
   return rowToRegularization(data)
 }
 
+// plan.md §33.3 — was a single unbounded request (no p_limit at all). Lower volume
+// than the other three (correction requests only), but the same unprotected shape.
+// Batched via fetchAllPages now that migration 0054 added p_limit/p_offset and a
+// stable sort (created_at, id) to the RPC.
 export async function adminGetRegularizations(token) {
-  const { data, error } = await supabase.rpc('admin_get_regularizations', { p_token: token })
-  if (error) throw error
-  return (data || []).map(rowToRegularization)
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_regularizations', {
+      p_token: token, p_limit: count, p_offset: start,
+    })
+    if (error) throw error
+    return page
+  })
+  return data.map(rowToRegularization)
 }
 
 export async function adminDecideRegularization(token, id, status) {

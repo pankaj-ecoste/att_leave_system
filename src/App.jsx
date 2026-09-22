@@ -68,7 +68,11 @@ export default function App() {
   if (updatingToLatest) return <Spinner label="Updating..." sub="Loading the latest version" />
 
   if (showAdminLogin && auth.view !== 'admin') {
-    return <AdminLogin adminLogin={auth.adminLogin} onBack={() => setShowAdminLogin(false)} />
+    return (
+      <ErrorBoundary>
+        <AdminLogin adminLogin={auth.adminLogin} onBack={() => setShowAdminLogin(false)} />
+      </ErrorBoundary>
+    )
   }
 
   if (auth.view === 'admin') {
@@ -120,13 +124,14 @@ export default function App() {
           applyLeave={empLeave.applyLeave}
           onOdApplied={empAttendance.startOdTracking}
           team={{
-            token: auth.employeeToken, myTeam: team.myTeam, teamLeaves: team.teamLeaves, teamRegs: team.teamRegs,
+            token: auth.employeeToken, managerId: auth.currentUser?.id, myTeam: team.myTeam, teamLeaves: team.teamLeaves, teamRegs: team.teamRegs,
             teamAttn: team.teamAttn, teamLoading: team.teamLoading, loadTeamAttendance: team.loadTeamAttendance,
             teamLocationLogs: team.teamLocationLogs, teamLocationLoading: team.teamLocationLoading, loadTeamLocationLogs: team.loadTeamLocationLogs,
             decideLeave: team.decideLeave, decideRegularization: team.decideRegularization,
             teamTravelSummary: team.teamTravelSummary, teamTravelLoading: team.teamTravelLoading,
             loadTeamTravelSummary: team.loadTeamTravelSummary, loadTeamTravelJourney: team.loadTeamTravelJourney,
-            loadTeamTravelAttendance: team.loadTeamTravelAttendance,
+            loadTeamTravelAttendance: team.loadTeamTravelAttendance, fetchPhotoUrl: team.fetchPhotoUrl,
+            teamError: team.error,
           }}
           travel={travel}
         />

@@ -35,11 +35,26 @@ export function uploadTravelReceipt(file) {
   return uploadTravelPhoto(file, 'receipt')
 }
 
+// plan.md §33.2 — signing now happens server-side, inside a token-checked database
+// function: anon no longer has a read policy on this bucket at all (migration 0053).
 // Kind-agnostic — used for both the selfie and, if present, the expense receipt photo.
-export async function getTravelPhotoUrl(path, expiresInSeconds = 300) {
-  const { data, error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).createSignedUrl(path, expiresInSeconds)
+// Split by role since each needs a different ownership check.
+export async function employeeGetOwnTravelPhotoUrl(token, empId, path) {
+  const { data, error } = await supabase.rpc('employee_get_own_travel_photo_url', { p_token: token, p_emp_id: empId, p_path: path })
   if (error) throw error
-  return data.signedUrl
+  return data
+}
+
+export async function managerGetTeamTravelPhotoUrl(token, managerId, path) {
+  const { data, error } = await supabase.rpc('manager_get_team_travel_photo_url', { p_token: token, p_manager_id: managerId, p_path: path })
+  if (error) throw error
+  return data
+}
+
+export async function adminGetTravelPhotoUrl(token, path) {
+  const { data, error } = await supabase.rpc('admin_get_travel_photo_url', { p_token: token, p_path: path })
+  if (error) throw error
+  return data
 }
 
 // ---------------------------------------------------------------------------

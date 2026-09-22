@@ -166,23 +166,39 @@ export async function adminResetLeaveBalances(token) {
 // V2 Phase C — read-only ledger visibility (plan.md §11 decision 1, PROGRESS.md VC-1/VC-8).
 // The crediting/expiry itself runs server-side on a cron, never from the client.
 
+// plan.md §33.3 — `limit` now means "total rows wanted" (fetchAllPages batches under
+// the hood), not "one request's size" — same fix as §29. The default cap of 500 stays
+// as a sane default for a caller that doesn't ask for more; a caller that wants
+// everything (Reports.jsx) passes a large limit explicitly, same S-2b convention as
+// every other export in this codebase.
 export async function adminFetchLeaveAccruals(token, { empId, leaveType, limit = 500, offset = 0 } = {}) {
-  const { data, error } = await supabase.rpc('admin_get_leave_accruals', {
-    p_token: token,
-    p_emp_id: empId || null,
-    p_leave_type: leaveType || null,
-    p_limit: limit,
-    p_offset: offset,
-  })
-  if (error) throw error
-  return (data || []).map(rowToLeaveAccrual)
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_leave_accruals', {
+      p_token: token,
+      p_emp_id: empId || null,
+      p_leave_type: leaveType || null,
+      p_limit: count,
+      p_offset: start,
+    })
+    if (error) throw error
+    return page
+  }, { limit, offset })
+  return data.map(rowToLeaveAccrual)
 }
 
+// plan.md §33.3 — was a single unbounded request (no p_limit at all). Batched via
+// fetchAllPages now that migration 0054 added p_limit/p_offset and a stable sort
+// (period, id) to the RPC.
 export async function adminFetchCompOffPayouts(token, { period } = {}) {
-  const { data, error } = await supabase.rpc('admin_get_comp_off_payouts', {
-    p_token: token,
-    p_period: period || null,
+  const data = await fetchAllPages(async (count, start) => {
+    const { data: page, error } = await supabase.rpc('admin_get_comp_off_payouts', {
+      p_token: token,
+      p_period: period || null,
+      p_limit: count,
+      p_offset: start,
+    })
+    if (error) throw error
+    return page
   })
-  if (error) throw error
-  return (data || []).map(rowToCompOffPayout)
+  return data.map(rowToCompOffPayout)
 }

@@ -3,6 +3,7 @@ import { getLocation } from './useGeolocation'
 import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
   employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt, employeeRefineOwnTravelDistances,
+  employeeGetOwnTravelPhotoUrl,
 } from '../api/travel'
 import { todayIST } from '../lib/datetime'
 
@@ -99,5 +100,9 @@ export function useTravelJourney(token, empId) {
     })
   }
 
-  return { journey, summary, settlements, loading, addingVisit, locationStatus, addVisit, reload }
+  // plan.md §33.2 — bound here (not called directly from TravelPhotoThumb) since only
+  // this hook has token/empId in scope; a plain path is all the component needs to know.
+  const fetchPhotoUrl = useCallback(path => employeeGetOwnTravelPhotoUrl(token, empId, path), [token, empId])
+
+  return { journey, summary, settlements, loading, addingVisit, locationStatus, addVisit, reload, fetchPhotoUrl }
 }

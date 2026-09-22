@@ -346,7 +346,7 @@ export function Reports({ token, employees, stdHours, holidays, onAudit }) {
     setLedgerMsg('')
     try {
       const [accruals, payouts] = await Promise.all([
-        adminFetchLeaveAccruals(token, { limit: 500 }),
+        adminFetchLeaveAccruals(token, { limit: 100000 }),
         adminFetchCompOffPayouts(token),
       ])
       setLedgerRows(accruals)

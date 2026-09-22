@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { getLeaveDocumentUrl } from '../../api/documents'
+import { adminGetLeaveDocumentUrl } from '../../api/documents'
 
-export function LeaveApprovals({ employees, leaves, adminRegs, decideLeave, decideRegularization, onAudit }) {
+export function LeaveApprovals({ token, employees, leaves, adminRegs, decideLeave, decideRegularization, onAudit }) {
   const [errMsg, setErrMsg] = useState('')
 
   async function viewDocument(path) {
     try {
-      const url = await getLeaveDocumentUrl(path)
+      const url = await adminGetLeaveDocumentUrl(token, path)
       window.open(url, '_blank', 'noopener')
     } catch (err) { setErrMsg(err.message) }
   }

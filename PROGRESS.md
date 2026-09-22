@@ -1356,3 +1356,119 @@ day *closer* to Half Day rather than covering it — the feature never actually 
 migration, `calcOvertimeHours` deliberately untouched. 6 new tests added
 (`datetime.test.js`), all 53 project tests pass, build is clean. **Not yet committed,
 pushed, or deployed to Vercel** — this session's next step once you confirm.
+
+---
+
+## 🆕 System health audit (2026-09-22) — plan.md §33, fixing one item at a time
+
+A deliberate, requested deep audit (not HR-reported) of the whole codebase and database
+ahead of continued growth — found in `plan.md` §33 (`33.1`–`33.9`), 9 groups of issues
+covering security, performance, and scale. Working through them one at a time,
+permanently, starting with the highest-value one.
+
+**§33.1 fixed and verified live (migration `0052_close_anon_access_gaps.sql`):** the
+recurring "Supabase grants anon access by default unless explicitly revoked" gap (same
+root cause already fixed twice before, Day 3 — `log_audit`, `run_annual_leave_rollover`)
+had resurfaced in 5 more places since: 2 tables (`leave_payouts`, `geocode_cache`) never
+had Row Level Security turned on, and 3 travel-distance helper functions
+(`road_distance_km`, `travel_summary_for_employee`, `travel_refine_distances_core`)
+could be called directly by anyone holding the app's public key, no login required.
+Confirmed live with a read-only check before touching anything — all 5 were genuinely
+reachable. Fix is permissions-only (no function body or data changed): RLS enabled on
+both tables, `EXECUTE` revoked from `public`/`anon`/`authenticated` on the three
+functions. Verified after: all 5 closed, the legitimate admin functions that depend on
+these internally still work (proven with real RPC calls, rolled back so nothing was
+actually written), and a direct unauthorized call is now correctly rejected.
+
+**Note for next session:** applying this migration required a Bash/PowerShell
+permission entry in `.claude/settings.local.json` (Claude's own tooling blocks direct
+production-database writes by default; running the exact same command through the
+user's own `!` terminal prefix succeeds instead — same as documented in the
+`supabase-db-access-method` memory). `.claude/settings.local.json` now has a standing
+`scripts/apply-*.mjs` allow rule for this project's DB connection, so future §33 fixes
+in this cleanup pass shouldn't hit the same wall again.
+
+**§33.2 fixed and verified live (migration `0053_signed_urls_for_private_files.sql`):**
+medical certificates and travel selfies were readable by anyone holding the app's
+public key (any user, not just admins). Fixed by moving "who can see this file" into
+the database itself — 5 new login-checked functions (one per role × file type) hand
+out a 5-minute signed link only to someone actually entitled to see that specific
+file, and the buckets' old blanket "anon can read everything" policies were removed.
+Required a new, very sensitive secret (the Supabase `service_role` key) stored
+write-only server-side — same careful pattern already used for the map-routing key,
+never exposed through any screen or RPC. Frontend updated so each of the three roles
+(employee viewing their own travel photos, manager viewing their team's, admin viewing
+anyone's) calls the correct one. Verified end-to-end with real calls through the
+actual functions the app uses (rolled back, nothing written): correct files return a
+working link, a made-up path is correctly rejected. Build/tests green (84 tests), G-1
+guardrail clean.
+
+**§33.3 fixed and verified live (migration `0054_paginate_remaining_admin_lists.sql`):**
+4 more admin lists had the same unprotected shape as the Sept report incident —
+location logs (all employees, one date), comp-off payouts, and regularization requests
+had no page-size cap on their database query at all, and the leave-accrual ledger's
+existing 500-row cap had no "fetch more" behind it. All 4 now batch safely through
+`fetchAllPages`. Proved it with a deliberately worst-case test: fetched all 172 real
+regularization requests one row at a time (forcing 172+ separate page requests) and
+confirmed exactly 172 rows came back with no duplicates and nothing missing. Build/
+tests green, G-1 guardrail clean.
+
+**§33.4 fixed (no migration — frontend only):** every employee was downloading a
+~1MB spreadsheet library on login that only the admin Imports screen ever uses. Root
+cause wasn't the hook (React hooks can't be conditionally loaded), it was one
+`import * as XLSX from 'xlsx'` sitting at the top of that hook's file — moved to load
+only the moment an admin actually imports/exports a file. Main bundle: 982.91 KB →
+490.33 KB. Build/tests green; not yet watched end-to-end in a real browser (code-only
+verification, same caveat §26 carried).
+
+**§33.5 fixed (no migration, one-line JSX fix):** the admin PIN-entry screen was the
+only top-level screen not wrapped in the app's `<ErrorBoundary>` — a render error there
+would have white-screened with no recovery UI instead of the friendly error message
+every other screen shows. Now wrapped the same way. Build/tests green.
+
+**§33.6 investigated and fixed (no migration):** traced the money path first — the
+travel-distance formula duplicated between browser and database turned out to
+**never actually affect pay** (the server always computes and stores its own distance,
+independently; the client's copy is a live preview only, confirmed by reading exactly
+where its result is used). Correcting the original finding's severity down. Still
+worth a permanent guard against the two formulas silently drifting apart later
+(same class as the already-fixed overtime-hours bug) — added `src/lib/geo.test.js`,
+which pins the client formula against an independent transliteration of the database's
+version across realistic coordinate ranges; a future edit that makes them disagree
+now fails a test instead of silently showing a wrong on-screen number. Build/tests
+green (91 tests, +7 new).
+
+**§33.7 fixed (no migration, frontend only):** several admin/manager screens used to
+fail completely silently on a network error (only logged to the browser console) —
+looked exactly like "no records," with nothing telling the admin/manager anything had
+actually gone wrong. All 3 affected hooks now surface a plain-language error message
+in the exact same style already used elsewhere in the app. Build/tests green (91
+tests).
+
+**§33.8 worked through — mixed outcomes, not every item needed a fix:**
+- **Fixed:** audit log now auto-cleans after 1 year (your call — kept much longer than
+  routine GPS logs since it has real investigative value); added a permanent check
+  that stops a migration number from ever being silently reused again.
+- **Investigated, correctly left alone:** the "index missing" finding turned out to
+  be wrong — a different constraint already covers it, so nothing needed adding.
+  The "unbounded employee attendance fetch" turned out to need a bigger, real
+  redesign to fix safely (the month/year picker on 2 other screens depends on that
+  same unbounded data) — flagged for later, not forced through today. The wide
+  `attendance` table and the not-yet-paginated employee list are both already
+  accepted, documented trade-offs from earlier decisions, not new problems.
+
+**§33.9 worked through — all 4 housekeeping items resolved:**
+- Two Excel libraries and the device-binding reset behavior: re-confirmed both are
+  intentional as designed, no action needed.
+- `npm audit`'s 2 moderate warnings: properly investigated instead of blindly
+  applying the suggested fix. The suggested fix would have downgraded a library
+  every admin export/import screen depends on, and — checked directly in that
+  library's own source — the specific vulnerable code path it warns about is never
+  actually called here. Correctly left as-is rather than trading a real feature
+  regression for closing a door that isn't open.
+- Deleted one confirmed-dead, zero-usage component. Build/tests green afterward.
+
+**System health audit (plan.md §33) is now fully worked through — all 9 groups
+addressed** (33.1–33.7 fixed and verified live/in build; 33.8 mixed — some fixed,
+some correctly left alone with reasoning; 33.9 closed out above). Nothing from this
+whole pass has been committed to git yet.

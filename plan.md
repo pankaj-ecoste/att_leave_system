@@ -2371,6 +2371,459 @@ false`, a genuinely gone path returns `true`.
 Confirmed fixed the same way the bug was found — a dry-run against Himanshu Bansal's
 real data (rolled back, nothing committed) now succeeds: 44.261km × ₹10/km = ₹442.61.
 
+## 33. System health audit — scalability, reliability, security (self-initiated, 2026-09-22)
+
+**Trigger:** not HR-reported — a deliberate, requested deep audit of the whole codebase
+and database ahead of continued growth ("BD management as the data will grow and grow
+day by day"). Four read-only passes (DB/migrations, backend API/lib, frontend
+components, security), nothing changed on the live app or database. Each item below:
+what's actually wrong, why, and where — fixes are tracked separately in `PROGRESS.md`
+as they're picked off one at a time, permanently, not patched.
+
+### 33.1 The anon-EXECUTE grant gap has recurred at least 5 times since it was last fixed
+
+**Background:** `plan.md` history (Day 3, `PROGRESS.md`) already documents this project
+being bitten twice by the same Supabase behavior — every new Postgres function gets a
+direct `EXECUTE` grant to the `anon` role by default, separate from `PUBLIC`, so
+revoking from `PUBLIC` alone (or just not mentioning a grant) does **not** block anon
+from calling it. `log_audit` and `run_annual_leave_rollover` were both fixed for this
+with an explicit `revoke ... from public, anon, authenticated`, then selective
+re-grants.
+
+**Problem — that rule has not been applied to newer functions:**
+
+| Function/table | File:line | Concrete risk |
+|---|---|---|
+| `road_distance_km()` | `0048_travel_road_distance.sql:56-99` | Comment claims "internal only" but has no `revoke` and no token check inside. If anon-callable: anyone holding the app's public key can call it directly with arbitrary coordinates, burning the paid OpenRouteService quota with no rate limit. |
+| `travel_summary_for_employee(p_emp_id)` | `0048_travel_road_distance.sql:204` (redefines `0044_travel_allowance.sql:118`) | No token/ownership check inside, takes a bare `p_emp_id`. If anon-callable: any employee's total travel km, expense total, and visit date range is readable by anyone who has that UUID (UUIDs already appear in other API responses, e.g. team lists). |
+| `travel_refine_distances_core(p_emp_id)` | `0049_travel_refine_for_employee_too.sql` | Same gap — could let anyone trigger a distance recompute (and ORS-quota spend) for any employee and overwrite their `travel_visits.road_leg_km`. |
+| `leave_payouts` (table, not function) | `0014_leave_accrual_and_payout.sql:92-103` | `CREATE TABLE` with **no** `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` anywhere in the migration history. The migration's own comment claims it's "reachable only through SECURITY DEFINER functions" — the same false belief that caused the original `log_audit` incident. If Supabase's default table grants apply here the same way they do to `employees` (confirmed at `0001_baseline_schema.sql:1445-1451`), this table could be directly readable/writable via the REST API, bypassing `admin_get_leave_payouts`'s admin-token check entirely. |
+| `geocode_cache` (table) | `0005_field_staff_and_geo.sql:29` | Same gap, lower sensitivity (only cached address text) — but same fragile "no RLS, hoping no grant exists" posture. |
+
+**Root cause (one, not five):** there is no repeatable check run against new migrations
+for "does this function/table actually block anon, or does it just look like it does."
+`0048`/`0049`/`0014`/`0005` were each written with a comment asserting safety that was
+never verified the way `log_audit`'s was.
+
+**Needs a live, read-only check to confirm exploitability** (not run yet — no DB
+credentials in the auditing session):
+```sql
+select relname, relrowsecurity from pg_class
+  where relname in ('leave_payouts','geocode_cache');
+select proname, has_function_privilege('anon', p.oid, 'execute') as anon_can_call
+  from pg_proc p where proname in
+  ('road_distance_km','travel_summary_for_employee','travel_refine_distances_core');
+```
+
+**Direction (not implemented yet):** run that check first to confirm which of the five
+are actually reachable, then (a) `enable row level security` on both tables, (b)
+explicit `revoke execute ... from public, anon, authenticated` on the three functions,
+re-granting only to the callers that legitimately need them (or adding a real
+token/ownership check inside, matching the standard `admin_*`/`employee_*`/`manager_*`
+pattern every other function in the codebase already follows). Then do one sweep of
+`information_schema.routine_privileges` for every function granted to `anon` with no
+`p_token`/ownership parameter, so this stops being found one feature at a time.
+
+**Fixed 2026-09-22 (migration `0052_close_anon_access_gaps.sql`):** the live check
+confirmed all 5 were reachable exactly as suspected — `relrowsecurity = false` on both
+tables, `anon_can_call = true` on all three functions. Applied `enable row level
+security` on `leave_payouts`/`geocode_cache` and `revoke execute ... from public, anon,
+authenticated` on the three functions — permissions only, no function body or table
+data touched. Verified after: all 5 now closed (`relrowsecurity = true`,
+`anon_can_call = false`); the legitimate callers that depend on these internally still
+work (`admin_get_travel_overview` — 32 rows, uses `travel_summary_for_employee`;
+`admin_refine_travel_distances` — uses `travel_refine_distances_core` +
+`road_distance_km`, both proven live via real RPC calls inside a rolled-back
+transaction, nothing committed by the test); a direct anon call to
+`travel_summary_for_employee` was attempted and correctly rejected
+(`permission denied for function travel_summary_for_employee`). Script:
+`scripts/apply-0052-close-anon-access-gaps.mjs`. The remaining 4 items in this section
+(§33.2 storage buckets, §33.3 pagination gaps, §33.4 bundle bloat, §33.5 ErrorBoundary,
+§33.6 duplicated formula, §33.7 silent errors, §33.8 growth risks) are still open.
+
+### 33.2 Employee medical certificates and travel selfies are readable by anyone with the app's public key, not just their owner
+
+**Where:** `leave-documents` bucket (sick-leave prescriptions) — policy at
+`0019_earned_leave_advance_notice.sql:28-30`; `travel-selfies` bucket — policy at
+`0044_travel_allowance.sql:105-107`. Both grant `anon` `SELECT` on
+`storage.objects` scoped only by `bucket_id`, with no per-owner/per-path restriction.
+
+**Root cause:** this app authenticates employees with a custom PIN system, not real
+Supabase Auth, so Supabase's usual per-user storage RLS (`auth.uid() = owner`) has
+nothing to scope against — this was a known, deliberate tradeoff when the sick-leave
+upload feature was built (`0019`'s own comment says as much), not an oversight. The
+delete-side of the identical bucket problem was already found and fixed for
+`travel-selfies` in `0045_travel_selfies_delete_policy_fix.sql` (moved deletion
+server-side); the **read** side was left as originally built, and now also covers
+medical documents specifically.
+
+**Impact:** the app's public (anon) key is embedded in the client bundle — anyone who
+opens browser dev tools on the live site has it. With it, they can `.list()` and
+download every employee's prescription and every travel selfie, not just their own.
+
+**Direction (not implemented yet):** the real fix needs either (a) a server-side
+signed-URL function (`SECURITY DEFINER`, token-checked, returns a short-lived signed
+URL only for files the caller is entitled to see) replacing direct bucket reads, or (b)
+moving to real per-employee Supabase Auth sessions so RLS can scope by identity
+properly. (a) is the smaller change and fits the existing SECURITY DEFINER pattern used
+everywhere else in this codebase.
+
+**Fixed 2026-09-22 (migration `0053_signed_urls_for_private_files.sql`, approach (a)):**
+built 5 token-checked wrapper functions (`admin_get_leave_document_url`,
+`manager_get_leave_document_url`, `employee_get_own_travel_photo_url`,
+`manager_get_team_travel_photo_url`, `admin_get_travel_photo_url`) backed by one
+internal `storage_sign_url_core()` that calls Supabase Storage's own sign-URL endpoint
+using the project's `service_role` key — stored write-only in a new
+`storage_signing_settings` table (RLS enabled, zero anon grants, never returned by any
+function; set once via `scripts/set-storage-signing-key.mjs`, never through an
+anon-reachable RPC, learning §33.1's lesson from the start: `storage_sign_url_core`
+itself has an explicit `revoke execute ... from public, anon, authenticated`). The two
+buckets' broad `anon can read ...` policies were dropped entirely — the 5 wrapper
+functions are now the only way to view either kind of file. Frontend: `src/api/documents.js`
+and `src/api/travel.js`'s old single `createSignedUrl`-based functions were split into
+role-specific calls; `TravelPhotoThumb`/`TravelDayChain` now take an injected
+`fetchPhotoUrl` function (bound per-role in `useTravelJourney`/`useTeam`/`Travel.jsx`)
+instead of importing a signer directly, so each of the three roles' own ownership check
+runs correctly. `LeaveApprovals.jsx` gained a `token` prop it didn't have before (needed
+for `admin_get_leave_document_url`). Verified end-to-end: buckets confirmed
+unreadable by anon (before: true/true, after: false/false); all 5 wrappers
+anon-callable, the core signer not; real calls through `admin_get_leave_document_url`
+and `admin_get_travel_photo_url` (inside a rolled-back transaction, nothing written)
+returned working signed URLs, and a made-up path was correctly rejected
+("No such photo"). `npm run build`/`npm run test` (84 tests) both green, G-1 guardrail
+clean (121 functions, 28 tables).
+
+### 33.3 The "silent 1000-row cutoff" bug (plan.md §29) has 4 more unguarded exposures
+
+**Background:** §29 already found and fixed this for `admin_get_attendance`/
+`admin_get_leaves`/`admin_get_leave_balances` via `fetchAllPages` + a stable sort
+(migration `0047`). It was not a one-off — it's a property of every Supabase response
+(hard-capped ~1000 rows regardless of requested `limit`).
+
+**Problem — new call sites with the same unprotected shape:**
+
+| Call site | File:line | Why it's exposed |
+|---|---|---|
+| `adminGetAllLocationLogs` | `src/api/location.js:41-51` | No `fetchAllPages`, no limit param at all. ~300 staff × 2-hourly auto-tracking (~5 pings/person on a work day) plus punch and On-Duty 5-min pings — a single busy day can plausibly already exceed ~1000 rows for the "all locations, one date" admin view. |
+| `adminFetchCompOffPayouts` | `src/api/leave.js:181-188`, called from `src/features/admin/Reports.jsx:350` | Called with no params, no pagination, no limit at all — fully unprotected. |
+| `adminGetRegularizations` | `src/api/attendance.js:158-162` | No limit, no batching — lower volume (corrections only) so lower urgency, same unprotected shape. |
+| `adminFetchLeaveAccruals` | `src/api/leave.js:169-179` | Fixed cap of 500 (safe today, under the 1000 ceiling) but no `fetchAllPages` and no "load more" — will silently start truncating once the accrual ledger passes 500 rows, plausible within about a year at ~300 staff. |
+
+**Root cause:** no server-side upper cap exists on any paginated admin RPC's `p_limit`
+parameter (`admin_get_attendance`, `admin_get_leaves`, `admin_get_audit_logs`, etc. all
+do a bare `limit p_limit`, no `least(p_limit, N)` guard) — safety currently depends
+entirely on every frontend caller remembering to wrap the call in `fetchAllPages`. §29
+fixed the three worst offenders; the rule it set ("never call an `admin_get_*` list RPC
+directly with a big `p_limit`") was never checked against the rest of the codebase.
+
+**Direction (not implemented yet):** wrap the four call sites above in `fetchAllPages`
+the same way §29's three were fixed; for `admin_get_all_location_logs` specifically,
+confirm migration `0047`'s stable-sort tiebreaker pattern is needed there too before
+batching (a non-unique sort + batched LIMIT/OFFSET can duplicate or skip rows, exactly
+what §29's fix was careful about).
+
+**Fixed 2026-09-22 (migration `0054_paginate_remaining_admin_lists.sql`):** all four
+had a non-unique `ORDER BY` (confirmed by reading each function body), so each gained
+its own `id` as a final tiebreaker column — the exact thing that made §29's batching
+safe. Three (`admin_get_all_location_logs`, `admin_get_comp_off_payouts`,
+`admin_get_regularizations`) had no `p_limit`/`p_offset` at all and needed them added,
+which changes their signature — each got an explicit `drop function if exists` first so
+the old, unpaginated version couldn't stay callable side-by-side (the Day-3
+`admin_update_settings` bug class). `admin_get_leave_accruals` already had
+`p_limit`/`p_offset`; only its `ORDER BY` changed, no signature change, so a plain
+`create or replace` was correct there. Frontend: all four `src/api/*.js` call sites now
+go through `fetchAllPages`; the one caller that was passing an artificial `limit: 500`
+for a report export (`Reports.jsx`'s leave-accruals ledger fetch) now passes
+`limit: 100000`, matching the `S-2b` "exports stay unlimited" convention every other
+report call already follows. Verified live: the 3 old signatures confirmed gone
+post-migration (no orphaned overload), all 4 new signatures anon-callable, and — the
+real proof — a forced worst-case pagination test (page size of 1, against the live
+`regularization_requests` table, 172 real rows) returned exactly 172 rows with 172
+unique ids, no duplicates, no gaps. `npm run build`/`npm run test` (84 tests) green, G-1
+guardrail clean (121 functions, 28 tables).
+
+### 33.4 Every employee downloads the admin-only Excel import library on login — a regression of §26's fix
+
+**Where:** `App.jsx:17` imports `useLeaveBalanceImport` (an admin-only hook) at module
+top level, not lazily; `src/hooks/useLeaveBalanceImport.js:2` imports the full `xlsx`
+(SheetJS) library at module scope. Confirmed in the built output: the main,
+non-lazy-loaded JS chunk is 982 KB and contains SheetJS's code, even though `AdminPanel`
+itself is already correctly lazy-loaded per §26.
+
+**Root cause:** §26 (2026-09-16) made `AdminPanel` itself load lazily, but a hook it
+depends on had already been imported eagerly one level up, at the top of `App.jsx` —
+outside the lazy boundary — so the heavy library it pulls in rides along in the main
+bundle regardless. The fix that was meant to stop this exact problem doesn't cover this
+one import.
+
+**Impact:** every one of the ~200-300 daily users — including field staff on mobile
+data who never touch the admin import screen — downloads and parses ~1 MB of
+JavaScript they'll never use, on every login. This is a present slowdown, not a future
+one.
+
+**Direction (not implemented yet):** move the `useLeaveBalanceImport` import (and any
+other admin-only hook currently imported at `App.jsx` top level) behind the same
+dynamic-`import()` boundary as `AdminPanel`, so it's only fetched when the Imports
+screen actually mounts — same pattern already proven safe by §26.
+
+**Fixed 2026-09-22:** the hook itself (`useLeaveBalanceImport`) can't be lazy-loaded the
+way `AdminPanel` was — it's a React hook, and hooks must be called unconditionally on
+every render (can't be gated behind `auth.view === 'admin'` without breaking the Rules
+of Hooks). The actual weight was never the hook's own code — a few small `useState`/
+`useEffect` calls — it was the `import * as XLSX from 'xlsx'` sitting at that file's top
+level, which Vite bundles into whatever chunk imports the file, and `App.jsx` imports it
+unconditionally. Moved the library import itself, not the hook: `handleImport` and
+`exportSheet` (the only two functions that touch XLSX) now do
+`const XLSX = await import('xlsx')` inline, right where they're used, instead of a
+module-level import. This is a pure loading-mechanism change — same rule as §26's own
+"must not alter any other function" scope — the hook's exported functions still do
+exactly what they did before, just fetch the library the first time they're actually
+called instead of the app's first paint. `src/features/admin/Database.jsx`/
+`Reports.jsx`/`Travel.jsx` also import `xlsx` statically, left untouched — they're only
+ever reached through the already-lazy `AdminPanel` chunk (§26), so their copy never
+reaches an employee's browser either. Verified: rebuilt and measured — main chunk
+982.91 KB → 490.33 KB (essentially half), with `xlsx` now its own separate
+499.55 KB chunk fetched only when the import screen is actually used. Confirmed the
+dynamic import exposes the identical shape the code relies on (`XLSX.read`,
+`XLSX.utils.sheet_to_json`/`json_to_sheet`/`book_new`/`book_append_sheet`,
+`XLSX.writeFile` — all present and are functions). `npm run build`/`npm run test`
+(84 tests) both green. **Not browser-click-tested** — the actual Imports screen upload/
+export flow hasn't been watched end-to-end after this change, same honesty caveat §26
+carried; the API-shape check above is the strongest available substitute without a
+live click-through.
+
+### 33.5 AdminLogin is the one top-level screen with no ErrorBoundary
+
+**Where:** `App.jsx:76-78` renders `<AdminLogin ... />` directly; every other
+top-level view in the same file is wrapped in `<ErrorBoundary>` (the guardrail built on
+Day 1, `plan.md` §8C / `PROGRESS.md` P5-4, specifically to stop white-screens). A
+render error on this one screen isn't caught.
+
+**Direction (not implemented yet):** wrap it the same way the other branches already are.
+
+**Fixed 2026-09-22:** `App.jsx`'s `showAdminLogin` branch now returns
+`<ErrorBoundary><AdminLogin .../></ErrorBoundary>`, matching every other top-level
+branch in the same file. No migration, no other function touched — the render tree
+for this one screen is the only thing that changed. `npm run build`/`npm run test`
+(84 tests) both green, bundle sizes unchanged (`ErrorBoundary` was already imported and
+used elsewhere in this exact file, so this adds zero new weight).
+
+### 33.6 The geofence/travel distance formula is duplicated by hand — same risk class as the overtime-hours bug, but this one touches money
+
+**Where:** `src/lib/geo.js:1-17` (`haversineMeters`) re-implements the same formula as
+the database's `haversine_m()` Postgres function — the file's own comment admits it's
+"kept in sync by hand." Used for the geofence distance shown on the punch screen
+(`PunchPanel.jsx:146`) and, more importantly, for travel-allowance distance
+fallback/display (`Travel.jsx:59`, `TravelDayChain.jsx:23`) — a feature that determines
+what employees are actually paid for travel.
+
+**Root cause:** the exact same "one formula, two hand-kept copies" pattern that already
+caused a real bug once in this codebase (5 duplicated overtime-hours calculations
+before they were consolidated into `calcOvertimeHours`, one of which forgot to subtract
+the half-day-leave deduction). Nothing stops the client and server copies of
+`haversine`/`haversine_m` from silently drifting the same way.
+
+**Direction (not implemented yet):** the server (`road_distance_km`/`haversine_m`) is
+already the paying authority — the client copy should be display-only (an estimate
+shown before the server confirms), never a fallback value that could itself be paid
+out. Confirm `Travel.jsx`/`TravelDayChain.jsx` never persist the client-computed
+number as the final distance; if either does, that's the priority fix here.
+
+**Verified, then fixed 2026-09-22 — severity correction:** traced the money path
+before touching anything. `employee_add_travel_visit` (`0044_travel_allowance.sql:191`)
+always computes `leg_distance_km` itself, server-side, via `haversine_m` — it never
+reads a client-submitted distance. `admin_settle_travel_period`
+(`0051_travel_settle_storage_cleanup_fix.sql:79`) computes the paid amount entirely
+from `travel_summary_for_employee`, which sums only server-stored columns
+(`leg_distance_km`/`road_leg_km`/`travel_return_road_km`) — never anything from the
+client. **So this was never a payment-correctness bug** — the client's `haversineMeters`
+is purely a live preview shown before the server's own number arrives (confirmed by
+reading `dayKm`'s only use: rendered as "Day total" text, never sent back to any RPC).
+Corrected finding: this is a "two hand-kept copies of one formula could silently
+drift apart" risk — same class as the already-fixed overtime-hours bug, just lower
+stakes since nothing here is money-critical today.
+
+**Fix, matched to the actual risk:** a JS/SQL pair can't be consolidated into one
+function the way 5 duplicate JS copies of overtime-hours were — they necessarily run in
+different languages (the client needs a synchronous answer with no network round-trip;
+the database is the paying authority). Added `src/lib/geo.test.js`: an independent
+transliteration of the SQL `haversine_m` formula (asin-based, vs. the client's
+atan2-based form — both standard, mathematically equivalent formulations) as a
+reference oracle, asserting `haversineMeters()`'s output matches it for 6 realistic
+coordinate pairs (this app's actual domain — city-scale distances, never global/
+antipodal, where the two forms' floating-point behavior would genuinely start to
+diverge for irrelevant reasons). Strengthened `geo.js`'s own comment to point at this
+test and state plainly, with the verification above, that nothing here is money-
+critical today. `npm run build`/`npm run test` (91 tests, +7 new) both green. No
+migration, no other file touched.
+
+### 33.7 Several admin/manager screens fail silently on a network or session error
+
+**Where:** `useAdminAttendance.js:21-22` (`fetchRange`), `useAdminTravel.js:30-31`,
+and all four loaders in `useTeam.js` (lines 39-40, 50-51, 59-60, 70-71) catch fetch
+errors with only `console.error` — no error state is exposed to the component, so a
+failed load (expired session, network blip) renders identically to "no data for this
+period," with nothing on screen telling the admin/manager anything went wrong.
+
+**Root cause:** the project's own G-4 guardrail ("errors carry context, never bare
+`alert()`") was applied to *write* actions (the 17 `alert()` replacements, §6) but not
+consistently to these *read* failures — the inverse failure mode: not a jarring
+`alert()`, but a silent, indistinguishable-from-empty screen.
+
+**Direction (not implemented yet):** each of these loaders needs an exposed `error`
+state and a visible inline message, matching the pattern already used for the fixed
+`alert()` call sites.
+
+**Fixed 2026-09-22 (no migration, frontend only):** all 3 hooks
+(`useAdminAttendance`, `useAdminTravel`, `useTeam`) now expose an `error` state —
+cleared at the start of every fetch, set to a plain-language message
+(`` `Could not load X: ${e.message}` ``) on failure, matching the exact
+`text-red-400` inline-message convention already used for the fixed `alert()` sites
+rather than introducing a new UI pattern. `useTeam`'s 4 loaders share one `error` field
+(same posture as its existing single `errMsg` for write actions) since only one is ever
+in flight from user interaction at a time. Wired through: `AdminPanel.jsx` renders
+`attendanceHook.error` once, in one shared banner, since 3 different screens
+(Dashboard/AttendanceGrid/Database) all read from the same hook — one insertion point
+instead of tripling the banner; `Travel.jsx` and `TeamPanel.jsx` each already had a
+local `errMsg`/`msg` state for write-action failures, so the hook's fetch error is
+shown from the exact same rendered line (`{(errMsg || teamError) && ...}`) rather than
+adding a second, potentially-confusing banner. `npm run build`/`npm run test` (91
+tests) both green.
+
+### 33.8 Growth-risk items — not broken today, will cost more to fix the longer they wait
+
+| # | Item | File:line | Why it matters as data grows |
+|---|---|---|---|
+| 33.8a | `audit_logs` has no retention/cleanup | table created `0002_hrms_schema.sql`, only index is `idx_audit_logs_ts` | Every other high-volume log table (`location_logs`, `od_tracking_logs`) gets a 90-day purge (`0011_location_retention_cron.sql`); this one doesn't and grows forever — already ~1,837 rows at 131 employees over a few weeks per the original baseline. |
+| 33.8b | `attendance` table has grown to 45+ columns via 8+ separate `ALTER TABLE` migrations | `0005`, `0007` (×14 cols), `0009` (×5), `0013`, `0048`, others | Still indexed fine today; it's the single highest-friction table for the *next* feature that needs to touch "the attendance record" — keeps becoming a wider row instead of a related table. |
+| 33.8c | Two pairs of duplicate migration filenames | `0034_employee_session_30_days.sql` / `0034_punch_uses_server_clock.sql`; `0047_stable_sort_for_paged_admin_reads.sql` / `0047_travel_punch_bookends.sql` | Contents don't conflict today, but any tool that applies migrations in alphabetical-filename order (not creation order) could run them out of intended sequence. Compounds the already-known `apply-migrations.mjs` full-replay breakage at migration 0010 (memory: `supabase-db-access-method`) — a second, independent reason one-off verified scripts remain the safer path, not a full replay. |
+| 33.8d | `employeeFetchAttendance` called with no date range on every employee dashboard load | `src/hooks/useEmployeeAttendance.js:35` | The function's own doc comment (`src/api/attendance.js:9-11`) says callers "should" pass a range; this call site doesn't, so it fetches one employee's **entire** attendance history, unbounded, every login — invisible today (a few months of data), grows forever per employee. |
+| 33.8e | `Employees.jsx` renders the entire filtered employee list with no DOM pagination | `Employees.jsx:310` | Fine at ~300 rows; will need the same "Load more"/pagination treatment already logged as a known gap for the Attendance grid (§8B S-1/S-2) once headcount grows further. |
+| 33.8f | `comp_off_payouts` indexed on `period` only, not `emp_id` | — | Minor today given table size; worth confirming the per-employee comp-off report doesn't end up doing a sequential scan as rows accumulate. |
+
+**Worked through 2026-09-22 — not every item needed the same treatment:**
+
+**33.8a — fixed** (migration `0055_audit_log_retention.sql`). This is the one item
+that was a real policy decision, not just a technical gap — asked the user how long
+audit entries should be kept before cleanup. **Decision: 1 year** (deliberately much
+longer than the 90-day operational GPS-log retention — audit entries have real
+investigative value, e.g. the 2026-09-04 leave-approval-functions incident, so this
+isn't the same number reused by habit). New daily cron job (`cleanup-old-audit-logs`,
+04:00 IST, staggered after the two existing cleanup jobs), same idempotent-by-name
+pattern as `0011`/`0014`/`0024`. Verified live: job exists, active, scheduled
+correctly; confirmed 0 of the current 982 rows are older than 1 year, so nothing was
+or will be deleted today — pure prevention of future unbounded growth.
+
+**33.8c — fixed differently than first proposed.** Renaming the two already-applied,
+already-documented duplicate-numbered files was considered and rejected: no
+migration-tracking table exists so renaming wouldn't be unsafe in that sense, but
+`plan.md`/`PROGRESS.md` already reference several of these files by their exact
+current name (e.g. `0038_punch_device_binding.sql` in §18) — renaming would trade one
+kind of confusion for another, for zero live benefit, since the full-replay risk this
+was about is already independently closed off (this project never does a naive
+alphabetical replay; every apply is a one-off verified script, per the
+`supabase-db-access-method` memory). Instead, added a permanent guardrail: `scripts/
+check-schema-contract.mjs` (the G-1 check) now fails loudly if any *new* migration
+number is ever accidentally reused, with the 2 existing known/harmless duplicates
+explicitly allowlisted so the guardrail stays clean today. This directly targets the
+actual goal — stop the mistake from happening again — without rewriting history.
+Verified: the check still passes clean (56 files), and a quick standalone test
+confirmed the detection logic correctly flags a genuinely new collision while ignoring
+the allowlisted ones.
+
+**33.8d — investigated, no safe fix available without a bigger, unrequested
+refactor.** Checked whether the fetch could simply be bounded to "current month," the
+same way `S-1`/attendance-history's own display was already narrowed
+(`hrms-attendance-history-current-month-2026-09-04`). It can't, safely: the same
+unbounded `attendance` map this hook loads also feeds `MonthlySummary.jsx` and
+`MyOvertime.jsx`, both of which have their own month **and year** picker going back 5
+years — bounding the underlying fetch to "this month" would silently break the
+ability to view any past month's summary or overtime, a real behavior regression for
+a proportionality-mismatched fix. A correct fix means converting those 3 screens to
+do an on-demand server fetch scoped to whichever month is selected, instead of one
+shared eager map — a real but larger architectural change, not something to force
+through as a drive-by fix. Left open, same as the already-documented `S-1`/`S-2`
+"staff panel own month" gap it's really part of; per that section's own reasoning,
+one employee's own data volume is genuinely small (nowhere near the row-count
+ceilings that made §29/§33.3 urgent), so this stays a "revisit when it starts to
+matter" item, not a forced fix today.
+
+**33.8e — no action, by design.** Matches the already-documented, deliberately
+accepted `S-1`/`S-2` gap (`plan.md` §8B) — fine at ~300 rows, revisit alongside 33.8d
+if/when headcount grows enough to matter. Forcing pagination in now would be scope
+creep against the project's own prior, considered decision.
+
+**33.8f — verified, turned out to be a non-issue, not fixed because nothing was
+broken.** `comp_off_payouts` has `unique (emp_id, period)` (`0024`), and Postgres
+automatically backs a `UNIQUE` constraint with a composite index — the leading column
+(`emp_id`) of that index is usable on its own for an `emp_id`-only lookup, same as any
+multi-column btree index. The original finding assumed no `emp_id` index existed at
+all; it does, implicitly, via the constraint already in place. No index added — adding
+a second, redundant one would be pure waste.
+
+### 33.9 Minor / housekeeping
+
+- **Two Excel libraries shipped** (`xlsx` and `exceljs`, both used in `Reports.jsx`) —
+  documented as a deliberate tradeoff in existing code comments (`xlsx` drops cell
+  styling on write), not an oversight, but doubles the spreadsheet-library maintenance
+  surface long-term.
+- **Device binding (anti-PIN-sharing, §18/§19) is reset by clearing browser
+  storage** — `src/lib/deviceId.js:1-16` generates the device ID client-side into
+  `localStorage`; clearing it, incognito, or a different browser mints a new device ID
+  and (by the feature's own design) triggers a rebind. Stops casual sharing, not a
+  motivated user. Known shape of the feature, not a bug — noted for completeness.
+- **`npm audit` — 2 moderate vulnerabilities**, both via `exceljs`'s dependency on a
+  vulnerable `uuid` version range (buffer bounds-check issue, `uuid <11.1.1`). No
+  high/critical findings. Fixing requires a breaking `exceljs` downgrade
+  (`npm audit fix --force`) — schedule, not urgent.
+- **Dead component:** `src/components/ui/Table.jsx` is not imported anywhere — every
+  admin screen hand-rolls its own `<table>` markup instead. Either wire it in or
+  delete it.
+
+**Worked through 2026-09-22:**
+
+- **Two Excel libraries — confirmed intentional, no action.** Re-confirmed the
+  existing code comment's reasoning still holds; not touched.
+- **Device binding reset by clearing storage — confirmed known/accepted, no
+  action.** This is the feature working as designed (a deterrent against casual
+  sharing, not a hard technical block), not a bug to fix.
+- **`npm audit` — investigated properly rather than blindly force-fixing.** Checked
+  whether the suggested fix (`npm audit fix --force`, downgrading `exceljs` to
+  `3.4.0`) was actually worth doing: confirmed this project is already on `exceljs`'s
+  latest stable release (`4.4.0` — only a prerelease exists beyond it), and that even
+  the *latest* upstream `exceljs` still depends on the same vulnerable `uuid@^8.3.0`
+  range — so the suggested "fix" is a real downgrade with real regression risk (losing
+  a major version's worth of fixes/features in the library every admin export/import
+  screen uses), not an upgrade. Went one step further and checked whether the
+  vulnerability is even reachable: the advisory is specifically about `uuid`'s `v3`/
+  `v5`/`v6` functions when called with an attacker-supplied `buf` argument.
+  `grep`ing `exceljs`'s own source confirmed it only ever calls `uuid.v4()`, with no
+  arguments at all — a different function entirely, never the vulnerable code path.
+  **Decision: leave as-is.** This is a real, correctly-triaged "not applicable in
+  practice" finding, not a deferred one — forcing the downgrade would trade a
+  functional regression for closing an attack surface that was never open. Will
+  resolve on its own once `exceljs` upstream bumps its own `uuid` dependency.
+- **Dead component — deleted.** Re-confirmed zero imports anywhere in `src/`
+  (`grep -rn "import.*Table" src/` — no matches) before removing
+  `src/components/ui/Table.jsx`. `npm run build`/`npm run test` (91 tests) both green
+  afterward, confirming nothing depended on it.
+
+### What's already solid (checked, not just assumed)
+
+No secrets/credentials committed to the repo (`.env` gitignored, only `.env.example`
+tracked; ORS API key is write-only from the client's perspective — `admin_set_ors_api_key`
+writes it, `admin_get_ors_api_key_status` only ever returns a boolean + timestamp).
+PIN hashing (bcrypt/pgcrypto), the 3-attempt/20-minute lockout, and 30-day employee
+sessions are all still correctly in place — no regression found. Every standard
+`admin_*`/`employee_*`/`manager_*` function sampled correctly checks its token as the
+first line — the gaps in 33.1 are specifically in helper functions that fall outside
+that naming convention and were assumed unreachable without checking. Audit logging on
+the newest money-adjacent functions (travel settlement, rate changes, distance
+overrides) is well covered — this gap has not grown alongside the newer features. FK
+indexing is in good shape since the §8B/`0021` pass. Retention/cron jobs are correctly
+staggered and idempotent (session cleanup, location/OD purge, annual rollover, monthly
+accrual) — audit_logs (33.8a) is the one real gap.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

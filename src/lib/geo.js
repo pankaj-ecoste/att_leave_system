@@ -1,8 +1,16 @@
 // Distance/geofence math. The server (employee_punch, supabase/migrations/
 // 0007_geofence_and_wfh.sql's haversine_m — same formula, kept in sync by hand) is the
 // one that actually decides accept/reject (plan.md §6B — "the server decides, not the
-// phone"); everything here is display-only, so the punch screen can highlight the
-// nearest office tile and show a live distance before the employee taps it.
+// phone") and the one that actually computes any stored/paid travel distance
+// (employee_add_travel_visit always calls haversine_m itself, never trusts a
+// client-submitted number — verified 2026-09-22, plan.md §33.6). Everything here is
+// display-only: the punch screen highlighting the nearest office tile, and the travel
+// screens' live "km so far" estimate before the server's own number is available.
+//
+// Two hand-kept copies of one formula (one JS, one SQL) is still a drift risk even
+// though neither side is money-critical today — geo.test.js pins this function's
+// output against an independent transliteration of haversine_m, so an edit that makes
+// the two disagree fails a test instead of silently showing a wrong estimate.
 
 const EARTH_RADIUS_M = 6371000
 

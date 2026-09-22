@@ -11,15 +11,22 @@ import { calcStatus } from '../lib/datetime'
 export function useAdminAttendance(token, stdHours) {
   const [attendance, setAttendance] = useState({})
   const [loading, setLoading] = useState(false)
+  // plan.md §33.7 — a failed fetch used to only log to the console; the screen kept
+  // showing whatever was already loaded (or nothing) with no indication anything went
+  // wrong, indistinguishable from "no records for this range." Now exposed so the
+  // consuming screen can show it.
+  const [error, setError] = useState(null)
 
   const fetchRange = useCallback(async (opts = {}) => {
     if (!token) return
     setLoading(true)
+    setError(null)
     try {
       const map = await adminFetchAttendance(token, { limit: 3000, ...opts })
       setAttendance(map)
     } catch (e) {
       console.error(e)
+      setError(`Could not load attendance: ${e.message}`)
     } finally {
       setLoading(false)
     }
@@ -57,5 +64,5 @@ export function useAdminAttendance(token, stdHours) {
     return count
   }
 
-  return { attendance, setAttendance, loading, fetchRange, upsert, editCell, bulkUpsert }
+  return { attendance, setAttendance, loading, error, fetchRange, upsert, editCell, bulkUpsert }
 }
