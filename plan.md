@@ -2877,6 +2877,45 @@ broken scripts now load correctly under plain `node` (confirmed each reaches its
 (91 tests)/`npm run check-schema` all still clean, confirming the app itself
 (which only ever runs through Vite) was never affected either way.
 
+## 34. Monthly Attendance calendar — team couldn't read what a day's box meant (2026-09-22)
+
+Team feedback (WhatsApp screenshot from an employee's phone): every day box on the
+Employee → Summary tab's "Monthly Attendance" calendar rendered as the same
+washed-out teal color — Present, Leave, WFH, and On Duty all shared one indigo hue
+at 15% opacity, and nothing inside the box said which status a day actually was.
+Specific asks: color coding people can actually tell apart, "L" inside the box for
+a full leave day, "HL" for half day, and which duration a short/partial leave was
+(1hr vs 2hr). One question also asked what a color (read back from voice-to-text as
+"read") meant at all — answered by adding an on-screen legend rather than guessing
+which color they meant.
+
+**Decision, confirmed with you first:** generic status codes (L / HL / P1 / P2), not
+per-leave-type codes. `constants.js` already defines a short code per leave type
+(SL, CL, EL, LOP, BL, ML, MT, PT, WH, OD, CO, plus P1/P2 for the two Partial Leave
+durations) — the more granular option would have surfaced those directly in the box
+instead. Team picked the simpler generic version.
+
+**Built** (`src/features/employee/MonthlySummary.jsx`): every status now gets its own
+color (Present=emerald, Half Day=yellow, Half Day Leave=violet, Leave=indigo,
+WFH=cyan, On Duty=teal, Absent=red, Holiday=amber) at higher opacity than before, plus
+a short code rendered under the day number (H / IN / HL / L / WH / OD / A). Half Day
+and Half Day Leave both show "HL" per the team's literal ask, kept apart only by
+color, since one is short worked hours and the other is a leave type applied as a
+half day. A Partial Leave (1hr/2hr) doesn't get its own status from `calcStatus` —
+it still resolves to Present or Half Day depending on whether it fully covered the
+shortfall — so it's shown as a small "P1"/"P2" corner badge independent of the main
+status, reusing `findLeaveType(...).label` rather than a new lookup. A color-key
+legend was added below the calendar so no color's meaning has to be inferred or
+asked about again.
+
+**Verified:** `npm run build` clean; the color utility classes used (cyan/teal/
+violet/orange) are already used elsewhere in the codebase, confirming Tailwind picks
+them up. Not verified against a live phone screen this session — the dev server logs
+into the real Supabase project (same one production reads from), and I don't hold
+any employee's PIN to log in and check the Summary tab as they would; ask HR/an
+employee to check on the next session sync, or share a login to verify directly.
+Not yet committed.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
