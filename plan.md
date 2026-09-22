@@ -2288,6 +2288,18 @@ same Source column. `effectiveLegKm()`/`effectiveReturnLegKm()` (`lib/travelPoin
 are the one place that decides the priority, used by the on-screen chain, the map-day
 total, and the report alike, so they can't drift apart.
 
+**Follow-up, same day:** you caught that this only refined on admin's Review — the
+employee's own "My Journey" screen kept showing the old straight-line number until
+admin happened to open theirs, so the two sides could disagree for a while. Migration
+0049 pulls the batch-refine loop into a private core function and adds an
+employee-scoped wrapper (`employee_refine_own_travel_distances`) with its own token
+check; the client now fires it in the background right after a visit is saved, and
+again whenever the journey screen loads, never blocking anything the employee is
+waiting on. Whichever side refines a leg first, the other side reads the exact same
+stored value on its next load — there's no longer a separate "admin's number" and
+"employee's number," just one number that starts as an estimate and gets more accurate
+in place. Admin's Review still triggers the same core function too, as a backstop.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

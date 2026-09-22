@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getLocation } from './useGeolocation'
 import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
-  employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt,
+  employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt, employeeRefineOwnTravelDistances,
 } from '../api/travel'
 import { todayIST } from '../lib/datetime'
 
@@ -38,10 +38,27 @@ export function useTravelJourney(token, empId) {
     }
   }, [token, empId])
 
+  // Best-effort — never awaited by anything the employee is actively waiting on
+  // (plan.md §31: refinement is an accuracy convenience, the same posture as the ORS
+  // call itself). Fires whenever the journey loads (catches up anything left unrefined
+  // from before this existed) and right after a new visit is saved, so the employee's
+  // own screen converges on the same road-distance number admin's review shows,
+  // instead of one lagging the other.
+  const refineInBackground = useCallback(async () => {
+    if (!token || !empId) return
+    try {
+      const count = await employeeRefineOwnTravelDistances(token, empId)
+      if (count > 0) await reload()
+    } catch (e) {
+      console.error('employeeRefineOwnTravelDistances:', e)
+    }
+  }, [token, empId, reload])
+
   useEffect(() => {
     if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); return }
-    reload()
-  }, [token, empId, reload])
+    reload().then(refineInBackground)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, empId])
 
   // file is the camera-captured selfie Blob/File, siteNote the mandatory client/site
   // name. GPS is captured live at the moment of this call — never reused from an
@@ -71,6 +88,7 @@ export function useTravelJourney(token, empId) {
           })
           await reload()
           resolve(visit)
+          refineInBackground()
         } catch (e) {
           reject(e)
         } finally {

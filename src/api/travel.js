@@ -76,6 +76,16 @@ export async function employeeGetTravelSettlements(token, empId) {
   return (data || []).map(rowToTravelSettlement)
 }
 
+// plan.md §31 follow-up — so the employee's own screen and admin's review converge on
+// the same road-distance number instead of one lagging the other (same underlying
+// refine logic admin's Review triggers, just employee-scoped). Best-effort: returns how
+// many legs it managed to refine, never throws for a single leg failing.
+export async function employeeRefineOwnTravelDistances(token, empId) {
+  const { data, error } = await supabase.rpc('employee_refine_own_travel_distances', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return data
+}
+
 // ---------------------------------------------------------------------------
 // Manager
 // ---------------------------------------------------------------------------
