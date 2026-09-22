@@ -185,15 +185,32 @@ export async function adminSetOrsApiKey(token, key) {
   if (error) throw error
 }
 
-// Settles the employee's whole current open period. The photos are deleted server-side
-// inside the RPC itself (0045_travel_selfies_delete_policy_fix.sql) — there is no anon
-// delete policy on the bucket, so the client never has (or needs) the ability to remove
-// storage objects directly.
+// Settles the employee's whole current open period. Deletes the travel_visits rows and
+// writes the settlement server-side (admin-token-gated), then returns the photo paths
+// so the caller can remove the actual files too — Supabase blocks plain SQL deletes on
+// storage.objects ("Direct deletion from storage tables is not allowed. Use the
+// Storage API instead."), so this genuinely has to be a second, client-side step, not a
+// convenience (0051_travel_settle_storage_cleanup_fix.sql). Storage's own delete policy
+// only allows removing a path that no travel_visits row references any more — since
+// settle already deleted those rows first, these paths are guaranteed orphaned by the
+// time this call happens, and an active (unsettled) claim's photo can never be removed
+// this way regardless of who holds the anon key.
 export async function adminSettleTravelPeriod(token, empId) {
   const { data, error } = await supabase.rpc('admin_settle_travel_period', { p_token: token, p_emp_id: empId })
   if (error) throw error
   const row = data?.[0]
   return {
     settlement: rowToTravelSettlement(row?.settlement),
+    photoPaths: row?.photo_paths || [],
   }
+}
+
+// Best-effort — a settlement that fails to delete every photo just leaves harmless
+// orphan files behind (still governed by the same orphan-only delete policy, so this
+// never risks anything active), never blocks the paid record which is already
+// committed by the time this runs.
+export async function deleteTravelSelfies(paths) {
+  if (!paths || paths.length === 0) return
+  const { error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).remove(paths)
+  if (error) console.error('deleteTravelSelfies:', error)
 }

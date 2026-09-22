@@ -2333,6 +2333,44 @@ date-range fetch inside `expand()` used `row.firstDate`/`row.lastDate` from that
 stale snapshot — now derived from the freshly-loaded journey's own dates instead, so it
 can't silently miss a day added since the list last loaded.
 
+## 32. Settle & Pay never actually worked — real root cause found and fixed (2026-09-22)
+
+**Reported:** "Settle & Pay button I think not working."
+
+**Investigation, not guesswork:** rather than assume, ran a dry-run against production
+— `BEGIN; call admin_settle_travel_period(...) for Himanshu Bansal; ROLLBACK;` (nothing
+committed, real data untouched either way) — and it failed for real: `Direct deletion
+from storage tables is not allowed. Use the Storage API instead.`
+
+**Root cause:** Supabase does not permit a plain SQL `DELETE FROM storage.objects` at
+all, under any circumstances. Migration 0045 (the security fix that moved photo
+deletion server-side, plan.md §28) added exactly that statement into
+`admin_settle_travel_period` — meaning **every settle attempt has failed, in every
+environment, since 0045 first shipped**, confirmed by `select count(*) from
+travel_settlements` returning 0. 0045's own verification script only checked that
+unrelated functions were untouched; it never actually called the function it changed,
+so this went uncaught for 4 days.
+
+**Fix (migration 0051):** `admin_settle_travel_period` goes back to not touching
+storage.objects directly — it still deletes the `travel_visits` rows and writes the
+settlement (ordinary table SQL, always worked) and returns the photo paths, same shape
+as before 0045. Actual file deletion goes back to the client calling the real Storage
+API, the only thing that can legally do it.
+
+That reopens the exact question 0045 was answering, so this closes it properly instead
+of just not closing it: a blanket anon DELETE policy would again let anyone with the
+public key remove an active claim's evidence before it's settled. Instead, the new
+policy only allows deleting a path that **no `travel_visits` row currently
+references** — checked via a new `travel_photo_is_orphaned()` SECURITY DEFINER
+function (anon gets EXECUTE on this one narrow yes/no check, never SELECT on
+`travel_visits` itself, which stays fully locked down). Since settle already deletes
+those rows first, a photo only becomes deletable the moment a real settlement has
+already happened — verified directly: an active visit's photo returns `is_orphaned =
+false`, a genuinely gone path returns `true`.
+
+Confirmed fixed the same way the bug was found — a dry-run against Himanshu Bansal's
+real data (rolled back, nothing committed) now succeeds: 44.261km × ₹10/km = ₹442.61.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

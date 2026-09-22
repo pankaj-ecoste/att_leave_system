@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   adminGetTravelOverview, adminGetEmployeeTravelJourney, adminGetTravelSettlements,
   adminSetTaRateTier, adminGetTaSettings, adminUpdateTaSettings,
-  adminOverrideTravelVisitDistance, adminSettleTravelPeriod,
+  adminOverrideTravelVisitDistance, adminSettleTravelPeriod, deleteTravelSelfies,
   adminRefineTravelDistances, adminGetOrsApiKeyStatus, adminSetOrsApiKey,
 } from '../api/travel'
 
@@ -73,10 +73,14 @@ export function useAdminTravel(token) {
     setOrsKeyStatus(await adminGetOrsApiKeyStatus(token))
   }
 
-  // Settlement (paid-amount record + photo/point cleanup) all happens atomically
-  // server-side inside admin_settle_travel_period (0045_travel_selfies_delete_policy_fix.sql).
+  // The paid-amount record + travel_visits cleanup happens atomically server-side
+  // (admin-token-gated); the actual photo files are removed as a genuinely separate
+  // client-side step, since Supabase doesn't allow deleting storage objects via plain
+  // SQL at all (0051_travel_settle_storage_cleanup_fix.sql) — a failure here leaves
+  // harmless orphan files behind, never risks or blocks the already-committed payout.
   async function settle(empId) {
-    const { settlement } = await adminSettleTravelPeriod(token, empId)
+    const { settlement, photoPaths } = await adminSettleTravelPeriod(token, empId)
+    await deleteTravelSelfies(photoPaths)
     await reload()
     return settlement
   }
