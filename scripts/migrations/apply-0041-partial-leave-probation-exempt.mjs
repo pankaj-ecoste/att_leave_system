@@ -22,7 +22,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0041_partial_leave_probation_exempt.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0041_partial_leave_probation_exempt.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const EXEMPTION_MARKER = "'LOP', 'Work From Home', 'On Duty', 'Partial Leave - 1 Hour', 'Partial Leave - 2 Hours'"

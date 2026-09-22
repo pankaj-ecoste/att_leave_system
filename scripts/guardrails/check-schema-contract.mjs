@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const MIGRATIONS_DIR = path.join(__dirname, '..', 'supabase', 'migrations')
+const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations')
 
 // 0001_baseline_schema.sql is the OLD project's extracted schema — never applied to
 // HRMS, so it must never contribute tables/functions here (see apply-migrations.mjs).

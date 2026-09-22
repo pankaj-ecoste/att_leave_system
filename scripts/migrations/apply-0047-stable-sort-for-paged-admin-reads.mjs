@@ -20,7 +20,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sql = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '0047_stable_sort_for_paged_admin_reads.sql'), 'utf8')
+const sql = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'migrations', '0047_stable_sort_for_paged_admin_reads.sql'), 'utf8')
 
 const CHECKS = [
   { fn: 'admin_get_attendance', marker: 'order by a.date desc, e.name, a.emp_id' },

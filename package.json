@@ -9,10 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check-schema": "node scripts/check-schema-contract.mjs",
-    "smoke-test": "node scripts/smoke-test-functions.mjs",
-    "apply-migrations": "node scripts/apply-migrations.mjs",
-    "seed": "node scripts/seed-employees-and-holidays.mjs"
+    "check-schema": "node scripts/guardrails/check-schema-contract.mjs",
+    "smoke-test": "node scripts/guardrails/smoke-test-functions.mjs",
+    "apply-migrations": "node scripts/migrations/apply-migrations.mjs",
+    "seed": "node scripts/setup/seed-employees-and-holidays.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

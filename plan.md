@@ -2824,6 +2824,59 @@ indexing is in good shape since the §8B/`0021` pass. Retention/cron jobs are co
 staggered and idempotent (session cleanup, location/OD purge, annual rollover, monthly
 accrual) — audit_logs (33.8a) is the one real gap.
 
+## 34. `scripts/` reorganized into subfolders by purpose (2026-09-22)
+
+**Trigger:** not a bug — you asked whether file naming met "proper developer
+standard." `src/` already did (consistent PascalCase components, `useXxx.js` hooks,
+domain-split `api/`/`lib/`) — no changes needed there. `scripts/` had grown to 34
+files in one flat directory as one-off migration/diagnostic/fix scripts accumulated
+over many sessions; still individually well-named, but no longer organized as a
+group. Also fixed one name I'd introduced earlier the same day
+(`check-331-anon-grants.mjs` — referenced a plan.md section number, a pattern no
+other script in the repo uses) while doing this.
+
+**Decision, confirmed with you first:** organize into 5 subfolders by purpose, not
+by date — `migrations/` (one script per numbered migration + the general
+`apply-migrations.mjs` tool), `guardrails/` (permanent, repeatedly-run checks wired
+into `package.json`), `diagnostics/` (one-off read-only investigations),
+`data-fixes/` (one-off scripts that corrected already-live data, kept as a
+historical record), `setup/` (reusable operational utilities). `scripts/README.md`
+now explains the layout for anyone opening the folder cold.
+
+**What had to change for this to actually work, not just look tidy:** 23 scripts
+compute paths relative to their own file location (`__dirname`) to find
+`supabase/migrations/` — moving them one level deeper meant every one needed an
+extra `'..'`. 3 more (`backfill-attendance-status-live.mjs`,
+`backfill-status-after-std-hours-change.mjs`, `revert-std-hours-to-9.mjs`) statically
+import from `../src/lib/` and needed the same depth fix. `package.json`'s 4 script
+references (`check-schema`, `smoke-test`, `apply-migrations`, `seed`) updated to the
+new paths.
+
+**Verified, not assumed:** ran every migration-apply script with no `DATABASE_URL`
+set (safe — they all exit at that guard before touching anything) and confirmed none
+threw a module-resolution error from the new location; `npm run check-schema` (no DB
+needed at all) ran fully clean end to end from its new path. `npm run build`/
+`npm run test` (91 tests) both still green — no `src/` file was touched, so this was
+never expected to affect either, confirmed anyway.
+
+**Found, then fixed on request:** verifying the 3 `data-fixes/` scripts surfaced a
+genuinely pre-existing, unrelated issue — `src/lib/datetime.js` imports `./constants`
+with no file extension, which plain Node's ESM loader rejects (confirmed via
+`git blame`: this predates today, commit `be10d82`, not caused by this move).
+Deliberately left alone at first, flagged rather than silently patched as a
+drive-by side effect of a file-naming cleanup. Traced the actual blast radius before
+touching it: the rest of the codebase is full of the same extensionless-import style
+(~40 more instances across `src/api/`/`src/hooks/`/`src/lib/`) — completely normal
+and correct for a Vite app, which resolves them itself, and none of the rest run
+through plain Node, so none of them were broken. Only `datetime.js`'s one import of
+`constants.js` sat on the actual path these 3 scripts need (`constants.js` itself has
+no further relative imports — a one-hop chain). Fixed that single line
+(`'./constants'` → `'./constants.js'`), nothing else. Verified: all 3 previously-
+broken scripts now load correctly under plain `node` (confirmed each reaches its own
+`DATABASE_URL` guard instead of a module error); `npm run build`/`npm run test`
+(91 tests)/`npm run check-schema` all still clean, confirming the app itself
+(which only ever runs through Vite) was never affected either way.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

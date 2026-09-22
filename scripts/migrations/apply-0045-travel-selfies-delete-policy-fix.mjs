@@ -24,7 +24,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0045_travel_selfies_delete_policy_fix.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0045_travel_selfies_delete_policy_fix.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 // Same "must not touch anything pre-existing" guardrail as 0044's apply script — this

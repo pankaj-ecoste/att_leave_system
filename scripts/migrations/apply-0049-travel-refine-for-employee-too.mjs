@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// One-off: apply supabase/migrations/0047_travel_punch_bookends.sql.
-// Purely additive — one new function (manager_get_team_travel_attendance), nothing
-// else touched. See plan.md §28 follow-up.
+// One-off: apply supabase/migrations/0049_travel_refine_for_employee_too.sql.
+// Adds employee_refine_own_travel_distances so the employee's own screen and admin's
+// review screen converge on the same refined number instead of one lagging the other.
+// See plan.md §31 follow-up.
 //
 // Usage:
 //   DATABASE_URL="postgresql://postgres.xxxx:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:5432/postgres" \
-//     node scripts/apply-0047-travel-punch-bookends.mjs
+//     node scripts/apply-0049-travel-refine-for-employee-too.mjs
 
 import pg from 'pg'
 import fs from 'fs'
@@ -19,14 +20,13 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0047_travel_punch_bookends.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0049_travel_refine_for_employee_too.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const MUST_BE_UNCHANGED = [
-  'employee_punch', 'admin_update_employee', 'admin_get_attendance', 'fetch_directory',
-  'is_valid_admin_token', 'is_valid_employee_token', 'log_audit', 'haversine_m',
-  'employee_add_travel_visit', 'travel_summary_for_employee', 'admin_settle_travel_period',
-  'manager_get_team_travel_journey', 'manager_get_team_travel_summary',
+  'employee_punch', 'admin_update_employee', 'fetch_directory', 'is_valid_admin_token',
+  'is_valid_employee_token', 'log_audit', 'haversine_m', 'road_distance_km',
+  'employee_add_travel_visit', 'admin_settle_travel_period', 'travel_summary_for_employee',
 ]
 
 async function fnHashes(client, names) {
@@ -45,7 +45,7 @@ async function main() {
     const before = await fnHashes(client, MUST_BE_UNCHANGED)
 
     await client.query(sql)
-    console.log('Migration 0047 applied.')
+    console.log('Migration 0049 applied.')
 
     const after = await fnHashes(client, MUST_BE_UNCHANGED)
     let changed = false
@@ -60,9 +60,9 @@ async function main() {
 
     const { rows } = await client.query(`
       select proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and proname = 'manager_get_team_travel_attendance'
+      where n.nspname = 'public' and proname in ('travel_refine_distances_core', 'employee_refine_own_travel_distances')
     `)
-    console.log('manager_get_team_travel_attendance present:', rows.length === 1)
+    console.log('New functions live:', rows.map(r => r.proname))
   } finally {
     await client.end()
   }

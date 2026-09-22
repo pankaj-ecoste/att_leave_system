@@ -20,7 +20,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0046_travel_expenses_and_summary.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0046_travel_expenses_and_summary.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 // Functions this migration intentionally changes (return shape or body) — excluded

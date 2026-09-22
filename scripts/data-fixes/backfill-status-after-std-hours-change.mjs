@@ -19,8 +19,8 @@
 //   ... node scripts/backfill-status-after-std-hours-change.mjs --apply
 
 import pg from 'pg'
-import { calcStatus } from '../src/lib/datetime.js'
-import { DAY_TYPES } from '../src/lib/constants.js'
+import { calcStatus } from '../../src/lib/datetime.js'
+import { DAY_TYPES } from '../../src/lib/constants.js'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {

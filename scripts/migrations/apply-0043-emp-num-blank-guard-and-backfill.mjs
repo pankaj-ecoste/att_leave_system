@@ -22,7 +22,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0043_emp_num_blank_guard_and_backfill.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0043_emp_num_blank_guard_and_backfill.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const MARKER = "nullif(btrim(p_data->>'empNum')" // present in the fixed body, absent from the old one

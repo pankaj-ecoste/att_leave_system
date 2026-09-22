@@ -19,7 +19,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0050_travel_road_distance_accept_header_fix.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0050_travel_road_distance_accept_header_fix.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const MUST_BE_UNCHANGED = [

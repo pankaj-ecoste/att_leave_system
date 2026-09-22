@@ -25,7 +25,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0036_per_employee_std_hours.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0036_per_employee_std_hours.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 async function main() {

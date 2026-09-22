@@ -16,7 +16,7 @@ import path from 'node:path'
 import pg from 'pg'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const MIGRATIONS_DIR = path.join(__dirname, '..', 'supabase', 'migrations')
+const MIGRATIONS_DIR = path.join(__dirname, '..', '..', 'supabase', 'migrations')
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {

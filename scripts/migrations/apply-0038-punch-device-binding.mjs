@@ -22,7 +22,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0038_punch_device_binding.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0038_punch_device_binding.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 async function main() {

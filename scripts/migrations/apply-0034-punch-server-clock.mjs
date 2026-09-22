@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// One-off: apply supabase/migrations/0037_fix_app_settings_public_view.sql directly
+// One-off: apply supabase/migrations/0034_punch_uses_server_clock.sql directly
 // (apply-migrations.mjs full-replay is broken at migration 0010 on prod — see
-// plan.md §13 / memory hrms-employee-session-expiry-fix-2026-08-20). Purely additive
-// view redefinition — no data, no table changes.
+// plan.md §13 / memory hrms-employee-session-expiry-fix-2026-08-20). This migration
+// only does `create or replace function employee_punch(...)` — no table/data changes.
 //
 // Usage:
 //   DATABASE_URL="postgresql://postgres.xxxx:PASSWORD@aws-1-ap-south-1.pooler.supabase.com:5432/postgres" \
-//     node scripts/apply-0037-fix-app-settings-public-view.mjs
+//     node scripts/apply-0034-punch-server-clock.mjs
 
 import pg from 'pg'
 import fs from 'fs'
@@ -20,7 +20,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0037_fix_app_settings_public_view.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0034_punch_uses_server_clock.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 async function main() {
@@ -28,9 +28,7 @@ async function main() {
   await client.connect()
   try {
     await client.query(sql)
-    const { rows } = await client.query(`select * from app_settings_public`)
-    console.log('Applied 0037_fix_app_settings_public_view.sql.')
-    console.log('app_settings_public now returns:', rows[0])
+    console.log('Applied 0034_punch_uses_server_clock.sql — employee_punch redefined.')
   } finally {
     await client.end()
   }

@@ -28,7 +28,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0053_signed_urls_for_private_files.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0053_signed_urls_for_private_files.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 async function bucketReadableByAnon(client, bucket) {

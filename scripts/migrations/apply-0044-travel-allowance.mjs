@@ -21,7 +21,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0044_travel_allowance.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0044_travel_allowance.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const NEW_FUNCTIONS = [

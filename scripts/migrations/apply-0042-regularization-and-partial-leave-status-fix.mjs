@@ -24,7 +24,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0042_regularization_and_partial_leave_status_fix.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0042_regularization_and_partial_leave_status_fix.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 const FUNCTIONS = ['manager_decide_regularization', 'admin_decide_regularization', 'apply_leave_approval_effects']

@@ -37,8 +37,8 @@
 //   ... node scripts/backfill-attendance-status-live.mjs --apply
 
 import pg from 'pg'
-import { calcStatus, effectiveStdHours } from '../src/lib/datetime.js'
-import { DAY_TYPES } from '../src/lib/constants.js'
+import { calcStatus, effectiveStdHours } from '../../src/lib/datetime.js'
+import { DAY_TYPES } from '../../src/lib/constants.js'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {

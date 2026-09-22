@@ -23,7 +23,7 @@ if (!connectionString) {
   process.exit(2)
 }
 
-const sqlPath = path.join(__dirname, '..', 'supabase', 'migrations', '0052_close_anon_access_gaps.sql')
+const sqlPath = path.join(__dirname, '..', '..', 'supabase', 'migrations', '0052_close_anon_access_gaps.sql')
 const sql = fs.readFileSync(sqlPath, 'utf8')
 
 async function anonReach(client) {
