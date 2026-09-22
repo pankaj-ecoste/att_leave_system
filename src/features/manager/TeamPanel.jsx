@@ -3,12 +3,13 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
-import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { getLeaveDocumentUrl } from '../../api/documents'
+import { dayPoints } from '../../lib/travelPoints'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
@@ -17,7 +18,7 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 export function TeamPanel({
   token, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
   teamLocationLogs, teamLocationLoading, loadTeamLocationLogs, globalStdHours,
-  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney,
+  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance,
 }) {
   const [tab, setTab] = useState('requests')
   const [monthSel, setMonthSel] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() })
@@ -25,8 +26,10 @@ export function TeamPanel({
   const [errMsg, setErrMsg] = useState('')
   const [expandedTravelEmp, setExpandedTravelEmp] = useState(null)
   const [travelJourney, setTravelJourney] = useState([])
+  const [travelAttnByDate, setTravelAttnByDate] = useState({})
   const [travelJourneyLoading, setTravelJourneyLoading] = useState(false)
   const [showTravelMap, setShowTravelMap] = useState(false)
+  const [travelMapDate, setTravelMapDate] = useState(null)
   const [travelViewerUrl, setTravelViewerUrl] = useState(null)
 
   function selectTab(t) {
@@ -39,13 +42,16 @@ export function TeamPanel({
     if (t === 'travel') loadTeamTravelSummary()
   }
 
-  async function expandTravel(empId) {
-    if (expandedTravelEmp === empId) { setExpandedTravelEmp(null); return }
-    setExpandedTravelEmp(empId)
+  async function expandTravel(row) {
+    if (expandedTravelEmp === row.empId) { setExpandedTravelEmp(null); return }
+    setExpandedTravelEmp(row.empId)
     setShowTravelMap(false)
+    setTravelMapDate(null)
     setTravelJourneyLoading(true)
     try {
-      setTravelJourney(await loadTeamTravelJourney(empId))
+      const journey = await loadTeamTravelJourney(row.empId)
+      setTravelJourney(journey)
+      setTravelAttnByDate(row.firstDate && row.lastDate ? await loadTeamTravelAttendance(row.empId, row.firstDate, row.lastDate) : {})
     } catch (err) {
       setErrMsg(err.message)
     } finally {
@@ -262,44 +268,42 @@ export function TeamPanel({
                       </div>
                       <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km{row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)}` : ''}</p>
                       <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
-                      <Button variant="secondary" className="text-xs" onClick={() => expandTravel(row.empId)}>
+                      <Button variant="secondary" className="text-xs" onClick={() => expandTravel(row)}>
                         {expandedTravelEmp === row.empId ? 'Hide' : 'View'}
                       </Button>
                     </div>
                     {expandedTravelEmp === row.empId && (
                       <div className="p-3 border-t border-white/10">
-                        {travelJourneyLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
-                          <>
-                            {travelJourney.length > 0 && (
-                              <button className="text-indigo-400 text-xs underline underline-offset-2 mb-2" onClick={() => setShowTravelMap(!showTravelMap)}>
-                                {showTravelMap ? 'Hide map' : 'View map'}
-                              </button>
-                            )}
-                            {showTravelMap && (
-                              <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
-                                <div className="mb-3">
-                                  <JourneyMap points={travelJourney.map(v => ({ id: v.id, lat: v.lat, lon: v.lon, label: v.siteNote, kind: 'visit' }))} />
+                        {travelJourneyLoading ? <p className="text-white/30 text-xs">Loading...</p> : (() => {
+                          const dates = [...new Set(travelJourney.map(v => v.date))].sort()
+                          const byDate = travelJourney.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
+                          if (dates.length === 0) return <p className="text-white/30 text-xs">No open visits.</p>
+                          return dates.map(date => {
+                            const visits = byDate[date]
+                            const record = travelAttnByDate[date]
+                            return (
+                              <div key={date} className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <p className="text-white/70 text-xs font-medium">{date}</p>
+                                  <button
+                                    className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
+                                    onClick={() => { setShowTravelMap(showTravelMap && travelMapDate === date ? false : true); setTravelMapDate(date) }}
+                                  >
+                                    {showTravelMap && travelMapDate === date ? 'Hide map' : 'View map'}
+                                  </button>
                                 </div>
-                              </Suspense>
-                            )}
-                            <div className="space-y-2">
-                              {travelJourney.map(v => (
-                                <div key={v.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
-                                  <TravelPhotoThumb path={v.photoPath} onOpen={setTravelViewerUrl} className="w-10 h-10" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-white text-sm truncate">{v.siteNote}</p>
-                                    <p className="text-white/30 text-xs">{v.date} {new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km</p>
-                                    {v.expenseAmount != null && (
-                                      <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
-                                    )}
-                                  </div>
-                                  {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setTravelViewerUrl} className="w-8 h-8" />}
-                                </div>
-                              ))}
-                              {travelJourney.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
-                            </div>
-                          </>
-                        )}
+                                {showTravelMap && travelMapDate === date && (
+                                  <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
+                                    <div className="mb-2">
+                                      <JourneyMap points={dayPoints(visits, record)} />
+                                    </div>
+                                  </Suspense>
+                                )}
+                                <TravelDayChain visits={visits} attendanceRecord={record} onOpenPhoto={setTravelViewerUrl} />
+                              </div>
+                            )
+                          })
+                        })()}
                       </div>
                     )}
                   </div>

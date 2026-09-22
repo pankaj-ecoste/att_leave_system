@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import {
   rowToTravelVisit, rowToTravelSummary, rowToTravelOverviewRow, rowToTravelSettlement, rowToTaSettings,
+  rowToAttendance,
 } from './mappers'
 
 // plan.md §28 — Travel Allowance verification. Same private-bucket pattern as
@@ -89,6 +90,17 @@ export async function managerGetTeamTravelJourney(token, managerId, empId) {
   const { data, error } = await supabase.rpc('manager_get_team_travel_journey', { p_token: token, p_manager_id: managerId, p_emp_id: empId })
   if (error) throw error
   return (data || []).map(rowToTravelVisit)
+}
+
+// Punch-in/punch-out bookends for one team member's open journey dates (plan.md §28 —
+// the on-screen list and the downloaded report show these alongside the visits, same
+// as the map already draws them as the line's two ends).
+export async function managerGetTeamTravelAttendance(token, managerId, empId, from, to) {
+  const { data, error } = await supabase.rpc('manager_get_team_travel_attendance', {
+    p_token: token, p_manager_id: managerId, p_emp_id: empId, p_from: from, p_to: to,
+  })
+  if (error) throw error
+  return (data || []).map(rowToAttendance)
 }
 
 // ---------------------------------------------------------------------------

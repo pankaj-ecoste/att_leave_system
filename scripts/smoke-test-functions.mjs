@@ -124,6 +124,7 @@ const CALLS = [
   ['employee_get_travel_settlements', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['manager_get_team_travel_summary', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID }],
   ['manager_get_team_travel_journey', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['manager_get_team_travel_attendance', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_emp_id: FAKE_UUID, p_from: TODAY, p_to: TODAY }],
   ['admin_get_travel_overview', { p_token: FAKE_UUID }],
   ['admin_get_employee_travel_journey', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['admin_get_travel_settlements', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],

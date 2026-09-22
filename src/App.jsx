@@ -126,6 +126,7 @@ export default function App() {
             decideLeave: team.decideLeave, decideRegularization: team.decideRegularization,
             teamTravelSummary: team.teamTravelSummary, teamTravelLoading: team.teamTravelLoading,
             loadTeamTravelSummary: team.loadTeamTravelSummary, loadTeamTravelJourney: team.loadTeamTravelJourney,
+            loadTeamTravelAttendance: team.loadTeamTravelAttendance,
           }}
           travel={travel}
         />

@@ -2208,6 +2208,39 @@ Also ran the real paging code against the live September data with a 1000-row ca
 `p_limit` from the client — go through a `fetchAllPages`-wrapped function. Any NEW
 "fetch everything for a range" RPC needs a total (unique) ORDER BY.
 
+## 30. Travel Allowance — punch-in/punch-out bookends in the list and report (plan.md §28 follow-up, 2026-09-22)
+
+**Trigger:** Puneet Sharma (emp #1171) used the feature for real for the first time
+(2026-09-21: punched in, logged one visit at "Supernova", punched out). Checked his live
+production data by hand first — the underlying math was correct (punch-in → Supernova →
+punch-out = 19.73km, matching the stored coordinates) — the gap was presentation: the
+map already draws punch-in → visits → punch-out as one connected line, but the
+on-screen visit list and the downloadable report only showed the visit rows, not the
+punch-in/punch-out bookends the line implies.
+
+**Fix:** new shared `TravelDayChain` component (one place, used by employee/manager/
+admin alike, not tripled) renders each day as Punch In → visit 1 → visit 2 → ... →
+Punch Out → day total, matching what the map already draws. The day total now also
+counts the last-visit-to-punch-out leg that was always part of the paid distance but
+never shown on its own before. The admin Excel report gained the same structure — a
+"Punch In" row and a "Punch Out" row (with their reverse-geocoded locations, already
+stored on the attendance row from punch time — no new geocoding needed) bracketing each
+day's visits.
+
+One new function: `manager_get_team_travel_attendance` (migration 0047) — admin already
+had a flexible date-range attendance fetch to reuse (`adminFetchAttendance`); manager
+only had a whole-team/whole-month one, so this adds a narrow, ownership-checked,
+date-range equivalent scoped to one team member, mirroring
+`manager_get_team_travel_journey`'s existing ownership-check shape. Applied and verified
+the same way as 0044–0046 (every function outside this migration's own scope hashed
+before/after, must be byte-identical).
+
+Also extracted `dayPoints()` (building the map's point list) out of three duplicated
+copies into `src/lib/travelPoints.js` — deliberately NOT re-exported from
+`JourneyMap.jsx` itself, since that file pulls in Leaflet at module scope and is only
+ever reached via a lazy `import()`; sharing the helper from there would have dragged
+Leaflet back into the main bundle for every screen that just needed the point list.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

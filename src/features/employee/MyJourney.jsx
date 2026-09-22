@@ -2,24 +2,13 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Spinner } from '../../components/ui/Spinner'
-import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { attnKey } from '../../api/mappers'
+import { dayPoints } from '../../lib/travelPoints'
 
 // Only fetched when a map is actually opened (plan.md §28 decision 9).
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
-
-function dayPoints(dateVisits, attendanceRecord) {
-  const points = []
-  if (attendanceRecord?.inLat != null) {
-    points.push({ id: 'start', lat: attendanceRecord.inLat, lon: attendanceRecord.inLon, label: `Punch in ${attendanceRecord.inTime || ''}`, kind: 'start' })
-  }
-  dateVisits.forEach(v => points.push({ id: v.id, lat: v.lat, lon: v.lon, label: v.siteNote, kind: 'visit' }))
-  if (attendanceRecord?.outLat != null) {
-    points.push({ id: 'end', lat: attendanceRecord.outLat, lon: attendanceRecord.outLon, label: `Punch out ${attendanceRecord.outTime || ''}`, kind: 'end' })
-  }
-  return points
-}
 
 // plan.md §28 — "My Journey": camera-only selfie + mandatory site note per client
 // visit, an optional additional expense (toll/lunch/etc — receipt photo mandatory the
@@ -185,20 +174,16 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
       ) : dates.map(date => {
         const visits = byDate[date]
         const record = attendance?.[attnKey(currentUser.id, date)]
-        const dayKm = visits.reduce((s, v) => s + v.legDistanceKm, 0)
         return (
           <Card key={date}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-white font-medium text-sm">{date}</p>
-              <div className="flex items-center gap-2">
-                <span className="text-white/40 text-xs">{dayKm.toFixed(1)} km</span>
-                <button
-                  className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
-                  onClick={() => setOpenMapDate(openMapDate === date ? null : date)}
-                >
-                  {openMapDate === date ? 'Hide map' : 'View map'}
-                </button>
-              </div>
+              <button
+                className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
+                onClick={() => setOpenMapDate(openMapDate === date ? null : date)}
+              >
+                {openMapDate === date ? 'Hide map' : 'View map'}
+              </button>
             </div>
             {openMapDate === date && (
               <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
@@ -207,21 +192,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
                 </div>
               </Suspense>
             )}
-            <div className="space-y-2">
-              {visits.map(v => (
-                <div key={v.id} className={`flex items-center gap-3 p-2 rounded-xl border ${selectedVisitId === v.id ? 'border-amber-400/50 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}>
-                  <TravelPhotoThumb path={v.photoPath} onOpen={setViewerUrl} className="w-12 h-12" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{v.siteNote}</p>
-                    <p className="text-white/30 text-xs">{new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km{v.distanceOverridden ? ' (adjusted)' : ''}</p>
-                    {v.expenseAmount != null && (
-                      <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
-                    )}
-                  </div>
-                  {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setViewerUrl} className="w-10 h-10" />}
-                </div>
-              ))}
-            </div>
+            <TravelDayChain visits={visits} attendanceRecord={record} onOpenPhoto={setViewerUrl} selectedVisitId={selectedVisitId} onSelectVisit={setSelectedVisitId} />
           </Card>
         )
       })}

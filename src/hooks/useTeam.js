@@ -3,7 +3,7 @@ import { employeeGetMyTeam } from '../api/employees'
 import { managerGetTeamLeaves, managerDecideLeave as apiManagerDecideLeave } from '../api/leave'
 import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideRegularization as apiManagerDecideReg } from '../api/attendance'
 import { managerGetTeamLocationLogs } from '../api/location'
-import { managerGetTeamTravelSummary, managerGetTeamTravelJourney } from '../api/travel'
+import { managerGetTeamTravelSummary, managerGetTeamTravelJourney, managerGetTeamTravelAttendance } from '../api/travel'
 
 // "My Team" — appears automatically for anyone with direct reports (the manager view
 // lives inside the employee dashboard, not a separate login, since one person is both).
@@ -78,6 +78,16 @@ export function useTeam(token, empId, onAudit) {
     return managerGetTeamTravelJourney(token, empId, memberEmpId)
   }
 
+  // Punch-in/punch-out bookends for one team member's open journey dates, keyed by
+  // date — mirrors what TravelDayChain needs, same shape adminFetchAttendance's map
+  // uses on the admin side, just scoped to a date range instead of a whole month.
+  async function loadTeamTravelAttendance(memberEmpId, from, to) {
+    const rows = await managerGetTeamTravelAttendance(token, empId, memberEmpId, from, to)
+    const byDate = {}
+    for (const r of rows) byDate[r.date] = r
+    return byDate
+  }
+
   async function decideLeave(leaveId, status) {
     try {
       // Trust the server's returned row rather than the status passed in — it carries
@@ -103,6 +113,6 @@ export function useTeam(token, empId, onAudit) {
   return {
     myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
     teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
-    teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney,
+    teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance,
   }
 }

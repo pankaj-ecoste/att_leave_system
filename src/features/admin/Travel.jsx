@@ -4,76 +4,115 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
-import { TravelPhotoThumb } from '../../components/TravelPhotoThumb'
+import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
+import { adminFetchAttendance } from '../../api/attendance'
+import { attnKey } from '../../api/mappers'
+import { haversineMeters } from '../../lib/geo'
+import { dayPoints } from '../../lib/travelPoints'
 import { todayIST } from '../../lib/datetime'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
 const TIER_LABELS = { manager: 'Manager', executive: 'Executive' }
 
-// Day-wise visit detail + a cumulative summary sheet — same lightweight xlsx pattern
-// Reports.jsx already uses for plain tabular exports (json_to_sheet, not the styled
-// exceljs path, since this isn't a multi-column-per-day register).
-function downloadTravelReport(row, journey, rate) {
-  const visitRows = journey.map(v => ({
-    Date: v.date,
-    Time: new Date(v.capturedAt).toLocaleTimeString(),
-    'Site / Client': v.siteNote,
-    'Distance (km)': v.legDistanceKm.toFixed(2),
-    Adjusted: v.distanceOverridden ? `Yes — ${v.overrideReason || ''}` : '',
-    'Expense Note': v.expenseNote || '',
-    'Expense Amount (₹)': v.expenseAmount != null ? v.expenseAmount.toFixed(2) : '',
-  }))
-  const totalKm = journey.reduce((s, v) => s + v.legDistanceKm, 0)
-  const totalExpense = journey.reduce((s, v) => s + (v.expenseAmount || 0), 0)
+function groupByDate(journey) {
+  const byDate = journey.reduce((acc, v) => {
+    (acc[v.date] ||= []).push(v)
+    return acc
+  }, {})
+  return Object.keys(byDate).sort()
+}
+
+// Day-wise Punch In -> visits -> Punch Out, then a cumulative summary sheet — same
+// lightweight xlsx pattern Reports.jsx already uses for plain tabular exports
+// (json_to_sheet, not the styled exceljs path). Mirrors exactly what the on-screen
+// TravelDayChain and the map show, so the report never looks like a different feature.
+function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
+  const rows = []
+  let totalKm = 0
+  let totalExpense = 0
+
+  for (const date of dates) {
+    const visits = journeyByDate[date]
+    const record = attnByDate[date]
+    if (record?.inTime) {
+      rows.push({ Date: date, Time: record.inTime, Type: 'Punch In', 'Site / Client': record.inLocation || '', 'Distance (km)': '', 'Expense Note': '', 'Expense Amount (₹)': '' })
+    }
+    let lastLat = record?.inLat, lastLon = record?.inLon
+    for (const v of visits) {
+      rows.push({
+        Date: date, Time: new Date(v.capturedAt).toLocaleTimeString(), Type: 'Visit', 'Site / Client': v.siteNote,
+        'Distance (km)': v.legDistanceKm.toFixed(2), 'Expense Note': v.expenseNote || '',
+        'Expense Amount (₹)': v.expenseAmount != null ? v.expenseAmount.toFixed(2) : '',
+      })
+      totalKm += v.legDistanceKm
+      totalExpense += v.expenseAmount || 0
+      lastLat = v.lat; lastLon = v.lon
+    }
+    if (record?.outTime) {
+      const returnKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
+      rows.push({ Date: date, Time: record.outTime, Type: 'Punch Out', 'Site / Client': record.outLocation || '', 'Distance (km)': returnKm.toFixed(2), 'Expense Note': '', 'Expense Amount (₹)': '' })
+      totalKm += returnKm
+    }
+  }
+
   const distanceAmount = totalKm * rate
   const summaryRows = [{
-    Employee: row.empName,
-    'Emp #': row.empNum || '',
-    'Rate Tier': TIER_LABELS[row.taRateTier] || row.taRateTier || '',
-    'Rate (₹/km)': rate,
-    Period: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
-    'Total Visits': journey.length,
-    'Total Distance (km)': totalKm.toFixed(2),
-    'Distance Amount (₹)': distanceAmount.toFixed(2),
-    'Total Expenses (₹)': totalExpense.toFixed(2),
-    'Grand Total (₹)': (distanceAmount + totalExpense).toFixed(2),
+    Employee: row.empName, 'Emp #': row.empNum || '', 'Rate Tier': TIER_LABELS[row.taRateTier] || row.taRateTier || '',
+    'Rate (₹/km)': rate, Period: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
+    'Total Visits': row.visitCount, 'Total Distance (km)': totalKm.toFixed(2), 'Distance Amount (₹)': distanceAmount.toFixed(2),
+    'Total Expenses (₹)': totalExpense.toFixed(2), 'Grand Total (₹)': (distanceAmount + totalExpense).toFixed(2),
   }]
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visitRows), 'Visits (day-wise)')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Day-wise Journey')
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
   XLSX.writeFile(wb, `travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}_${todayIST()}.xlsx`)
 }
 
 // plan.md §28 — admin's Travel Allowance screen: rate tiers per eligible employee, the
-// two ₹/km rates, per-employee journey review with map + distance override + expense
+// two ₹/km rates, per-employee journey review (punch-in -> visits -> punch-out, same
+// chain the map draws as one connected line) with distance override + expense
 // receipts, a downloadable day-wise/cumulative report, and settling (pay + purge). Own
 // file, own hook (useAdminTravel) — nothing existing here was touched to add this tab
 // (plan.md §28, "do not alter any running function").
-export function Travel({ travel, onAudit }) {
+export function Travel({ token, travel, onAudit }) {
   const { overview, taSettings, loading, setRateTier, updateRates, loadEmployeeJourney, loadSettlements, overrideDistance, settle } = travel
   const [rateForm, setRateForm] = useState(null)
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
+  const [attnByDate, setAttnByDate] = useState({})
   const [settlements, setSettlements] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [showMap, setShowMap] = useState(false)
+  const [mapDate, setMapDate] = useState(null)
   const [overrideVisit, setOverrideVisit] = useState(null)
   const [viewerUrl, setViewerUrl] = useState(null)
   const [msg, setMsg] = useState('')
 
-  async function expand(empId) {
-    if (expandedEmp === empId) { setExpandedEmp(null); return }
-    setExpandedEmp(empId)
+  async function expand(row) {
+    if (expandedEmp === row.empId) { setExpandedEmp(null); return }
+    setExpandedEmp(row.empId)
     setShowMap(false)
+    setMapDate(null)
     setMsg('')
     setDetailLoading(true)
     try {
-      const [j, s] = await Promise.all([loadEmployeeJourney(empId), loadSettlements(empId)])
+      const [j, s] = await Promise.all([loadEmployeeJourney(row.empId), loadSettlements(row.empId)])
       setJourney(j)
       setSettlements(s)
+      if (row.firstDate && row.lastDate) {
+        const attn = await adminFetchAttendance(token, { empId: row.empId, from: row.firstDate, to: row.lastDate })
+        const byDate = {}
+        for (const [key, rec] of Object.entries(attn)) {
+          const [, date] = key.split('_')
+          byDate[date] = rec
+        }
+        setAttnByDate(byDate)
+      } else {
+        setAttnByDate({})
+      }
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -111,7 +150,7 @@ export function Travel({ travel, onAudit }) {
 
   function download(row) {
     if (journey.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
-    downloadTravelReport(row, journey, rateFor(row))
+    downloadTravelReport(row, groupByDate(journey), journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {}), attnByDate, rateFor(row))
   }
 
   async function doSettle(row) {
@@ -132,6 +171,9 @@ export function Travel({ travel, onAudit }) {
       setMsg(e.message)
     }
   }
+
+  const dates = groupByDate(journey)
+  const journeyByDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
 
   return (
     <div className="space-y-4">
@@ -196,7 +238,7 @@ export function Travel({ travel, onAudit }) {
                     <p className="text-white/70 text-sm font-mono">{row.totalKm.toFixed(1)} km{row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)}` : ''}</p>
                     <p className="text-white/30 text-xs">{row.visitCount} visits{row.firstDate ? ` since ${row.firstDate}` : ''}</p>
                   </div>
-                  <Button variant="secondary" className="text-xs" onClick={() => expand(row.empId)}>
+                  <Button variant="secondary" className="text-xs" onClick={() => expand(row)}>
                     {expandedEmp === row.empId ? 'Hide' : 'Review'}
                   </Button>
                   <Button className="text-xs" disabled={row.visitCount === 0} onClick={() => doSettle(row)}>Settle & Pay</Button>
@@ -206,40 +248,44 @@ export function Travel({ travel, onAudit }) {
                   <div className="p-3 border-t border-white/10">
                     {detailLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
                       <>
-                        <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          {journey.length > 0 && (
-                            <button className="text-indigo-400 text-xs underline underline-offset-2" onClick={() => setShowMap(!showMap)}>
-                              {showMap ? 'Hide map' : 'View map'}
-                            </button>
-                          )}
+                        <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <Button variant="secondary" className="text-xs" disabled={journey.length === 0} onClick={() => download(row)}>
                             ⬇ Download Report
                           </Button>
                         </div>
-                        {showMap && (
-                          <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
-                            <div className="mb-3">
-                              <JourneyMap points={journey.map(v => ({ id: v.id, lat: v.lat, lon: v.lon, label: v.siteNote, kind: 'visit' }))} />
-                            </div>
-                          </Suspense>
-                        )}
-                        <div className="space-y-2">
-                          {journey.map(v => (
-                            <div key={v.id} className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/10">
-                              <TravelPhotoThumb path={v.photoPath} onOpen={setViewerUrl} className="w-12 h-12" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-white text-sm truncate">{v.siteNote}</p>
-                                <p className="text-white/30 text-xs">{v.date} {new Date(v.capturedAt).toLocaleTimeString()} · {v.legDistanceKm.toFixed(1)} km{v.distanceOverridden ? ` (adjusted: ${v.overrideReason})` : ''}</p>
-                                {v.expenseAmount != null && (
-                                  <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
-                                )}
+                        {dates.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
+                        {dates.map(date => {
+                          const visits = journeyByDate[date]
+                          const record = attnByDate[date]
+                          return (
+                            <div key={date} className="mb-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-white/70 text-xs font-medium">{date}</p>
+                                <button
+                                  className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
+                                  onClick={() => { setShowMap(showMap && mapDate === date ? false : true); setMapDate(date) }}
+                                >
+                                  {showMap && mapDate === date ? 'Hide map' : 'View map'}
+                                </button>
                               </div>
-                              {v.expensePhotoPath && <TravelPhotoThumb path={v.expensePhotoPath} onOpen={setViewerUrl} className="w-10 h-10" />}
-                              <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: v.legDistanceKm, reason: '' })}>Adjust</Button>
+                              {showMap && mapDate === date && (
+                                <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
+                                  <div className="mb-2">
+                                    <JourneyMap points={dayPoints(visits, record)} />
+                                  </div>
+                                </Suspense>
+                              )}
+                              <TravelDayChain
+                                visits={visits}
+                                attendanceRecord={record}
+                                onOpenPhoto={setViewerUrl}
+                                renderVisitExtra={v => (
+                                  <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: v.legDistanceKm, reason: '' })}>Adjust</Button>
+                                )}
+                              />
                             </div>
-                          ))}
-                          {journey.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
-                        </div>
+                          )
+                        })}
 
                         {overrideVisit && (
                           <div className="mt-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
