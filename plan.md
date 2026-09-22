@@ -2300,6 +2300,26 @@ stored value on its next load — there's no longer a separate "admin's number" 
 "employee's number," just one number that starts as an estimate and gets more accurate
 in place. Admin's Review still triggers the same core function too, as a backstop.
 
+**Getting the key live, 2026-09-22 — two real snags, both found by testing against
+live production data instead of trusting a "should work now":**
+
+1. First key pasted in was from **OpenRouter** (openrouter.ai, an LLM API gateway),
+   not **OpenRouteService** (openrouteservice.org, the mapping service) — the names
+   are almost identical and easy to mix up. `road_distance_km()`'s own error-swallowing
+   meant this just looked like "no result," not an obvious wrong-service error, so a
+   one-off diagnostic script (bypassing the swallow, printing the raw HTTP status/body)
+   was needed to see the real `403 Access to this API has been disallowed`.
+2. With the correct key, still failed — ORS's v2 directions endpoint returned `406 Not
+   Acceptable`, rejecting the `Accept: application/json` header `road_distance_km()`
+   sent; it requires the more specific `application/geo+json; charset=UTF-8`. Fixed in
+   migration 0050 (same function, only the header string changes).
+
+Confirmed working end-to-end against Puneet Sharma's real visit before calling this
+done: `travel_refine_distances_core` refined both his legs, total went from 19.73km
+(pure straight-line) to **28.3km** (real road distance) — the individual punch-in →
+Supernova leg alone came back as 16.7km, close to the ~15km originally seen on Google
+Maps (small cross-engine differences between routing services are normal and expected).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
