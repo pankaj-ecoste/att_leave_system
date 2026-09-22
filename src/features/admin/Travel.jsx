@@ -119,15 +119,24 @@ export function Travel({ token, travel, onAudit }) {
     setMapDate(null)
     setMsg('')
     setDetailLoading(true)
+    // The date range for the attendance fetch is derived from the freshly-loaded
+    // journey itself (below), not from `row` — `row` is a snapshot from whenever the
+    // outer list last loaded, and reload() below could just be updating it, so reading
+    // dates off the stale closure could miss a day the employee added since.
+    let dateRange = row.firstDate && row.lastDate ? { from: row.firstDate, to: row.lastDate } : null
     try {
-      const [j, s] = await Promise.all([loadEmployeeJourney(row.empId), loadSettlements(row.empId)])
+      // Always refresh the outer summary row too (plan.md §31 follow-up — it was only
+      // refreshed after a refine found something new, so a visit added by the employee
+      // while admin had this screen open could leave the list showing a stale km/visit
+      // count even after Review showed the correct detail underneath it).
+      const [j, s] = await Promise.all([loadEmployeeJourney(row.empId), loadSettlements(row.empId), reload()])
       setJourney(j)
       setSettlements(s)
-      if (row.firstDate && row.lastDate) {
-        setAttnByDate(await fetchAttnByDate(row.empId, row.firstDate, row.lastDate))
-      } else {
-        setAttnByDate({})
+      if (j.length > 0) {
+        const dates = j.map(v => v.date).sort()
+        dateRange = { from: dates[0], to: dates[dates.length - 1] }
       }
+      setAttnByDate(dateRange ? await fetchAttnByDate(row.empId, dateRange.from, dateRange.to) : {})
     } catch (e) {
       setMsg(e.message)
     } finally {
@@ -138,14 +147,14 @@ export function Travel({ token, travel, onAudit }) {
     // instant estimates are already on screen, so opening Review never waits on an
     // external service. If it refines anything, re-pull the journey/attendance/overview
     // so the more accurate numbers replace the estimates without a manual refresh.
-    if (orsKeyStatus.isSet && row.firstDate && row.lastDate) {
+    if (orsKeyStatus.isSet && dateRange) {
       setRefining(true)
       try {
         const count = await refineDistances(row.empId)
         if (count > 0) {
           const [j2, attn2] = await Promise.all([
             loadEmployeeJourney(row.empId),
-            fetchAttnByDate(row.empId, row.firstDate, row.lastDate),
+            fetchAttnByDate(row.empId, dateRange.from, dateRange.to),
           ])
           setJourney(j2)
           setAttnByDate(attn2)

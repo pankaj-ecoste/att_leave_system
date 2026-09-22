@@ -2320,6 +2320,19 @@ done: `travel_refine_distances_core` refined both his legs, total went from 19.7
 Supernova leg alone came back as 16.7km, close to the ~15km originally seen on Google
 Maps (small cross-engine differences between routing services are normal and expected).
 
+**Follow-up bug, HR-reported same day (Himanshu Bansal, emp #1168):** admin's Travel
+list showed "5.2 km, 1 visit" for Himanshu, but opening Review showed the real picture
+— 2 visits, 44.3 km. Root cause: the outer summary row (`overview`) only ever refreshed
+after `settle`/a rate-tier change/a refine that found something new — not simply from
+opening Review — so a second visit Himanshu added while admin had the tab open left the
+list showing what it loaded at page-open time, even though Review's own detail fetch
+was always live. Fixed by refreshing the outer row unconditionally the moment Review
+opens (admin's `Travel.jsx` and manager's read-only `TeamPanel.jsx` both had this).
+Also fixed a related latent bug found while touching this code: the attendance
+date-range fetch inside `expand()` used `row.firstDate`/`row.lastDate` from that same
+stale snapshot — now derived from the freshly-loaded journey's own dates instead, so it
+can't silently miss a day added since the list last loaded.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

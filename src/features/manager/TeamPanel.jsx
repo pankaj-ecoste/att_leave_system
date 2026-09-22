@@ -49,9 +49,15 @@ export function TeamPanel({
     setTravelMapDate(null)
     setTravelJourneyLoading(true)
     try {
-      const journey = await loadTeamTravelJourney(row.empId)
+      // Refresh the outer summary row too, same fix as admin's Travel.jsx (plan.md
+      // §31 follow-up) — otherwise a visit added since the list last loaded would show
+      // a stale km/visit count in the row even after this panel shows the right detail.
+      const [journey] = await Promise.all([loadTeamTravelJourney(row.empId), loadTeamTravelSummary()])
       setTravelJourney(journey)
-      setTravelAttnByDate(row.firstDate && row.lastDate ? await loadTeamTravelAttendance(row.empId, row.firstDate, row.lastDate) : {})
+      // Date range comes from the freshly-loaded journey itself, not the possibly-stale
+      // `row` snapshot, so it can't miss a day the employee added since.
+      const dates = journey.map(v => v.date).sort()
+      setTravelAttnByDate(dates.length > 0 ? await loadTeamTravelAttendance(row.empId, dates[0], dates[dates.length - 1]) : {})
     } catch (err) {
       setErrMsg(err.message)
     } finally {
