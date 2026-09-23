@@ -86,11 +86,12 @@ function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
 // (plan.md §28, "do not alter any running function").
 export function Travel({ token, travel, onAudit }) {
   const {
-    overview, taSettings, orsKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
-    overrideDistance, refineDistances, setOrsApiKey, settle, reload,
+    overview, taSettings, routingKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, settle, reload,
   } = travel
   const [rateForm, setRateForm] = useState(null)
   const [orsKeyInput, setOrsKeyInput] = useState(null)
+  const [googleKeyInput, setGoogleKeyInput] = useState(null)
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
   const [attnByDate, setAttnByDate] = useState({})
@@ -151,7 +152,7 @@ export function Travel({ token, travel, onAudit }) {
     // instant estimates are already on screen, so opening Review never waits on an
     // external service. If it refines anything, re-pull the journey/attendance/overview
     // so the more accurate numbers replace the estimates without a manual refresh.
-    if (orsKeyStatus.isSet && dateRange) {
+    if ((routingKeyStatus.orsIsSet || routingKeyStatus.googleIsSet) && dateRange) {
       setRefining(true)
       try {
         const count = await refineDistances(row.empId)
@@ -185,8 +186,18 @@ export function Travel({ token, travel, onAudit }) {
   async function saveOrsKey() {
     try {
       await setOrsApiKey(orsKeyInput.trim())
-      onAudit?.('ORS_API_KEY_UPDATED', orsKeyInput.trim() ? 'Road-routing key set' : 'Road-routing key cleared', 'admin')
+      onAudit?.('ORS_API_KEY_UPDATED', orsKeyInput.trim() ? 'OpenRouteService key set' : 'OpenRouteService key cleared', 'admin')
       setOrsKeyInput(null)
+    } catch (e) {
+      setMsg(e.message)
+    }
+  }
+
+  async function saveGoogleKey() {
+    try {
+      await setGoogleApiKey(googleKeyInput.trim())
+      onAudit?.('GOOGLE_MAPS_API_KEY_UPDATED', googleKeyInput.trim() ? 'Google Maps key set' : 'Google Maps key cleared', 'admin')
+      setGoogleKeyInput(null)
     } catch (e) {
       setMsg(e.message)
     }
@@ -272,31 +283,63 @@ export function Travel({ token, travel, onAudit }) {
       </Card>
 
       <Card>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-white font-semibold">Road Distance (routing)</h3>
-            <p className="text-white/30 text-xs mt-1">
-              The straight-line estimate can undercount real road distance by a lot in a city — this fills in the actual routed
-              distance via OpenRouteService whenever you open Review, before you settle. Free key at openrouteservice.org (no card needed).
-            </p>
-          </div>
-          {orsKeyInput == null && <Button variant="secondary" className="text-xs whitespace-nowrap" onClick={() => setOrsKeyInput('')}>{orsKeyStatus.isSet ? 'Update Key' : 'Set Key'}</Button>}
-        </div>
-        {orsKeyInput != null ? (
-          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-            <Label>OpenRouteService API Key</Label>
-            <Input type="password" autoFocus value={orsKeyInput} onChange={e => setOrsKeyInput(e.target.value)} placeholder="Paste your ORS API key" />
-            <div className="flex gap-2 mt-2">
-              <Button className="text-xs" onClick={saveOrsKey}>Save</Button>
-              <Button variant="secondary" className="text-xs" onClick={() => setOrsKeyInput(null)}>Cancel</Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm">
-            {orsKeyStatus.isSet
-              ? <span className="text-emerald-400">Configured — road distances refine automatically on Review</span>
-              : <span className="text-white/40">Not configured — showing the instant straight-line estimate only</span>}
+        <div className="mb-3">
+          <h3 className="text-white font-semibold">Road Distance (routing)</h3>
+          <p className="text-white/30 text-xs mt-1">
+            The straight-line estimate can undercount real road distance by a lot in a city — this fills in the actual routed
+            distance whenever you open Review, before you settle. Google is tried first if both are set (matches what you'd
+            check manually); OpenRouteService is the free, no-card fallback.
           </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-white/80 text-sm font-medium">Google Maps</p>
+              {googleKeyInput == null && <Button variant="secondary" className="text-xs whitespace-nowrap" onClick={() => setGoogleKeyInput('')}>{routingKeyStatus.googleIsSet ? 'Update' : 'Set Key'}</Button>}
+            </div>
+            {googleKeyInput != null ? (
+              <>
+                <Input type="password" autoFocus value={googleKeyInput} onChange={e => setGoogleKeyInput(e.target.value)} placeholder="Paste your Google Maps API key" />
+                <div className="flex gap-2 mt-2">
+                  <Button className="text-xs" onClick={saveGoogleKey}>Save</Button>
+                  <Button variant="secondary" className="text-xs" onClick={() => setGoogleKeyInput(null)}>Cancel</Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm">
+                {routingKeyStatus.googleIsSet
+                  ? <span className="text-emerald-400">Configured</span>
+                  : <span className="text-white/40">Not configured</span>}
+              </p>
+            )}
+          </div>
+
+          <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-white/80 text-sm font-medium">OpenRouteService</p>
+              {orsKeyInput == null && <Button variant="secondary" className="text-xs whitespace-nowrap" onClick={() => setOrsKeyInput('')}>{routingKeyStatus.orsIsSet ? 'Update' : 'Set Key'}</Button>}
+            </div>
+            {orsKeyInput != null ? (
+              <>
+                <Input type="password" autoFocus value={orsKeyInput} onChange={e => setOrsKeyInput(e.target.value)} placeholder="Paste your ORS API key" />
+                <div className="flex gap-2 mt-2">
+                  <Button className="text-xs" onClick={saveOrsKey}>Save</Button>
+                  <Button variant="secondary" className="text-xs" onClick={() => setOrsKeyInput(null)}>Cancel</Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm">
+                {routingKeyStatus.orsIsSet
+                  ? <span className="text-emerald-400">Configured</span>
+                  : <span className="text-white/40">Not configured</span>}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {!routingKeyStatus.googleIsSet && !routingKeyStatus.orsIsSet && (
+          <p className="text-white/40 text-xs mt-3">Neither is set — showing the instant straight-line estimate only.</p>
         )}
       </Card>
 

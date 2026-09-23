@@ -3,7 +3,7 @@ import {
   adminGetTravelOverview, adminGetEmployeeTravelJourney, adminGetTravelSettlements,
   adminSetTaRateTier, adminGetTaSettings, adminUpdateTaSettings,
   adminOverrideTravelVisitDistance, adminSettleTravelPeriod, deleteTravelSelfies,
-  adminRefineTravelDistances, adminGetOrsApiKeyStatus, adminSetOrsApiKey,
+  adminRefineTravelDistances, adminGetRoutingKeyStatus, adminSetOrsApiKey, adminSetGoogleMapsApiKey,
 } from '../api/travel'
 
 // plan.md §28 — admin side of Travel Allowance. Deliberately its own hook, not folded
@@ -12,7 +12,7 @@ import {
 export function useAdminTravel(token) {
   const [overview, setOverview] = useState([])
   const [taSettings, setTaSettings] = useState({ managerRatePerKm: 0, executiveRatePerKm: 0 })
-  const [orsKeyStatus, setOrsKeyStatus] = useState({ isSet: false, updatedAt: null })
+  const [routingKeyStatus, setRoutingKeyStatus] = useState({ orsIsSet: false, googleIsSet: false, updatedAt: null })
   const [loading, setLoading] = useState(false)
   // plan.md §33.7 — a failed fetch used to only log to the console; the screen kept
   // showing whatever was already loaded (or an empty list) with no indication anything
@@ -27,11 +27,11 @@ export function useAdminTravel(token) {
       const [ov, settings, keyStatus] = await Promise.all([
         adminGetTravelOverview(token),
         adminGetTaSettings(token),
-        adminGetOrsApiKeyStatus(token),
+        adminGetRoutingKeyStatus(token),
       ])
       setOverview(ov)
       setTaSettings(settings)
-      setOrsKeyStatus(keyStatus)
+      setRoutingKeyStatus(keyStatus)
     } catch (e) {
       console.error('loadTravelOverview:', e)
       setError(`Could not load travel data: ${e.message}`)
@@ -76,7 +76,12 @@ export function useAdminTravel(token) {
 
   async function setOrsApiKey(key) {
     await adminSetOrsApiKey(token, key)
-    setOrsKeyStatus(await adminGetOrsApiKeyStatus(token))
+    setRoutingKeyStatus(await adminGetRoutingKeyStatus(token))
+  }
+
+  async function setGoogleApiKey(key) {
+    await adminSetGoogleMapsApiKey(token, key)
+    setRoutingKeyStatus(await adminGetRoutingKeyStatus(token))
   }
 
   // The paid-amount record + travel_visits cleanup happens atomically server-side
@@ -92,7 +97,7 @@ export function useAdminTravel(token) {
   }
 
   return {
-    overview, taSettings, orsKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
-    overrideDistance, refineDistances, setOrsApiKey, settle, reload,
+    overview, taSettings, routingKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, settle, reload,
   }
 }

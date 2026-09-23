@@ -187,16 +187,24 @@ export async function adminRefineTravelDistances(token, empId) {
   return data
 }
 
-// The ORS API key itself is never returned by any function — only whether one is set.
-export async function adminGetOrsApiKeyStatus(token) {
-  const { data, error } = await supabase.rpc('admin_get_ors_api_key_status', { p_token: token })
+// Neither key is ever returned by any function — only whether each is set. Google is
+// tried first when both are set (road_distance_km() dispatcher, 0056), ORS is the
+// fallback — so plan.md §31's original free-no-card option stays available even after
+// adding Google.
+export async function adminGetRoutingKeyStatus(token) {
+  const { data, error } = await supabase.rpc('admin_get_routing_key_status', { p_token: token })
   if (error) throw error
   const row = data?.[0]
-  return { isSet: !!row?.is_set, updatedAt: row?.updated_at || null }
+  return { orsIsSet: !!row?.ors_is_set, googleIsSet: !!row?.google_is_set, updatedAt: row?.updated_at || null }
 }
 
 export async function adminSetOrsApiKey(token, key) {
   const { error } = await supabase.rpc('admin_set_ors_api_key', { p_token: token, p_key: key })
+  if (error) throw error
+}
+
+export async function adminSetGoogleMapsApiKey(token, key) {
+  const { error } = await supabase.rpc('admin_set_google_maps_api_key', { p_token: token, p_key: key })
   if (error) throw error
 }
 

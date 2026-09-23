@@ -136,7 +136,8 @@ const CALLS = [
   ['admin_refine_travel_distances', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['employee_refine_own_travel_distances', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['admin_set_ors_api_key', { p_token: FAKE_UUID, p_key: 'test' }],
-  ['admin_get_ors_api_key_status', { p_token: FAKE_UUID }],
+  ['admin_set_google_maps_api_key', { p_token: FAKE_UUID, p_key: 'test' }],
+  ['admin_get_routing_key_status', { p_token: FAKE_UUID }],
 ]
 
 async function main() {

@@ -2934,6 +2934,44 @@ mechanism reused). This is the actual anti-fraud check the map was always meant 
 support: admin can now see, on the point itself, whether what someone typed and where
 their GPS actually put them roughly agree.
 
+## 36. Travel — Google Maps added as the preferred routing provider (2026-09-23)
+
+**Why:** OpenRouteService's road distances came in consistently 4-6km under Google
+Maps on the same trips. Checked first that this wasn't a bug — every leg was already
+using real road distance, nothing stuck on the straight-line fallback (§35's dry-run
+discipline) — confirming it's genuine cross-provider variance (different map data,
+different routing engines), not something fixable in our own code. Priced switching
+before building it: Google's Routes API gives 10,000 free calls/month, our real usage
+is ~3-4.5k/month, so the honest cost is ₹0/month either way — the only real tradeoff is
+Google requiring a billing account (card on file, with a recommended budget-alert cap)
+versus OpenRouteService needing none at all. Admin decided exact parity with the
+numbers they already check by hand was worth that.
+
+**Design (migration 0056):** `road_distance_km()` becomes a dispatcher — tries Google
+Routes first if a key is configured, falls back to OpenRouteService if that's
+configured (or if Google fails for any reason), falls back to the original straight-line
+estimate if neither works or neither is set. Both provider calls (`road_distance_km_google`,
+`road_distance_km_ors`) are separate internal functions with an explicit
+`revoke ... from public, anon, authenticated` each (§33.1 discipline — never rely on
+"no grant mentioned" alone). Neither API key is ever returned by any function, only
+whether each is set (`admin_get_routing_key_status`).
+
+Verified zero regression before trusting it: captured `road_distance_km()`'s real
+result for Puneet Sharma's already-refined leg (16.743km, via OpenRouteService) before
+applying, confirmed it came back byte-identical after — with no Google key configured
+yet, the dispatcher falls straight through to the exact same ORS call as before.
+Frontend: admin's "Road Distance" card now has two independent key slots (Google
+preferred, OpenRouteService as the free fallback) instead of one.
+
+**Not yet done:** admin is setting up the Google Cloud project/billing/key themselves
+(same reasoning as OpenRouteService — creating third-party accounts isn't something
+this session can do). Once a real key is pasted in, still needs the same live
+verification OpenRouteService needed (a dry-run against real data, checking the actual
+HTTP response) before trusting it — Google's Routes API has a stricter request shape
+(POST + JSON body + required field mask) than OpenRouteService's, so a first-attempt
+header/format mismatch here would not be surprising, same as the Accept-header issue
+found with OpenRouteService (§31).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
