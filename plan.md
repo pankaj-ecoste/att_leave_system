@@ -2916,6 +2916,24 @@ any employee's PIN to log in and check the Summary tab as they would; ask HR/an
 employee to check on the next session sync, or share a login to verify directly.
 Not yet committed.
 
+## 35. Travel map — click a point to see the real GPS location next to what was typed (2026-09-23)
+
+**Ask:** on the journey map, clicking a site point only showed the employee's own typed
+note (e.g. "Ashish goel") — wanted the actual GPS-resolved location name shown
+alongside it, on the map itself, not just in the list underneath.
+
+**Fix:** `JourneyMap.jsx` markers now open a click popup with both lines — what the
+employee entered, and "GPS location" underneath. For punch-in/punch-out points the
+address is already known (reverse-geocoded and stored on the attendance row at punch
+time — `dayPoints()` in `lib/travelPoints.js` now passes `inLocation`/`outLocation`
+through), shown immediately with no extra call. A client visit has no stored address
+(only raw lat/lon), so its popup fetches one live, on open, via the exact same
+`reverse_geocode()` RPC the punch screen already uses (`0005_field_staff_and_geo.sql`,
+server-side, cached by grid — no new migration needed, no new cost, same free
+mechanism reused). This is the actual anti-fraud check the map was always meant to
+support: admin can now see, on the point itself, whether what someone typed and where
+their GPS actually put them roughly agree.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

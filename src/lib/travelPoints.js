@@ -10,11 +10,21 @@
 export function dayPoints(dateVisits, attendanceRecord) {
   const points = []
   if (attendanceRecord?.inLat != null) {
-    points.push({ id: 'start', lat: attendanceRecord.inLat, lon: attendanceRecord.inLon, label: `Punch in ${attendanceRecord.inTime || ''}`, kind: 'start' })
+    points.push({
+      id: 'start', lat: attendanceRecord.inLat, lon: attendanceRecord.inLon, kind: 'start',
+      label: `Punch in ${attendanceRecord.inTime || ''}`,
+      // Already reverse-geocoded and stored at punch time — no need to fetch it again
+      // on the map (JourneyMap.jsx only live-fetches when address is missing).
+      address: attendanceRecord.inLocation || null,
+    })
   }
   dateVisits.forEach(v => points.push({ id: v.id, lat: v.lat, lon: v.lon, label: v.siteNote, kind: 'visit' }))
   if (attendanceRecord?.outLat != null) {
-    points.push({ id: 'end', lat: attendanceRecord.outLat, lon: attendanceRecord.outLon, label: `Punch out ${attendanceRecord.outTime || ''}`, kind: 'end' })
+    points.push({
+      id: 'end', lat: attendanceRecord.outLat, lon: attendanceRecord.outLon, kind: 'end',
+      label: `Punch out ${attendanceRecord.outTime || ''}`,
+      address: attendanceRecord.outLocation || null,
+    })
   }
   return points
 }

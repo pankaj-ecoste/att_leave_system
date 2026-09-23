@@ -1,14 +1,41 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { supabase } from '../lib/supabase'
 
 // plan.md §28 — route line connecting a day's selfie points. Free (OpenStreetMap tiles,
 // no API key), and this file is only ever reached via a lazy `import()` from wherever
 // it's used, so Leaflet never ends up in the main bundle for the ~98% of people who
 // never open a journey (same posture as AdminPanel's own lazy chunk, plan.md §26).
 //
-// `points` — ordered array of { id, lat, lon, label, kind } where kind is
+// `points` — ordered array of { id, lat, lon, label, kind, address? } where kind is
 // 'start' | 'visit' | 'end'; clicking a 'visit' marker calls onSelectVisit(id).
+// `address`, when already known (punch-in/out already have a stored reverse-geocoded
+// location — dayPoints() passes it through), is shown immediately; a 'visit' point
+// never has one stored, so it's fetched live on click via the same reverse_geocode()
+// RPC the punch screen already uses (0005_field_staff_and_geo.sql) — so admin can see,
+// right on the map, what the employee typed next to what GPS actually found there
+// (plan.md §28's whole point: cross-check the claim against the real location).
+async function fetchAddress(lat, lon) {
+  try {
+    const { data, error } = await supabase.rpc('reverse_geocode', { p_lat: lat, p_lon: lon })
+    if (error) throw error
+    return data || 'Address unavailable'
+  } catch {
+    return 'Address unavailable'
+  }
+}
+
+function popupHtml(label, addressLine) {
+  return `
+    <div style="min-width:180px;max-width:240px">
+      <div style="font-weight:600;color:#1e1b4b;margin-bottom:2px">${label}</div>
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.03em;margin-top:4px">GPS location</div>
+      <div style="font-size:12px;color:#374151">${addressLine}</div>
+    </div>
+  `
+}
+
 export function JourneyMap({ points, onSelectVisit, selectedId }) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -49,7 +76,19 @@ export function JourneyMap({ points, onSelectVisit, selectedId }) {
         fillColor: color,
         fillOpacity: 0.85,
       }).addTo(group)
-      marker.bindTooltip(p.label || `Stop ${i + 1}`, { direction: 'top' })
+      const label = p.label || `Stop ${i + 1}`
+      marker.bindTooltip(label, { direction: 'top' })
+
+      // Address already known (punch-in/out) -> show immediately. Otherwise (a client
+      // visit) fetch live the moment the popup opens, replacing "Fetching..." in place.
+      marker.bindPopup(popupHtml(label, p.address || 'Fetching...'))
+      if (!p.address) {
+        marker.on('popupopen', async () => {
+          const address = await fetchAddress(p.lat, p.lon)
+          marker.setPopupContent(popupHtml(label, address))
+        })
+      }
+
       if (p.kind === 'visit' && onSelectVisit) {
         marker.on('click', () => onSelectVisit(p.id))
       }
