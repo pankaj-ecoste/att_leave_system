@@ -49,3 +49,15 @@ export function effectiveReturnLegKm(attendanceRecord, clientFallbackKm) {
   if (attendanceRecord?.travelReturnRoadKm != null) return { km: attendanceRecord.travelReturnRoadKm, source: 'routed' }
   return { km: clientFallbackKm, source: 'estimated' }
 }
+
+// Google Maps "Maps URLs" directions link built from the exact GPS points a leg was
+// measured between — NOT from address labels. Address text is display-only and can
+// resolve somewhere else entirely in Google (a Nangloi punch-in labelled "Narela" was
+// searched as the northern town of Narela, 18km away, and looked like a 35 vs 57km
+// mismatch — plan.md §36). Coordinates are what the app actually measures, so they're
+// what a cross-check has to use. Returns null if either end is missing.
+export function googleMapsDirectionsUrl(from, to) {
+  if (!from || !to || from.lat == null || from.lon == null || to.lat == null || to.lon == null) return null
+  const pt = p => `${Number(p.lat).toFixed(6)},${Number(p.lon).toFixed(6)}`
+  return `https://www.google.com/maps/dir/?api=1&origin=${pt(from)}&destination=${pt(to)}&travelmode=driving`
+}

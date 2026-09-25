@@ -3010,8 +3010,14 @@ label comes from OpenStreetMap reverse-geocoding, which files Nangloi Extension 
 Google Routes for the actual GPS points = 35.37km = what the app shows; address text →
 address text = 57.7km. **Lesson: to cross-check a leg against Google, use the GPS
 coordinates, not the address labels** — labels are display text, coordinates are what's
-measured. (A "Check on Google Maps" link per leg built from the coordinates would remove
-this trap; offered to admin, not built unasked.)
+measured. **Built on admin's go-ahead:** every leg in the shared day view
+(`TravelDayChain`, so admin, manager and the employee's own screen) now has a "Check on
+Google Maps ↗" link built from the exact GPS points that leg was measured between
+(`googleMapsDirectionsUrl()` in `lib/travelPoints.js`, unit-tested — punch-in → first
+visit, visit → visit, last visit → punch-out), opening Google's documented "Maps URLs"
+directions link in a new tab. Coordinates, never address labels, so a cross-check
+measures the same thing the app did. Build + 94 tests pass; not click-tested in a
+browser this session (no login credentials held) — worth one click on the next review.
 
 ## Appendix — Reference
 

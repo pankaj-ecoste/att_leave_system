@@ -1,6 +1,22 @@
 import { TravelPhotoThumb } from './TravelPhotoThumb'
 import { haversineMeters } from '../lib/geo'
-import { effectiveLegKm, effectiveReturnLegKm } from '../lib/travelPoints'
+import { effectiveLegKm, effectiveReturnLegKm, googleMapsDirectionsUrl } from '../lib/travelPoints'
+
+// Opens Google Maps with the exact GPS points this leg was measured between (not the
+// address labels — see googleMapsDirectionsUrl). stopPropagation so clicking it on a
+// visit row doesn't also select that row.
+function CheckOnGoogleMaps({ from, to }) {
+  const url = googleMapsDirectionsUrl(from, to)
+  if (!url) return null
+  return (
+    <a
+      href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+      className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+    >
+      Check on Google Maps ↗
+    </a>
+  )
+}
 
 // plan.md §28 follow-up (2026-09-22) — a small, quiet label so it's never ambiguous
 // which kind of number someone's looking at: a real road distance once refined, the
@@ -25,6 +41,17 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
   const returnLeg = effectiveReturnLegKm(attendanceRecord, returnFallbackKm)
   const dayKm = visits.reduce((s, v) => s + effectiveLegKm(v).km, 0) + (attendanceRecord?.outTime ? returnLeg.km : 0)
 
+  // Where each leg starts: punch-in for the first visit, the previous visit after that.
+  // Same chain the distance itself is measured along, so a Google Maps cross-check of a
+  // leg uses exactly the points that produced the number.
+  let cursor = attendanceRecord?.inLat != null ? { lat: attendanceRecord.inLat, lon: attendanceRecord.inLon } : null
+  const legStarts = visits.map(v => {
+    const start = cursor
+    cursor = { lat: v.lat, lon: v.lon }
+    return start
+  })
+  const lastPoint = cursor
+
   return (
     <div className="space-y-1.5">
       {attendanceRecord?.inTime && (
@@ -37,7 +64,7 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
         </div>
       )}
 
-      {visits.map(v => {
+      {visits.map((v, i) => {
         const leg = effectiveLegKm(v)
         return (
           <div
@@ -52,6 +79,7 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
                 {new Date(v.capturedAt).toLocaleTimeString()} · {leg.km.toFixed(1)} km · <SourceBadge source={leg.source} />
                 {leg.source === 'adjusted' && v.overrideReason ? `: ${v.overrideReason}` : ''}
               </p>
+              <p className="text-xs mt-0.5"><CheckOnGoogleMaps from={legStarts[i]} to={{ lat: v.lat, lon: v.lon }} /></p>
               {v.expenseAmount != null && (
                 <p className="text-amber-300/80 text-xs mt-0.5">{v.expenseNote || 'Expense'} · ₹{v.expenseAmount.toFixed(2)}</p>
               )}
@@ -68,6 +96,9 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
           <div className="flex-1 min-w-0">
             <p className="text-red-300 text-sm font-medium truncate">{attendanceRecord.outLocation || 'Punch Out'}</p>
             <p className="text-white/30 text-xs">{attendanceRecord.outTime} · {returnLeg.km.toFixed(1)} km · <SourceBadge source={returnLeg.source} /></p>
+            {attendanceRecord.outLat != null && (
+              <p className="text-xs mt-0.5"><CheckOnGoogleMaps from={lastPoint} to={{ lat: attendanceRecord.outLat, lon: attendanceRecord.outLon }} /></p>
+            )}
           </div>
         </div>
       ) : (
