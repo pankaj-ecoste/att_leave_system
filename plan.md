@@ -2998,6 +2998,21 @@ alone (a zero-distance duplicate visit at identical coordinates — Google retur
 distance for a zero-length route, so it keeps its 0km). Himanshu 217.09 → 234.59km,
 Puneet 74.30 → 75.17km. Nothing settled was touched (settled rows are already gone).
 
+**"HRMS says 35km, Google says 51-64km" — investigated, not a bug (2026-09-25):** admin
+compared Himanshu's 24 Sept first leg by typing the app's address *labels* into Google
+Search (which showed an AI-generated "50.6 to 64 km" summary quoting travel sites — not
+a routed measurement). Used `scripts/diagnostics/inspect-travel-legs-by-punch-in-
+address.mjs` and `where-does-google-put-these-addresses.mjs` (both read-only): our GPS
+fix at punch-in was 28.6862, 77.0530 (Nangloi/Mundka side); Google resolves the text
+"Rattan Park, Narela, Delhi…" to 28.8365, 77.1215 — real Narela town, ~18km north. The
+label comes from OpenStreetMap reverse-geocoding, which files Nangloi Extension under
+"Narela"; Google reads "Narela" as the northern town. Destination matched (~300m).
+Google Routes for the actual GPS points = 35.37km = what the app shows; address text →
+address text = 57.7km. **Lesson: to cross-check a leg against Google, use the GPS
+coordinates, not the address labels** — labels are display text, coordinates are what's
+measured. (A "Check on Google Maps" link per leg built from the coordinates would remove
+this trap; offered to admin, not built unasked.)
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
