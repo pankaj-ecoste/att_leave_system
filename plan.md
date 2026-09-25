@@ -2963,14 +2963,40 @@ yet, the dispatcher falls straight through to the exact same ORS call as before.
 Frontend: admin's "Road Distance" card now has two independent key slots (Google
 preferred, OpenRouteService as the free fallback) instead of one.
 
-**Not yet done:** admin is setting up the Google Cloud project/billing/key themselves
-(same reasoning as OpenRouteService — creating third-party accounts isn't something
-this session can do). Once a real key is pasted in, still needs the same live
-verification OpenRouteService needed (a dry-run against real data, checking the actual
-HTTP response) before trusting it — Google's Routes API has a stricter request shape
-(POST + JSON body + required field mask) than OpenRouteService's, so a first-attempt
-header/format mismatch here would not be surprising, same as the Accept-header issue
-found with OpenRouteService (§31).
+**Google account setup (2026-09-25), done by admin — not something this session can do
+(creating accounts / entering payment details):** Google Cloud project `ecoste-hrms`,
+billing via the free trial (₹28,663.51 credit, 90 days, no automatic charges — **ends
+~24 Dec 2026; a full pay-as-you-go upgrade is needed by then to keep Google working,
+still expected to cost ₹0 at current volume; until then, and if that's ever missed, the
+dispatcher just falls back to OpenRouteService, nothing breaks**). Card needed an OTP
+(RBI rules for Indian cards). Routes API enabled; the key was auto-created on enabling,
+then restricted to the Routes API only ("Application restrictions" deliberately not
+set — Supabase's outbound calls have no fixed IP/referrer to lock to).
+
+**Verified live, first attempt** (`scripts/diagnostics/verify-google-routes-key.mjs` —
+prints the raw HTTP status/body with the key redacted, since the wrapper functions
+swallow failures by design): Google returned a real route, 16.010km for Puneet's
+punch-in → Supernova leg (OpenRouteService now says 14.866km for the same coordinates,
+16.743km when first measured — so its answer for one trip isn't even stable over time).
+The dispatcher now returns Google's number. No Accept-header-style surprise this time.
+
+**Confirmed the original complaint was real:** `scripts/diagnostics/compare-open-legs-
+google-vs-stored.mjs` (read-only) previewed every open leg first. Most agreed within a
+few hundred metres, but some were far longer on Google — Himanshu's → Ar Mayank Yadav
+39.04 → 47.24km, his 24 Sept return leg 36.05 → 40.82km. Totals: Himanshu +17.5km,
+Puneet +0.9km. (A phone's Google Maps *app* can still differ by a km or two — it uses
+live traffic and picks the best route at that moment; the API's default is traffic-
+independent, which is the better basis for a payout because it doesn't vary with when
+someone looks.)
+
+**Open legs recalculated (with admin's go-ahead, since it changes pending totals):**
+`scripts/data-fixes/recalculate-open-travel-legs-with-google.mjs` — overwrites a leg only
+when Google returns a value (so a Google hiccup can never drop a leg back to the small
+straight-line estimate), skips manually adjusted legs (a human override always wins),
+one transaction, audit-logged as `TRAVEL_LEGS_RECALCULATED`. 16 legs updated, 1 left
+alone (a zero-distance duplicate visit at identical coordinates — Google returns no
+distance for a zero-length route, so it keeps its 0km). Himanshu 217.09 → 234.59km,
+Puneet 74.30 → 75.17km. Nothing settled was touched (settled rows are already gone).
 
 ## Appendix — Reference
 
