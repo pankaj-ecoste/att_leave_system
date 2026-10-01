@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, WORK_MODES, getShiftInfo, statusLabel } from '../../lib/constants'
-import { todayIST } from '../../lib/datetime'
+import { todayIST, effectiveProbationEnd } from '../../lib/datetime'
 import { buildConfirmationGmailLink } from '../../lib/notify'
 
 // Sub Dept and Cost Center dropped from the form per your request — the columns and
@@ -47,9 +47,9 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
   // plan.md §25 — fires once probation is actually complete, not N days early
   // (revises the Phase 2 "admin alert when probation is nearing its end" banner).
   const today = todayIST()
-  const probationEnding = employees.filter(e =>
-    e.employmentStatus === 'Probation' && e.probationEndDate && e.probationEndDate <= today
-  )
+  const probationEnding = employees
+    .map(e => ({ ...e, probationEndDate: effectiveProbationEnd(e.probationEndDate, e.joiningDate) }))
+    .filter(e => e.employmentStatus === 'Probation' && e.probationEndDate && e.probationEndDate <= today)
 
   function noteJustConfirmed(updated) {
     if (!updated || updated.employmentStatus !== 'Confirmed') return

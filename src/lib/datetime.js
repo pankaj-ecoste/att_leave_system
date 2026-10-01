@@ -46,6 +46,19 @@ export function todayIST() {
   return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`
 }
 
+// The date probation ends: the saved end date if there is one, otherwise joining date +
+// 3 months (same rule the database applies at hire). Falls back so a missing saved date
+// can never hide someone from the "completed probation" banner. Day is clamped to the
+// month's last day, matching Postgres (31 Aug + 3 months = 30 Nov, not 1 Dec).
+export function effectiveProbationEnd(probationEndDate, joiningDate) {
+  if (probationEndDate) return probationEndDate
+  if (!joiningDate) return null
+  const [y, m, d] = String(joiningDate).slice(0, 10).split('-').map(Number)
+  const lastDay = new Date(Date.UTC(y, m - 1 + 3 + 1, 0)).getUTCDate()
+  const end = new Date(Date.UTC(y, m - 1 + 3, Math.min(d, lastDay)))
+  return `${end.getUTCFullYear()}-${pad2(end.getUTCMonth() + 1)}-${pad2(end.getUTCDate())}`
+}
+
 // N days from today in IST, as YYYY-MM-DD — used for advance-notice rules (e.g. Earned
 // Leave's 7-day minimum). Same "call at point of use, never cache" rule as todayIST.
 export function daysFromTodayIST(days) {
