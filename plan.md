@@ -3196,6 +3196,13 @@ staff: phone quality and the exact spot decide GPS quality.
 - Only the radius check changed (the apply script proves live == 0038 before, and live == the
   0060 file after). Field/WFH punches (no office tile) were never rejected and are untouched.
 
+**Applied to production 2026-10-03** (all checks passed, incl. punch-in AND punch-out paths). Live radii
+at the time: ECOSTE 50 m, MetaMask 50 m, PLANT SONIPAT HARYANA 70 m — so ECOSTE has the SAME radius
+as MetaMask yet "works very good": the MetaMask trouble is therefore more likely its GPS conditions
+or where its office point was saved than the radius number itself (see open item 3). A first
+version of the rejection message printed a stray "s" ("…50ms.") — fixed the same day
+(`apply-0060-message-wording-fix.mjs`).
+
 **Still open (offered, not built):**
 1. **Punch screen shows a stale, accuracy-less distance** ("184m away · 50m radius" from ONE
    reading taken when the screen opened, never refreshed). Should keep updating and show GPS

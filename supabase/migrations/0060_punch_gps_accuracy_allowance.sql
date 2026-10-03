@@ -116,7 +116,7 @@ begin
       if not v_inside then
         v_allowance_note := case when v_margin > 0
           then format(' (plus %sm allowance for GPS accuracy)', round(v_margin)) else '' end;
-        raise exception 'Outside % radius — %m away, must be within %m%s. Punch not recorded.',
+        raise exception 'Outside % radius — %m away, must be within %m%. Punch not recorded.',
           v_site.name, round(v_distance), v_site.radius_m, v_allowance_note;
       end if;
       -- Accepted only thanks to the allowance (outside the plain radius): leave a trace so HR
