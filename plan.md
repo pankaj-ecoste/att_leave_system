@@ -3376,6 +3376,24 @@ travel and device-reset lists, which show the "could not load" note.
 `src/api/analytics.js`, `src/hooks/useAdminAnalytics.js`, `src/features/admin/Analytics.jsx`,
 `AdminPanel.jsx`, migration `0061_admin_analytics_support.sql`.
 
+## 46. Travel claims — employee submits a dated claim, HR is emailed, admin marks it Paid (2026-10-03)
+
+**Ask:** field staff view their travel report, pick an end date (at least 5 days after the first unclaimed visit), submit, get a report file downloaded and a pre-written Gmail to HR; admin changes the claim to Paid, and those days disappear from both panels.
+
+**Decisions (confirmed with admin 2026-10-03):**
+1. **Attachment:** a Gmail link can't carry a file. Flow = report downloads, Gmail opens with subject and body written, employee attaches the downloaded file (one manual step). No server-side email service.
+2. **Period:** employee chooses an end date. Claim covers every unclaimed day up to it. The span from the first unclaimed visit to the end date must be at least 5 days, end date not in the future.
+3. **Recipients:** To careers02@ecoste.in · CC founderoffice@ecoste.in, accounts03@ecoste.in (the CC line in the message had a typo — read as these two).
+4. **Status:** Submitted → Paid. Replaces the instant "Settle & Pay" button.
+
+**Data model (migration 0062):** `travel_claims` (period, status, km, distance amount, expenses, total, rate, submitted/paid timestamps). `travel_visits.claim_id` links visits to their claim (null = not yet claimed). Visits stay visible to staff and admin while Submitted; on Paid they're deleted as before (photos removed client-side, the 0051 orphan-only policy), and a `travel_settlements` row keeps the audit trail — the Analytics archive trigger (0061) still keeps the day totals.
+
+**Functions:** employee_submit_travel_claim, admin_mark_travel_claim_paid, employee_get_travel_claims, admin_get_travel_claims. Internal total helper not anon-granted (§33.1).
+
+**Frontend:** shared `lib/travelReport.js` (Excel builder, moved out of admin's Travel.jsx so admin and staff produce identical files). Staff: Travel report card with end-date picker, Prepare & email button (submit → download → Gmail compose URL). Admin: Submitted claims per employee with Mark as Paid.
+
+**Not in this change:** the old admin_settle_travel_period function stays in the database (unused by the UI) — removal is a later clean-up.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
