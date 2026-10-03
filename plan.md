@@ -3139,6 +3139,39 @@ requests is untouched. HR can raise the limit by changing the number in both pla
 `src/lib/regularizationQuota.js(+test)`, `src/lib/constants.js`,
 `src/features/employee/AttendanceHistory.jsx`.
 
+## 40. Managers — "you have approval requests" notification on the front screen (2026-10-03)
+
+**Asked by:** manager-level staff — when a request arrives for approval, show something on
+the front screen so they know right away ("we have an approval request").
+
+**Why they didn't know:** the manager's pending leave + correction requests were fetched
+ONCE at login (`useTeam`). A manager who kept the app open never saw a new request until
+they reloaded, and even then had to open My Team to find out. Nothing on any other tab
+said anything was waiting.
+
+**Built (front-end only, no migration):**
+1. **Banner** on every tab for a manager with ≥1 pending item: "🔔 3 requests waiting for
+   your approval (2 leave, 1 correction) [Review now]" — the button jumps to My Team. Hidden
+   on the My Team tab itself (redundant there).
+2. **Red count** on the "My Team" tab.
+3. **Browser-tab title** "(3) HRMS" so a background tab shows it too.
+4. **Stays fresh:** `useTeam.refreshPending` quietly re-fetches every 2 minutes while the app
+   is visible and whenever the app returns to the foreground. No spinner/error flash on a
+   failed refresh (keeps what's on screen). A `decisionCount` guard throws away a refresh that
+   was in flight while the manager approved/rejected something, so a decided request can't
+   reappear as Pending.
+5. "Waiting for the manager" = status `Pending` — the same filter TeamPanel uses, so the
+   banner number always equals what is listed under My Team. A leave the manager already
+   approved ("Manager Approved") is waiting on admin and is NOT counted.
+
+**Not built (offered):** a real phone/desktop push notification while the app is CLOSED. That
+needs a service worker, push subscriptions stored per device, and a server-side sender — a
+separate, larger feature (and iPhone only supports it for apps added to the home screen).
+Also not done: the same banner for the Admin panel's "Manager Approved" queue.
+
+**Files:** `src/lib/pendingApprovals.js(+test)`, `src/features/manager/PendingApprovalsBanner.jsx`,
+`src/hooks/useTeam.js`, `src/features/employee/EmployeeDashboard.jsx`.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

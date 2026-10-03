@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { PunchPanel } from './PunchPanel'
@@ -9,6 +10,8 @@ import { MyOvertime } from './MyOvertime'
 import { MyAssets } from './MyAssets'
 import { MyJourney } from './MyJourney'
 import { TeamPanel } from '../manager/TeamPanel'
+import { PendingApprovalsBanner } from '../manager/PendingApprovalsBanner'
+import { countPendingApprovals, titleWithCount } from '../../lib/pendingApprovals'
 import { statusStyle } from '../../lib/format'
 import { todayIST, explainShortfall, effectiveStdHours, calcStatus } from '../../lib/datetime'
 import { requiresFieldNote } from '../../lib/constants'
@@ -26,6 +29,14 @@ export function EmployeeDashboard({
   // down to every child below as `stdHours` — none of them need to know about the
   // override or `currentUser` specially, they just get the right number already.
   const stdHours = effectiveStdHours(currentUser, globalStdHours)
+  // plan.md §40 — requests waiting for this manager's decision: banner on every tab, a count
+  // on the My Team tab, and the count in the browser-tab title. useTeam keeps the data fresh.
+  const pending = countPendingApprovals(team.teamLeaves, team.teamRegs)
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\)\s*/, '')
+    document.title = titleWithCount(base, pending.total)
+    return () => { document.title = base }
+  }, [pending.total])
   const tabs = [
     { id: 'today', label: 'Work Status' },
     { id: 'leaves', label: 'Apply For' },
@@ -35,7 +46,7 @@ export function EmployeeDashboard({
     ...(requiresFieldNote(currentUser.workMode) ? [{ id: 'journey', label: 'My Journey' }] : []),
     { id: 'policy', label: 'Leave Policy' },
     { id: 'assets', label: 'My Assets' },
-    ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})` }] : []),
+    ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})`, badge: pending.total }] : []),
   ]
   // Recomputed live, not the stored todayRecord.status — see AttendanceHistory.jsx.
   const status = calcStatus(todayRecord, stdHours, todayRecord.dayType)
@@ -77,10 +88,12 @@ export function EmployeeDashboard({
             </div>
           </div>
         </div>
+        {empTab !== 'team' && <PendingApprovalsBanner pending={pending} onReview={() => setEmpTab('team')} />}
         <div className="flex gap-2 bg-white/5 rounded-2xl p-1 border border-white/10 overflow-x-auto">
           {tabs.map(t => (
             <button key={t.id} onClick={() => setEmpTab(t.id)} className={`flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-xl text-sm font-medium transition-all ${empTab === t.id ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg' : 'text-white/50 hover:text-white/80'}`}>
               {t.label}
+              {t.badge > 0 && <span className="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold">{t.badge}</span>}
             </button>
           ))}
         </div>

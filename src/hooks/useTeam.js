@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { employeeGetMyTeam } from '../api/employees'
 import { managerGetTeamLeaves, managerDecideLeave as apiManagerDecideLeave } from '../api/leave'
 import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideRegularization as apiManagerDecideReg } from '../api/attendance'
@@ -7,6 +7,8 @@ import {
   managerGetTeamTravelSummary, managerGetTeamTravelJourney, managerGetTeamTravelAttendance,
   managerGetTeamTravelPhotoUrl,
 } from '../api/travel'
+
+const PENDING_REFRESH_MS = 2 * 60 * 1000
 
 // "My Team" — appears automatically for anyone with direct reports (the manager view
 // lives inside the employee dashboard, not a separate login, since one person is both).
@@ -53,6 +55,45 @@ export function useTeam(token, empId, onAudit) {
       }
     })()
   }, [token, empId])
+
+  // plan.md §40 — pending requests used to be fetched ONCE at login, so a manager who left the
+  // app open never saw a new request until they reloaded. This re-fetches quietly (no spinner,
+  // no error flash — a failed refresh just keeps what is on screen) every 2 minutes while the
+  // app is visible, and the moment the app comes back to the foreground.
+  //
+  // decisionCount guards one race: a refresh that was already in flight when the manager
+  // approved/rejected something could return the OLD list and put the decided request back as
+  // "Pending". Every decision bumps the counter (before AND after), and a refresh whose
+  // counter changed while it was running is thrown away; the next one is correct.
+  const decisionCount = useRef(0)
+  const isManager = myTeam.length > 0
+
+  const refreshPending = useCallback(async () => {
+    if (!token || !empId) return
+    const startedAt = decisionCount.current
+    try {
+      const [lvs, regs] = await Promise.all([
+        managerGetTeamLeaves(token, empId),
+        managerGetTeamRegularizations(token, empId),
+      ])
+      if (decisionCount.current !== startedAt) return
+      setTeamLeaves(lvs)
+      setTeamRegs(regs)
+    } catch (e) {
+      console.error('refreshPending:', e)
+    }
+  }, [token, empId])
+
+  useEffect(() => {
+    if (!isManager) return undefined
+    const tick = () => { if (document.visibilityState === 'visible') refreshPending() }
+    const timer = setInterval(tick, PENDING_REFRESH_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [isManager, refreshPending])
 
   async function loadTeamAttendance(month, year) {
     try {
@@ -105,6 +146,7 @@ export function useTeam(token, empId, onAudit) {
   }
 
   async function decideLeave(leaveId, status) {
+    decisionCount.current++
     try {
       // Trust the server's returned row rather than the status passed in — it carries
       // the real decided_at/decided_by fields the argument alone doesn't have.
@@ -113,16 +155,21 @@ export function useTeam(token, empId, onAudit) {
       onAudit?.('MANAGER_ACTION', `${status} leave ${leaveId}`)
     } catch (e) {
       throw new Error(`Could not update leave: ${e.message}`)
+    } finally {
+      decisionCount.current++
     }
   }
 
   async function decideRegularization(regId, status) {
+    decisionCount.current++
     try {
       await apiManagerDecideReg(token, empId, regId, status)
       setTeamRegs(prev => prev.map(r => (r.id === regId ? { ...r, status } : r)))
       onAudit?.('MANAGER_ACTION', `${status} regularization ${regId}`)
     } catch (e) {
       throw new Error(`Could not update regularization: ${e.message}`)
+    } finally {
+      decisionCount.current++
     }
   }
 
