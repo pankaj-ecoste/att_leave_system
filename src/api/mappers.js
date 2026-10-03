@@ -427,3 +427,23 @@ export function parseAttnKey(key) {
   const idx = key.lastIndexOf('_')
   return [key.slice(0, idx), key.slice(idx + 1)]
 }
+
+// plan.md §46 — travel claims.
+export function rowToTravelClaim(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    status: row.status,
+    totalKm: Number(row.total_km),
+    distanceAmount: Number(row.distance_amount),
+    expenseAmount: Number(row.expense_amount || 0),
+    amount: Number(row.amount),
+    rateTier: row.rate_tier,
+    ratePerKm: Number(row.rate_per_km),
+    submittedAt: row.submitted_at,
+    paidAt: row.paid_at,
+  }
+}

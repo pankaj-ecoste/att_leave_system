@@ -138,6 +138,10 @@ const CALLS = [
   ['admin_set_ors_api_key', { p_token: FAKE_UUID, p_key: 'test' }],
   ['admin_set_google_maps_api_key', { p_token: FAKE_UUID, p_key: 'test' }],
   ['admin_get_routing_key_status', { p_token: FAKE_UUID }],
+  ['employee_submit_travel_claim', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_end: TODAY }],
+  ['employee_get_travel_claims', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
+  ['admin_get_travel_claims', { p_token: FAKE_UUID }],
+  ['admin_mark_travel_claim_paid', { p_token: FAKE_UUID, p_claim_id: FAKE_UUID }],
 ]
 
 async function main() {

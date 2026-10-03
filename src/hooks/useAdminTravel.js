@@ -4,6 +4,7 @@ import {
   adminSetTaRateTier, adminGetTaSettings, adminUpdateTaSettings,
   adminOverrideTravelVisitDistance, adminSettleTravelPeriod, deleteTravelSelfies,
   adminRefineTravelDistances, adminGetRoutingKeyStatus, adminSetOrsApiKey, adminSetGoogleMapsApiKey,
+  adminGetTravelClaims, adminMarkTravelClaimPaid,
 } from '../api/travel'
 
 // plan.md §28 — admin side of Travel Allowance. Deliberately its own hook, not folded
@@ -13,6 +14,7 @@ export function useAdminTravel(token) {
   const [overview, setOverview] = useState([])
   const [taSettings, setTaSettings] = useState({ managerRatePerKm: 0, executiveRatePerKm: 0 })
   const [routingKeyStatus, setRoutingKeyStatus] = useState({ orsIsSet: false, googleIsSet: false, updatedAt: null })
+  const [claims, setClaims] = useState([])
   const [loading, setLoading] = useState(false)
   // plan.md §33.7 — a failed fetch used to only log to the console; the screen kept
   // showing whatever was already loaded (or an empty list) with no indication anything
@@ -24,11 +26,13 @@ export function useAdminTravel(token) {
     try {
       setLoading(true)
       setError(null)
-      const [ov, settings, keyStatus] = await Promise.all([
+      const [ov, settings, keyStatus, cl] = await Promise.all([
         adminGetTravelOverview(token),
         adminGetTaSettings(token),
         adminGetRoutingKeyStatus(token),
+        adminGetTravelClaims(token),
       ])
+      setClaims(cl)
       setOverview(ov)
       setTaSettings(settings)
       setRoutingKeyStatus(keyStatus)
@@ -96,7 +100,17 @@ export function useAdminTravel(token) {
     return settlement
   }
 
+  // plan.md §46 — Submitted -> Paid. Pays out the record, removes the claimed visits (the
+  // archive trigger keeps analytics), then removes the photo files (client step, 0051).
+  async function markClaimPaid(claimId) {
+    const { claim, photoPaths } = await adminMarkTravelClaimPaid(token, claimId)
+    await deleteTravelSelfies(photoPaths)
+    await reload()
+    return claim
+  }
+
   return {
+    claims, markClaimPaid,
     overview, taSettings, routingKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
     overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, settle, reload,
   }

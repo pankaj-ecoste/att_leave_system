@@ -1,5 +1,4 @@
 import { useState, useCallback, lazy, Suspense } from 'react'
-import * as XLSX from 'xlsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
@@ -8,13 +7,11 @@ import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { adminFetchAttendance } from '../../api/attendance'
 import { adminGetTravelPhotoUrl } from '../../api/travel'
-import { dayPoints, effectiveLegKm, effectiveReturnLegKm } from '../../lib/travelPoints'
-import { haversineMeters } from '../../lib/geo'
-import { todayIST } from '../../lib/datetime'
+import { dayPoints, effectiveLegKm } from '../../lib/travelPoints'
+import { downloadTravelReportFile, TIER_LABELS } from '../../lib/travelReport'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
-const TIER_LABELS = { manager: 'Manager', executive: 'Executive' }
 
 function groupByDate(journey) {
   const byDate = journey.reduce((acc, v) => {
@@ -22,60 +19,6 @@ function groupByDate(journey) {
     return acc
   }, {})
   return Object.keys(byDate).sort()
-}
-
-const SOURCE_LABELS = { routed: 'Road distance', estimated: 'Estimate (straight-line)', adjusted: 'Manually adjusted' }
-
-// Day-wise Punch In -> visits -> Punch Out, then a cumulative summary sheet — same
-// lightweight xlsx pattern Reports.jsx already uses for plain tabular exports
-// (json_to_sheet, not the styled exceljs path). Mirrors exactly what the on-screen
-// TravelDayChain and the map show, so the report never looks like a different feature.
-// Distance column uses the same effective-distance priority as the screen: a manual
-// adjustment wins, then the refined road distance once available, else the original
-// instant straight-line estimate — the Source column says plainly which one it is.
-function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
-  const rows = []
-  let totalKm = 0
-  let totalExpense = 0
-
-  for (const date of dates) {
-    const visits = journeyByDate[date]
-    const record = attnByDate[date]
-    if (record?.inTime) {
-      rows.push({ Date: date, Time: record.inTime, Type: 'Punch In', 'Site / Client': record.inLocation || '', 'Distance (km)': '', Source: '', 'Expense Note': '', 'Expense Amount (₹)': '' })
-    }
-    let lastLat = record?.inLat, lastLon = record?.inLon
-    for (const v of visits) {
-      const leg = effectiveLegKm(v)
-      rows.push({
-        Date: date, Time: new Date(v.capturedAt).toLocaleTimeString(), Type: 'Visit', 'Site / Client': v.siteNote,
-        'Distance (km)': leg.km.toFixed(2), Source: SOURCE_LABELS[leg.source], 'Expense Note': v.expenseNote || '',
-        'Expense Amount (₹)': v.expenseAmount != null ? v.expenseAmount.toFixed(2) : '',
-      })
-      totalKm += leg.km
-      totalExpense += v.expenseAmount || 0
-      lastLat = v.lat; lastLon = v.lon
-    }
-    if (record?.outTime) {
-      const fallbackKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
-      const returnLeg = effectiveReturnLegKm(record, fallbackKm)
-      rows.push({ Date: date, Time: record.outTime, Type: 'Punch Out', 'Site / Client': record.outLocation || '', 'Distance (km)': returnLeg.km.toFixed(2), Source: SOURCE_LABELS[returnLeg.source], 'Expense Note': '', 'Expense Amount (₹)': '' })
-      totalKm += returnLeg.km
-    }
-  }
-
-  const distanceAmount = totalKm * rate
-  const summaryRows = [{
-    Employee: row.empName, 'Emp #': row.empNum || '', 'Rate Tier': TIER_LABELS[row.taRateTier] || row.taRateTier || '',
-    'Rate (₹/km)': rate, Period: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
-    'Total Visits': row.visitCount, 'Total Distance (km)': totalKm.toFixed(2), 'Distance Amount (₹)': distanceAmount.toFixed(2),
-    'Total Expenses (₹)': totalExpense.toFixed(2), 'Grand Total (₹)': (distanceAmount + totalExpense).toFixed(2),
-  }]
-
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Day-wise Journey')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary')
-  XLSX.writeFile(wb, `travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}_${todayIST()}.xlsx`)
 }
 
 // plan.md §28 — admin's Travel Allowance screen: rate tiers per eligible employee, the
@@ -87,7 +30,7 @@ function downloadTravelReport(row, dates, journeyByDate, attnByDate, rate) {
 export function Travel({ token, travel, onAudit }) {
   const {
     overview, taSettings, routingKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
-    overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, settle, reload,
+    overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, reload, claims, markClaimPaid,
   } = travel
   const [rateForm, setRateForm] = useState(null)
   const [orsKeyInput, setOrsKeyInput] = useState(null)
@@ -223,22 +166,22 @@ export function Travel({ token, travel, onAudit }) {
 
   function download(row) {
     if (journey.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
-    downloadTravelReport(row, groupByDate(journey), journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {}), attnByDate, rateFor(row))
+    const byDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
+    downloadTravelReportFile(`travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}`, {
+      employee: { name: row.empName, empNum: row.empNum, taRateTier: row.taRateTier },
+      dates: groupByDate(journey), journeyByDate: byDate, attnByDate, rate: rateFor(row),
+      periodLabel: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
+    })
   }
 
-  async function doSettle(row) {
-    if (!row.taRateTier) { setMsg('Set a rate tier before settling.'); return }
-    const rate = rateFor(row)
-    const distanceAmount = row.totalKm * rate
-    const grandTotal = (distanceAmount + row.totalExpense).toFixed(2)
-    if (!window.confirm(
-      `Settle ${row.empName}: ${row.totalKm.toFixed(1)} km × ₹${rate}/km = ₹${distanceAmount.toFixed(2)}`
-      + (row.totalExpense > 0 ? ` + ₹${row.totalExpense.toFixed(2)} expenses` : '')
-      + ` = ₹${grandTotal}?\n\nMake sure you've downloaded the report first — this pays out and permanently deletes their selfies/receipts/points, keeping only this summary.`
-    )) return
+  // plan.md §46 — Submitted -> Paid. Replaces the instant Settle & Pay.
+  async function doMarkPaid(claim, empName) {
+    if (!window.confirm(`Mark ${empName}'s claim ${claim.periodStart} to ${claim.periodEnd} (₹${claim.amount.toFixed(2)}) as PAID?
+
+This removes those days' photos and points from the staff and admin panels. Only confirm after the money has actually been paid.`)) return
     try {
-      const settlement = await settle(row.empId)
-      onAudit?.('TRAVEL_SETTLED', `${row.empName} — ${settlement.totalKm.toFixed(1)}km, ₹${settlement.amount}`, 'admin')
+      await markClaimPaid(claim.id)
+      onAudit?.('TRAVEL_CLAIM_PAID', `${empName} — ${claim.periodStart} to ${claim.periodEnd}, ₹${claim.amount}`, 'admin')
       setExpandedEmp(null)
     } catch (e) {
       setMsg(e.message)
@@ -375,13 +318,21 @@ export function Travel({ token, travel, onAudit }) {
                   <Button variant="secondary" className="text-xs" onClick={() => expand(row)}>
                     {expandedEmp === row.empId ? 'Hide' : 'Review'}
                   </Button>
-                  <Button className="text-xs" disabled={row.visitCount === 0} onClick={() => doSettle(row)}>Settle & Pay</Button>
                 </div>
 
                 {expandedEmp === row.empId && (
                   <div className="p-3 border-t border-white/10">
                     {detailLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
                       <>
+                        {claims.filter(c => c.empId === row.empId).map(c => (
+                          <div key={c.id} className="flex items-center justify-between gap-3 flex-wrap p-3 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
+                            <div>
+                              <p className="text-amber-200 text-xs font-medium">Claim submitted — awaiting payment</p>
+                              <p className="text-white/60 text-xs">{c.periodStart} to {c.periodEnd} · {c.totalKm.toFixed(1)} km + ₹{c.expenseAmount.toFixed(2)} expenses = <span className="text-white font-medium">₹{c.amount.toFixed(2)}</span></p>
+                            </div>
+                            <Button className="text-xs" onClick={() => doMarkPaid(c, row.empName)}>Mark as Paid</Button>
+                          </div>
+                        ))}
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <Button variant="secondary" className="text-xs" disabled={journey.length === 0} onClick={() => download(row)}>
                             ⬇ Download Report

@@ -3392,6 +3392,14 @@ travel and device-reset lists, which show the "could not load" note.
 
 **Frontend:** shared `lib/travelReport.js` (Excel builder, moved out of admin's Travel.jsx so admin and staff produce identical files). Staff: Travel report card with end-date picker, Prepare & email button (submit → download → Gmail compose URL). Admin: Submitted claims per employee with Mark as Paid.
 
+**Built 2026-10-03:** migration 0062 applied; rolled-back dry run on Himanshu's real data
+(17 unclaimed visits, ₹5,805.70 would have been claimed, nothing kept). Staff: TravelClaimCard
+(end date ≥ 5 days from first unclaimed day, not in the future; downloads the report, then
+opens the Gmail draft via a real link so the browser allows it). Admin: Submitted claims show
+inside each employee's Review with Mark as Paid (confirm, then photos removed). Gmail opens with
+To careers02@ecoste.in, CC founderoffice@ecoste.in and accounts03@ecoste.in. Build + 185 tests
+pass. Not click-tested in a browser this session (no login held) — first real use is the test.
+
 **Not in this change:** the old admin_settle_travel_period function stays in the database (unused by the UI) — removal is a later clean-up.
 
 ## Appendix — Reference

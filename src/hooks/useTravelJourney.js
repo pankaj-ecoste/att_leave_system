@@ -3,6 +3,7 @@ import { getLocation } from './useGeolocation'
 import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
   employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt, employeeRefineOwnTravelDistances,
+  employeeGetTravelClaims, employeeSubmitTravelClaim,
   employeeGetOwnTravelPhotoUrl,
 } from '../api/travel'
 import { todayIST } from '../lib/datetime'
@@ -16,6 +17,7 @@ export function useTravelJourney(token, empId) {
   const [journey, setJourney] = useState([])
   const [summary, setSummary] = useState({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null })
   const [settlements, setSettlements] = useState([])
+  const [claims, setClaims] = useState([])
   const [loading, setLoading] = useState(false)
   const [addingVisit, setAddingVisit] = useState(false)
   const [locationStatus, setLocationStatus] = useState('')
@@ -24,14 +26,16 @@ export function useTravelJourney(token, empId) {
     if (!token || !empId) return
     try {
       setLoading(true)
-      const [j, s, st] = await Promise.all([
+      const [j, s, st, cl] = await Promise.all([
         employeeGetTravelJourney(token, empId),
         employeeGetTravelSummary(token, empId),
         employeeGetTravelSettlements(token, empId),
+        employeeGetTravelClaims(token, empId),
       ])
       setJourney(j)
       setSummary(s)
       setSettlements(st)
+      setClaims(cl)
     } catch (e) {
       console.error('loadTravelJourney:', e)
     } finally {
@@ -56,7 +60,7 @@ export function useTravelJourney(token, empId) {
   }, [token, empId, reload])
 
   useEffect(() => {
-    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); return }
+    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); setClaims([]); return }
     reload().then(refineInBackground)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, empId])
@@ -104,5 +108,12 @@ export function useTravelJourney(token, empId) {
   // this hook has token/empId in scope; a plain path is all the component needs to know.
   const fetchPhotoUrl = useCallback(path => employeeGetOwnTravelPhotoUrl(token, empId, path), [token, empId])
 
-  return { journey, summary, settlements, loading, addingVisit, locationStatus, addVisit, reload, fetchPhotoUrl }
+  // plan.md §46 — submit a dated claim; the caller builds and downloads the report for that period.
+  async function submitClaim(endDate) {
+    const claim = await employeeSubmitTravelClaim(token, empId, endDate)
+    await reload()
+    return claim
+  }
+
+  return { journey, summary, settlements, claims, loading, addingVisit, locationStatus, addVisit, submitClaim, reload, fetchPhotoUrl }
 }

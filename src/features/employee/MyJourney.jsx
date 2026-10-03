@@ -6,6 +6,7 @@ import { TravelDayChain } from '../../components/TravelDayChain'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { attnKey } from '../../api/mappers'
 import { dayPoints } from '../../lib/travelPoints'
+import { TravelClaimCard } from './TravelClaimCard'
 
 // Only fetched when a map is actually opened (plan.md §28 decision 9).
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
@@ -16,7 +17,7 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 // distance + expense total, and a lazy map. Only rendered for Field / Office+Field
 // staff — gated by the caller (EmployeeDashboard) using the same requiresFieldNote()
 // check the punch screen already uses.
-export function MyJourney({ currentUser, attendance, journey, summary, settlements, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl }) {
+export function MyJourney({ currentUser, attendance, journey, summary, settlements, claims, submitClaim, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [siteNote, setSiteNote] = useState('')
   const [showExpense, setShowExpense] = useState(false)
@@ -166,6 +167,8 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
           </div>
         )}
       </Card>
+
+      <TravelClaimCard currentUser={currentUser} attendance={attendance} journey={journey} claims={claims} submitClaim={submitClaim} />
 
       {loading && dates.length === 0 ? (
         <p className="text-white/30 text-sm text-center py-8">Loading...</p>

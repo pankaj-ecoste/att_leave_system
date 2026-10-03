@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import {
   rowToTravelVisit, rowToTravelSummary, rowToTravelOverviewRow, rowToTravelSettlement, rowToTaSettings,
-  rowToAttendance,
+  rowToAttendance, rowToTravelClaim,
 } from './mappers'
 
 // plan.md §28 — Travel Allowance verification. Same private-bucket pattern as
@@ -236,4 +236,33 @@ export async function deleteTravelSelfies(paths) {
   if (!paths || paths.length === 0) return
   const { error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).remove(paths)
   if (error) console.error('deleteTravelSelfies:', error)
+}
+
+// ---------------------------------------------------------------------------
+// Claims (plan.md §46)
+// ---------------------------------------------------------------------------
+
+export async function employeeSubmitTravelClaim(token, empId, endDate) {
+  const { data, error } = await supabase.rpc('employee_submit_travel_claim', { p_token: token, p_emp_id: empId, p_end: endDate })
+  if (error) throw error
+  return rowToTravelClaim(data)
+}
+
+export async function employeeGetTravelClaims(token, empId) {
+  const { data, error } = await supabase.rpc('employee_get_travel_claims', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return (data || []).map(rowToTravelClaim)
+}
+
+export async function adminGetTravelClaims(token) {
+  const { data, error } = await supabase.rpc('admin_get_travel_claims', { p_token: token })
+  if (error) throw error
+  return (data || []).map(rowToTravelClaim)
+}
+
+export async function adminMarkTravelClaimPaid(token, claimId) {
+  const { data, error } = await supabase.rpc('admin_mark_travel_claim_paid', { p_token: token, p_claim_id: claimId })
+  if (error) throw error
+  const row = data?.[0]
+  return { claim: rowToTravelClaim(row?.claim), photoPaths: row?.photo_paths || [] }
 }
