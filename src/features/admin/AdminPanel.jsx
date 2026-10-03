@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { Dashboard } from './Dashboard'
+import { Analytics } from './Analytics'
 import { Imports } from './Imports'
 import { AttendanceGrid } from './AttendanceGrid'
 import { LeaveApprovals } from './LeaveApprovals'
@@ -15,6 +16,7 @@ import { countAdminAlerts } from '../../lib/adminAlerts'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'analytics', label: 'Analytics' },
   { id: 'attendance', label: 'Attendance' },
   { id: 'leaves', label: 'Leaves' },
   { id: 'employees', label: 'Employees' },
@@ -62,6 +64,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
             that share this hook (Dashboard, Attendance grid, Database). */}
         {attendanceHook.error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{attendanceHook.error}</p>}
         {tab === 'dashboard' && <Dashboard token={token} employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} onNavigate={setTab} />}
+        {tab === 'analytics' && <Analytics token={token} employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} stdHours={admin.stdHours} />}
         {tab === 'attendance' && (
           <>
             <Imports leaveBalanceImport={imports.leaveBalance} />

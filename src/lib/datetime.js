@@ -177,7 +177,12 @@ export function calcStatus(rec, stdHours, dayType = DAY_TYPES.WORKING) {
 // badge already says enough and no extra note is shown. Mirrors calcStatus's other
 // branches (leave-type early-outs, the work-window forgiveness) so it never fires on a
 // day whose status has nothing to do with hours worked.
-export function explainShortfall(rec, stdHours) {
+// Whole minutes this day fell short of stdHours, using exactly the rules calcStatus and
+// explainShortfall share — or null when the day is not an "hours worked" story at all
+// (full-day leave, WFH / On Duty, no punch-out yet, or a late punch-in that used its whole
+// window). 0 means stdHours was met or exceeded. One place, so the day-status explanation
+// and the admin Analytics grace-period ranking (plan.md §45) can never disagree.
+export function shortfallMinutes(rec, stdHours) {
   if (rec.leaveType) {
     const lt = findLeaveType(rec.leaveType)
     // Full-day leave, or a leave type that returns early in calcStatus regardless of
@@ -194,7 +199,19 @@ export function explainShortfall(rec, stdHours) {
   // available window is Present outright — no grace or Partial Leave involved.
   if (available != null && available < stdHours && raw >= available) return null
 
-  const rawShortfallMin = Math.round(Math.max(0, stdHours - cappedRaw) * 60)
+  return Math.round(Math.max(0, stdHours - cappedRaw) * 60)
+}
+
+// Minutes of the grace period this day used (1..GRACE_PERIOD_MIN), or 0 if it did not use
+// it (met the hours, or fell short by more than the grace, or not an hours day).
+export function graceMinutesUsed(rec, stdHours) {
+  const m = shortfallMinutes(rec, stdHours)
+  return m != null && m > 0 && m <= GRACE_PERIOD_MIN ? m : 0
+}
+
+export function explainShortfall(rec, stdHours) {
+  const rawShortfallMin = shortfallMinutes(rec, stdHours)
+  if (rawShortfallMin == null) return null
   if (rawShortfallMin === 0) return null // met or exceeded stdHours, nothing to explain
 
   if (rawShortfallMin <= GRACE_PERIOD_MIN) return `${rawShortfallMin} min short — grace period used`

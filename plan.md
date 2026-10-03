@@ -3335,6 +3335,47 @@ screens start as `password` type, the eye reveals/hides the typed text, the eye 
 box, and the rest of the staff screen (Remember me, Login) is unchanged. The Settings screen uses the
 same component but was not opened (needs an admin login).
 
+## 45. Admin Analytics tab — eight "who ... most" rankings for a chosen month (2026-10-03)
+
+**Asked by:** HR — a basic-analysis dashboard for the admin: who used the grace period most, took
+the most leave this month, regularized the most, asked for the most device resets, has the highest
+visits per month / per day, the highest km per month, and who punched out after 7 pm.
+
+**Built:** a new **Analytics** tab (second tab, after Dashboard) with a month picker (default: this
+month, any earlier month allowed) and eight ranked top-10 lists, each one measure in one colour with
+the number written beside a thin bar (the list is its own table view; hover shows a one-line detail).
+Data loads only when the tab is opened; the attendance is fetched into the hook's OWN state (never the
+shared admin attendance hook, which feeds the Dashboard/Attendance grid). A failed source (travel,
+resets, attendance) shows a note and the other lists still render (`Promise.allSettled`).
+
+**Definitions chosen (state these to HR; changeable):**
+| List | Rule |
+|---|---|
+| Grace period | days the person finished **1-15 min short** of the day's hours (their own hours target if they have one) and the grace period covered it — via the same `shortfallMinutes()` that `explainShortfall`/day status use (refactored out so they cannot disagree; the 64 existing datetime tests still pass) |
+| Leave | **Approved** leave days dated in the month; half-day = 0.5; real time off only — **WFH, On Duty and hour-long Partial Leave are not counted** |
+| Regularized | correction requests **filed** in the month (Indian date), any decision, plus how many approved |
+| Device resets | HR resets in the month (from the audit log, `PUNCH_DEVICE_RESET`), plus the 1-year total; grouped by name (the log stores names, not ids) |
+| Visits / month, visits / day | live travel visits in the month; "per day" = their single busiest day |
+| Km / month | sum of visit legs + each day's return leg to the punch-out point — the same definition as `travel_summary_for_employee` (checked equal in the apply script) |
+| After 7 pm | days with punch-out strictly after 19:00 |
+Top 10 per list; people with a zero are not shown; ties are ordered by name.
+
+**Gotcha found while designing it:** settling an employee's travel DELETES all their `travel_visits`
+(§28), so visit/km history would vanish when a period is paid. Migration `0061` adds
+`travel_daily_archive` + a statement-level `AFTER DELETE` trigger on `travel_visits` that stores each
+deleted batch's per-day visits and km first. It watches the table, so none of the money-handling settle
+functions are touched. **Periods paid before this migration have no visit-level history** (rows are
+gone). Two read-only admin RPCs: `admin_get_travel_analytics`, `admin_get_device_reset_counts`.
+
+**Rollout:** apply `scripts/migrations/apply-0061-admin-analytics-support.mjs` (rolled-back test: km
+equals the existing travel summary, numbers unchanged after a settlement-style delete, device-reset
+counting, wrong token refused), then push. If the app is pushed first, the tab still works except the
+travel and device-reset lists, which show the "could not load" note.
+
+**Files:** `src/lib/analytics.js(+test)`, `src/lib/datetime.js` (`shortfallMinutes`, `graceMinutesUsed`),
+`src/api/analytics.js`, `src/hooks/useAdminAnalytics.js`, `src/features/admin/Analytics.jsx`,
+`AdminPanel.jsx`, migration `0061_admin_analytics_support.sql`.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
