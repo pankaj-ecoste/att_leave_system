@@ -3447,7 +3447,7 @@ reach more than it should. Fixed in two phases so the live app is never broken.
 - Smoke test: two signatures updated to what the app already sends (they had been stale
   since device binding, 2026-09-07).
 
-**Phase 2 — migration `0064` (committed, NOT applied yet):** removes `fetch_directory`
+**Phase 2 — migration `0064` (APPLIED to production 2026-10-03, after confirming the live site serves the new client; apply script checks passed; public-exposure check now clean):** removes `fetch_directory`
 from the public key, closes the `employees_directory` view, and drops `admin_email`
 from `app_settings_public`. Must be applied only after the new app is live, or old browser
 tabs would break. The apply script checks everything before committing.
