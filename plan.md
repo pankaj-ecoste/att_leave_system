@@ -3314,6 +3314,27 @@ long-absent staff.
 defined only there, so nothing else depends on it. The tab still appears only for field-note work
 modes (`requiresFieldNote`); everyone else's tab order is unchanged.
 
+## 44. PIN boxes hide the PIN, with an eye button to reveal it (2026-10-03)
+
+**Asked by:** the team — when staff or admin type their PIN it was shown in plain text (the boxes
+were `type="text"`); it should show dots, with an eye button to reveal it on demand.
+
+**Built (front-end only):** new `components/ui/PinInput.jsx` — shows dots by default, an eye button
+toggles to plain text (and an eye-with-slash icon while revealed; `aria-label`/`aria-pressed` for
+screen readers). It always starts hidden when a screen opens. Used on: the **staff login**, the
+**admin login**, and the three **admin Settings -> change PIN** fields (current / new / confirm).
+`autoComplete="off"` and no `<form>` kept, so browsers do not offer to save the PIN.
+`className` styles the input and `wrapperClassName` the spacing, so the eye stays vertically centred.
+
+**Deliberately NOT changed:** the PIN field on the admin's *create/edit employee* form stays visible —
+HR is assigning someone else's PIN and has to read it out to them. Easy to switch if HR wants it
+masked too.
+
+**Verified in a real browser** (local dev server, test text only, no login attempted): both login
+screens start as `password` type, the eye reveals/hides the typed text, the eye is centred inside the
+box, and the rest of the staff screen (Remember me, Login) is unchanged. The Settings screen uses the
+same component but was not opened (needs an admin login).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

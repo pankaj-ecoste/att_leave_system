@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Input, Label } from '../../components/ui/Input'
+import { Label } from '../../components/ui/Input'
+import { PinInput } from '../../components/ui/PinInput'
 import { adminLoginMessage } from './adminLoginMessage'
 
 export function AdminLogin({ adminLogin, onBack }) {
@@ -34,9 +35,9 @@ export function AdminLogin({ adminLogin, onBack }) {
         </div>
         <Card>
           <Label>Admin PIN</Label>
-          <Input
-            type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
-            className="mb-3 tracking-widest text-center text-lg" value={pin}
+          <PinInput
+            wrapperClassName="mb-3"
+            className="tracking-widest text-center text-lg" value={pin}
             onChange={e => setPin(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && doLogin()}
             placeholder="----"

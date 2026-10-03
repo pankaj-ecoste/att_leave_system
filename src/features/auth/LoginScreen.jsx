@@ -3,6 +3,7 @@ import { COMPANIES, COMPANY_COLORS, COMPANY_ICONS } from '../../lib/constants'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
+import { PinInput } from '../../components/ui/PinInput'
 
 // Company -> employee picker -> PIN entry. The employee list here is intentionally the
 // public directory (name/company/job title only, no email/phone) — see the RLS notes
@@ -138,9 +139,9 @@ export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminL
                   </div>
                 </div>
                 <Label>Enter PIN</Label>
-                <Input
-                  type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
-                  className="mb-2 text-center tracking-widest text-lg" value={pin}
+                <PinInput
+                  wrapperClassName="mb-2"
+                  className="text-center tracking-widest text-lg" value={pin}
                   onChange={e => setPin(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && doLogin()}
                   placeholder="----"
