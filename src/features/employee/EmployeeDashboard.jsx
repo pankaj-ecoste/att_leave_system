@@ -39,11 +39,12 @@ export function EmployeeDashboard({
   }, [pending.total])
   const tabs = [
     { id: 'today', label: 'Work Status' },
+    // Field staff live in this tab all day, so it sits right after Work Status (team request).
+    ...(requiresFieldNote(currentUser.workMode) ? [{ id: 'journey', label: 'My Journey' }] : []),
     { id: 'leaves', label: 'Apply For' },
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },
     { id: 'overtime', label: 'Overtime' },
-    ...(requiresFieldNote(currentUser.workMode) ? [{ id: 'journey', label: 'My Journey' }] : []),
     { id: 'policy', label: 'Leave Policy' },
     { id: 'assets', label: 'My Assets' },
     ...(team.myTeam.length > 0 ? [{ id: 'team', label: `My Team (${team.myTeam.length})`, badge: pending.total }] : []),

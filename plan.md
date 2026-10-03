@@ -3307,6 +3307,13 @@ long-absent staff.
 **Files:** `src/lib/adminAlerts.js(+test)`, `src/features/admin/AdminAlerts.jsx`,
 `src/features/admin/Dashboard.jsx`, `AdminPanel.jsx`, `Employees.jsx`.
 
+## 43. Field staff — "My Journey" tab moved to second place (2026-10-03)
+
+**Asked by:** the team — for field staff, the My Journey tab should come right after Work Status.
+**Change:** one line moved in `EmployeeDashboard.jsx`'s tab list (front-end only). Tab order is
+defined only there, so nothing else depends on it. The tab still appears only for field-note work
+modes (`requiresFieldNote`); everyone else's tab order is unchanged.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
