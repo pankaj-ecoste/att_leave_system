@@ -1,7 +1,7 @@
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import {
-  probationCompleted, workAnniversariesToday, awaitingAdminApproval,
+  probationCompleted, workAnniversariesToday, awaitingAdminApproval, overdueRequests, missingDetails, OVERDUE_DAYS,
   whatsappLink, birthdayWishText, anniversaryWishText,
 } from '../../lib/adminAlerts'
 
@@ -24,21 +24,33 @@ export function AdminAlerts({ employees, leaves, adminRegs, todaysBirthdays, mar
   const probation = probationCompleted(employees, today)
   const anniversaries = workAnniversariesToday(employees, today)
   const waiting = awaitingAdminApproval(leaves, adminRegs)
+  const overdue = overdueRequests(leaves, adminRegs, today)
+  const missing = missingDetails(employees)
   const phoneOf = empId => employees.find(e => e.id === empId)?.phone
 
-  if (!probation.length && !anniversaries.length && !todaysBirthdays.length && !waiting.total) return null
+  if (!probation.length && !anniversaries.length && !todaysBirthdays.length && !waiting.total && !missing.length) return null
 
   return (
     <Card>
       <h3 className="text-white font-semibold text-sm mb-3">🔔 Needs your attention</h3>
       <div className="space-y-4">
         {waiting.total > 0 && (
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-white/80 text-xs">
-              <span className="text-amber-300 font-semibold">{waiting.total} request{waiting.total !== 1 ? 's' : ''} waiting for your approval</span>
-              {' '}({waiting.leaves} leave, {waiting.regs} correction)
-            </p>
-            <Button variant="secondary" className="text-xs py-1 px-2.5 flex-shrink-0" onClick={() => onNavigate('leaves')}>Review</Button>
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-white/80 text-xs">
+                <span className="text-amber-300 font-semibold">{waiting.total} request{waiting.total !== 1 ? 's' : ''} waiting for your approval</span>
+                {' '}({waiting.leaves} leave, {waiting.regs} correction)
+              </p>
+              <Button variant="secondary" className="text-xs py-1 px-2.5 flex-shrink-0" onClick={() => onNavigate('leaves')}>Review</Button>
+            </div>
+            {overdue.length > 0 && (
+              // Already counted above — this only singles out the ones that have waited too long.
+              <p className="text-red-300 text-xs mt-1.5">
+                ⏰ {overdue.length} waiting {OVERDUE_DAYS}+ days:{' '}
+                {overdue.slice(0, 3).map(o => `${o.name || 'Employee'} (${o.kind === 'leave' ? o.label : 'correction'}, ${o.days} days)`).join(', ')}
+                {overdue.length > 3 ? ` and ${overdue.length - 3} more` : ''}
+              </p>
+            )}
           </div>
         )}
 
@@ -93,6 +105,28 @@ export function AdminAlerts({ employees, leaves, adminRegs, todaysBirthdays, mar
               ))}
             </div>
           </div>
+        )}
+
+        {missing.length > 0 && (
+          // A long-running tidy-up list, not something that happened today: collapsed by default
+          // and not part of the badge number, so it can't drown out the real alerts.
+          <details>
+            <summary className="text-white/50 text-xs cursor-pointer select-none">
+              📇 {missing.length} employee{missing.length !== 1 ? 's' : ''} missing a phone, birthday or email — wishes and emails can't reach them
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              {missing.slice(0, 8).map(m => (
+                <div key={m.id} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="text-white/70">{m.name} — {m.company?.split(' ')[0]}</span>
+                  <span className="text-white/40 flex-shrink-0">missing {m.missing.join(', ')}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <span className="text-white/30 text-xs">{missing.length > 8 ? `…and ${missing.length - 8} more` : ''}</span>
+                <Button variant="secondary" className="text-xs py-1 px-2.5" onClick={() => onNavigate('employees')}>Open Employees</Button>
+              </div>
+            </div>
+          </details>
         )}
       </div>
     </Card>

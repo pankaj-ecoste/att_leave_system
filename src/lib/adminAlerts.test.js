@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   probationCompleted, workAnniversariesToday, awaitingAdminApproval, countAdminAlerts,
   whatsappDigits, whatsappLink, birthdayWishText, anniversaryWishText,
+  overdueRequests, missingDetails,
 } from './adminAlerts'
 
 const TODAY = '2026-10-03'
@@ -128,5 +129,53 @@ describe('awaitingAdminApproval + countAdminAlerts', () => {
     ]
     const birthdays = [{ acked: false }, { acked: true }]
     expect(countAdminAlerts({ employees, leaves, regs, birthdays, today: TODAY })).toBe(1 + 1 + 1 + 3)
+  })
+})
+
+describe('overdueRequests', () => {
+  // TODAY = 2026-10-03 (IST)
+  const leave = (appliedAt, status = 'Pending', name = 'A') => ({ appliedAt, status, empName: name, leaveType: 'Casual' })
+  it('flags requests waiting 3+ days, oldest first, leave and correction together', () => {
+    const r = overdueRequests(
+      [leave('2026-09-30T05:00:00Z', 'Pending', 'P'), leave('2026-09-27T05:00:00Z', 'Manager Approved', 'Q'), leave('2026-10-01T05:00:00Z', 'Pending', 'R')],
+      [{ createdAt: '2026-09-29T05:00:00Z', status: 'Pending', empName: 'S' }],
+      TODAY,
+    )
+    expect(r.map(x => [x.name, x.days])).toEqual([['Q', 6], ['P', 3], ['S', 4]].sort((a, b) => b[1] - a[1]))
+  })
+  it('does not flag recent ones (under 3 days)', () => {
+    expect(overdueRequests([leave('2026-10-01T05:00:00Z')], [], TODAY)).toEqual([])
+  })
+  it('ignores decided requests', () => {
+    expect(overdueRequests([leave('2026-09-01T05:00:00Z', 'Approved'), leave('2026-09-01T05:00:00Z', 'Rejected')], [{ createdAt: '2026-09-01T05:00:00Z', status: 'Approved' }], TODAY)).toEqual([])
+  })
+  it('counts Indian calendar days: filed late on 30 Sep UTC is 1 Oct in India', () => {
+    // 2026-09-30T19:00Z = 2026-10-01 00:30 IST -> 2 days old on 3 Oct, so NOT yet overdue
+    expect(overdueRequests([leave('2026-09-30T19:00:00Z')], [], TODAY)).toEqual([])
+    // 2026-09-30T17:00Z = 2026-09-30 22:30 IST -> 3 days old on 3 Oct -> overdue
+    expect(overdueRequests([leave('2026-09-30T17:00:00Z')], [], TODAY)).toHaveLength(1)
+  })
+  it('skips rows with no usable filing time and survives empty input', () => {
+    expect(overdueRequests([{ status: 'Pending' }, leave('garbage')], [{ status: 'Pending' }], TODAY)).toEqual([])
+    expect(overdueRequests(undefined, undefined, TODAY)).toEqual([])
+  })
+})
+
+describe('missingDetails', () => {
+  const ok = { active: true, phone: '9876543210', dateOfBirth: '1990-01-01', email: 'a@b.com' }
+  it('lists exactly what each active person is missing, sorted by name', () => {
+    const r = missingDetails([
+      { id: 2, name: 'Zed', ...ok, phone: '' },
+      { id: 1, name: 'Amy', ...ok, dateOfBirth: null, email: '  ' },
+      { id: 3, name: 'Fine', ...ok },
+    ])
+    expect(r.map(x => [x.name, x.missing])).toEqual([['Amy', ['birthday', 'email']], ['Zed', ['phone']]])
+  })
+  it('treats an invalid phone as missing', () => {
+    expect(missingDetails([{ id: 1, name: 'A', ...ok, phone: '12345' }])[0].missing).toEqual(['phone'])
+  })
+  it('skips inactive staff and survives empty input', () => {
+    expect(missingDetails([{ id: 1, name: 'Gone', active: false }])).toEqual([])
+    expect(missingDetails(undefined)).toEqual([])
   })
 })

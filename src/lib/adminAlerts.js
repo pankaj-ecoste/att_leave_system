@@ -37,6 +37,57 @@ export function awaitingAdminApproval(leaves, regs) {
   return { leaves: l, regs: r, total: l + r }
 }
 
+// How long a request may sit before it is flagged as overdue (plan.md §42): "3 or more days".
+export const OVERDUE_DAYS = 3
+
+// 'YYYY-MM-DD' of an instant as seen in India (UTC+5:30, no daylight saving).
+function istDateOf(isoTimestamp) {
+  const ms = new Date(isoTimestamp).getTime()
+  if (Number.isNaN(ms)) return null
+  return new Date(ms + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+function wholeDaysBetween(fromDate, toDate) {
+  return Math.round((Date.UTC(...toDate.split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n)))) -
+    Date.UTC(...fromDate.split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))) / 86400000)
+}
+
+// Requests the admin can act on that have been waiting `minDays` or more (counted in Indian
+// calendar days from the day they were filed), oldest first. Same "can act on" rule as
+// awaitingAdminApproval. A request with no usable filing time is skipped, not guessed at.
+export function overdueRequests(leaves, regs, today, minDays = OVERDUE_DAYS) {
+  const rows = []
+  for (const l of leaves || []) {
+    if (!l || (l.status !== 'Pending' && l.status !== 'Manager Approved')) continue
+    const filed = l.appliedAt ? istDateOf(l.appliedAt) : null
+    if (filed) rows.push({ kind: 'leave', name: l.empName, label: l.leaveType, days: wholeDaysBetween(filed, today) })
+  }
+  for (const r of regs || []) {
+    if (!r || r.status !== 'Pending') continue
+    const filed = r.createdAt ? istDateOf(r.createdAt) : null
+    if (filed) rows.push({ kind: 'correction', name: r.empName, label: 'attendance correction', days: wholeDaysBetween(filed, today) })
+  }
+  return rows.filter(x => x.days >= minDays).sort((a, b) => b.days - a.days)
+}
+
+// Active employees missing something the app needs to reach them: a usable phone (WhatsApp
+// wishes), a birth date (birthday alerts), an email (probation confirmation email). An
+// invalid phone counts as missing. Deliberately NOT part of the badge number — it is a
+// long-running tidy-up list, not something that happened today.
+export function missingDetails(employees) {
+  return (employees || [])
+    .filter(e => e && e.active !== false)
+    .map(e => {
+      const missing = []
+      if (!whatsappDigits(e.phone)) missing.push('phone')
+      if (!e.dateOfBirth) missing.push('birthday')
+      if (!String(e.email ?? '').trim()) missing.push('email')
+      return { id: e.id, name: e.name, company: e.company, missing }
+    })
+    .filter(x => x.missing.length > 0)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+}
+
 // Everything on the panel in one number, for the badge on the Dashboard tab.
 export function countAdminAlerts({ employees, leaves, regs, birthdays, today }) {
   const waiting = awaitingAdminApproval(leaves, regs).total

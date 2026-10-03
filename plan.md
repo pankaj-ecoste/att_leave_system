@@ -3288,9 +3288,20 @@ other tabs.
 **Noted, not changed:** `admin_get_todays_birthdays` uses the database's `current_date` (UTC), so
 between midnight and 05:30 IST it would still show yesterday's birthdays — irrelevant in office hours.
 
-**Suggested next alerts (not built, awaiting HR's pick):** forgot-to-punch-out yesterday; security
+**Added the same day on HR's pick ("3 and 4th is good add on"):**
+- **Requests waiting 3+ days** (`overdueRequests`, `OVERDUE_DAYS = 3`): a red line inside the
+  waiting-approvals block — "⏰ 2 waiting 3+ days: Harsh Sharma (Casual, 7 days), Priya Verma
+  (correction, 4 days)", oldest first, max 3 named. Counted in Indian calendar days from the day the
+  request was filed (`appliedAt` / `createdAt`), only for requests the admin can act on. Not added
+  to the badge (already counted as waiting).
+- **Missing details** (`missingDetails`): active employees with no usable phone (an invalid number
+  counts as missing), no birth date, or no email — the three things the WhatsApp wishes, birthday
+  alerts and the probation confirmation email need. Shown as a COLLAPSED list (first 8 + "and N
+  more", "Open Employees" button) and deliberately NOT part of the badge: it is a long-running
+  tidy-up list, not something that happened today, and would otherwise sit on the badge forever.
+
+**Still suggested, not built:** forgot-to-punch-out yesterday (most useful for payroll); security
 alerts (admin-login lock events §37, device-blocked logins §38, GPS-allowance punches §41);
-correction/leave requests pending for more than N days; employees with no phone/DOB/email on file;
 long-absent staff.
 
 **Files:** `src/lib/adminAlerts.js(+test)`, `src/features/admin/AdminAlerts.jsx`,
