@@ -11,6 +11,7 @@ import { Settings } from './Settings'
 import { Sites } from './Sites'
 import { Travel } from './Travel'
 import { todayIST } from '../../lib/datetime'
+import { countAdminAlerts } from '../../lib/adminAlerts'
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -26,6 +27,9 @@ const TABS = [
 
 export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, onAudit, travel }) {
   const [tab, setTab] = useState('dashboard')
+  // plan.md §42 — number of things needing the admin's attention, shown on the Dashboard tab
+  // so it is visible from every tab.
+  const alertCount = countAdminAlerts({ employees: admin.employees, leaves: admin.leaves, regs: admin.adminRegs, birthdays: admin.todaysBirthdays, today: todayIST() })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950">
@@ -46,6 +50,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-all ${tab === t.id ? 'border-indigo-400 text-white' : 'border-transparent text-white/40 hover:text-white/70'}`}>
               {t.label}
+              {t.id === 'dashboard' && alertCount > 0 && <span className="ml-1.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">{alertCount}</span>}
             </button>
           ))}
         </div>
@@ -56,7 +61,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
             indication anything went wrong. One banner here covers all three screens
             that share this hook (Dashboard, Attendance grid, Database). */}
         {attendanceHook.error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{attendanceHook.error}</p>}
-        {tab === 'dashboard' && <Dashboard token={token} employees={admin.employees} leaves={admin.leaves} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} />}
+        {tab === 'dashboard' && <Dashboard token={token} employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} attendanceHook={attendanceHook} stdHours={admin.stdHours} todaysBirthdays={admin.todaysBirthdays} markBirthdayWished={admin.markBirthdayWished} onNavigate={setTab} />}
         {tab === 'attendance' && (
           <>
             <Imports leaveBalanceImport={imports.leaveBalance} />

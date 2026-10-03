@@ -3252,6 +3252,50 @@ floor centre to be right; re-check with fresh punches after a few days.
 `scripts/migrations/apply-0060-punch-gps-accuracy-allowance.mjs`,
 `scripts/diagnostics/gps-geofence-review.mjs`.
 
+## 42. Admin "Needs your attention" panel — probation, birthdays, anniversaries, approvals (2026-10-03)
+
+**Asked by:** HR — a notification in the admin panel when someone completes probation, and when it is
+someone's birthday today, with a direct button to send a proper official WhatsApp wish with their
+name; plus "any other that you suggest that is important".
+
+**What already existed:** a probation banner, but only inside the Employees tab (so the admin saw it
+only if they opened that tab), and a birthday list on the Dashboard with just "Mark as done" (a
+reminder to post in the WhatsApp group, VA-6). No WhatsApp button, no badge, nothing visible from
+other tabs.
+
+**Built (front-end only, no migration — every field was already on the admin's screen):**
+- `AdminAlerts.jsx` at the top of the Dashboard (replaces the old birthday-only card; renders
+  nothing when there is nothing): (1) requests waiting for the ADMIN's approval (leaves
+  Pending/Manager Approved + correction requests Pending) -> Review; (2) probation completed ->
+  "Review & confirm" jumps to Employees where the existing Fixed + Gmail flow (§25) lives;
+  (3) birthdays today -> **Send WhatsApp wish** + Mark as done (existing ack); (4) **work
+  anniversaries** today (>=1 full year) -> Send WhatsApp wish.
+- Red count badge on the **Dashboard tab** (visible from every tab) = probation + anniversaries +
+  un-wished birthdays + waiting approvals.
+- The Employees-tab probation banner now uses the same function (`probationCompleted`), so the two
+  can't disagree; it now also skips inactive people (someone who left during probation no longer
+  nags HR forever).
+- WhatsApp button = WhatsApp's click-to-chat link `https://wa.me/<number>?text=<message>`: opens a
+  chat with the person and the official wish already typed. **It does not send** — the admin presses
+  Send (true auto-send would need the WhatsApp Business API: Meta approval, a business number, cost).
+  Phone numbers are tidied (spaces/+/0 prefix, 10 digits -> 91 added); a missing/invalid number
+  shows "No valid phone on file" instead of a broken link.
+- Wish wording is fixed in `lib/adminAlerts.js` (`birthdayWishText`, `anniversaryWishText`): "Dear
+  <full name>, Wishing you a very Happy Birthday! ... On behalf of everyone at <company> ... Warm
+  regards, HR Team <company>". Editable later (could move into Settings like the in-app birthday
+  message) if HR wants different wording.
+
+**Noted, not changed:** `admin_get_todays_birthdays` uses the database's `current_date` (UTC), so
+between midnight and 05:30 IST it would still show yesterday's birthdays — irrelevant in office hours.
+
+**Suggested next alerts (not built, awaiting HR's pick):** forgot-to-punch-out yesterday; security
+alerts (admin-login lock events §37, device-blocked logins §38, GPS-allowance punches §41);
+correction/leave requests pending for more than N days; employees with no phone/DOB/email on file;
+long-absent staff.
+
+**Files:** `src/lib/adminAlerts.js(+test)`, `src/features/admin/AdminAlerts.jsx`,
+`src/features/admin/Dashboard.jsx`, `AdminPanel.jsx`, `Employees.jsx`.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

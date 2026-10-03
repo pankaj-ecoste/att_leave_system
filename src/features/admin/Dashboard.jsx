@@ -8,6 +8,7 @@ import { getShiftInfo, requiresFieldNote } from '../../lib/constants'
 import { calcRawHrs, calcOvertimeHours, calcStatus, todayIST, effectiveStdHours } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { adminGetAllLocationLogs } from '../../api/location'
+import { AdminAlerts } from './AdminAlerts'
 
 // Predicate per attendance-based tile — 'pending' is handled separately below since it
 // comes from leave requests, not today's attendance records.
@@ -40,7 +41,7 @@ const TILE_FILTERS = {
 
 const TILE_LABELS = { present: 'Present', absent: 'Absent', leave: 'On Leave', halfDay: 'Half Day', wfh: 'WFH', onDuty: 'On Duty', fieldStaff: 'Field Staff', pending: 'Pending Leave Requests' }
 
-export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, todaysBirthdays = [], markBirthdayWished }) {
+export function Dashboard({ token, employees, leaves, adminRegs = [], attendanceHook, stdHours, todaysBirthdays = [], markBirthdayWished, onNavigate }) {
   const today = todayIST()
   const { attendance, fetchRange } = attendanceHook
   const [filter, setFilter] = useState(null) // null | one of TILE_FILTERS' keys | 'pending'
@@ -109,25 +110,13 @@ export function Dashboard({ token, employees, leaves, attendanceHook, stdHours, 
     <>
       <h2 className="text-white font-bold text-lg">Today's Summary — {today}</h2>
 
-      {todaysBirthdays.length > 0 && (
-        // VA-6 (plan.md §11) — a reminder to post in the WhatsApp group, not an
-        // approval queue, so "mark as done" is a plain acknowledgement, not a decision.
-        <Card>
-          <p className="text-amber-300 text-xs font-semibold mb-2">🎂 {todaysBirthdays.length} birthday{todaysBirthdays.length !== 1 ? 's' : ''} today</p>
-          <div className="space-y-1">
-            {todaysBirthdays.map(b => (
-              <div key={b.empId} className="flex items-center justify-between text-xs">
-                <span className="text-white/70">{b.name} — {b.company?.split(' ')[0]}</span>
-                {b.acked ? (
-                  <span className="text-emerald-400">Wished ✓</span>
-                ) : (
-                  <Button variant="secondary" className="text-xs py-0.5 px-2" onClick={() => markBirthdayWished(b.empId)}>Mark as done</Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* plan.md §42 — replaces the old birthday-only card (VA-6): probation completions, birthdays
+          and anniversaries with WhatsApp wishes, and what is waiting for the admin. */}
+      <AdminAlerts
+        employees={employees} leaves={leaves} adminRegs={adminRegs}
+        todaysBirthdays={todaysBirthdays} markBirthdayWished={markBirthdayWished}
+        onNavigate={onNavigate} today={today}
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Active" value={stats.active} color="indigo" sub="Registered employees" onClick={() => setFilter(null)} active={!filter} />
