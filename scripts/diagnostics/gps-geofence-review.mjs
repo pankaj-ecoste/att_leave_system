@@ -53,6 +53,23 @@ async function main() {
     console.log(`\n== Accepted punch-ins per office, last ${DAYS} days: how far from the office point, and how good the GPS was ==`)
     console.table(bySite)
 
+    // Re-measured against each office's CURRENT saved point (stored distances were measured
+    // against whatever point was saved at the time). The centre of where people really punched
+    // should sit on the saved point; a steady offset means the point is off-centre or the
+    // building's GPS is skewed.
+    const { rows: fresh } = await client.query(`
+      select s.name,
+             count(*)::int as punches,
+             round(percentile_cont(0.5) within group (order by haversine_m(a.in_lat, a.in_lon, s.latitude, s.longitude))::numeric) as median_dist_to_saved_point_m,
+             round(percentile_cont(0.9) within group (order by haversine_m(a.in_lat, a.in_lon, s.latitude, s.longitude))::numeric) as p90_dist_to_saved_point_m,
+             round(haversine_m(percentile_cont(0.5) within group (order by a.in_lat)::numeric,
+                               percentile_cont(0.5) within group (order by a.in_lon)::numeric, s.latitude, s.longitude)) as centre_of_punches_vs_saved_point_m
+        from attendance a join sites s on s.id = a.in_matched_site_id
+       where a.date > current_date - $1::int and a.in_lat is not null
+       group by s.name, s.latitude, s.longitude order by punches desc`, [DAYS])
+    console.log(`\n== Where staff really punched (last ${DAYS} days) measured against each office's CURRENT saved point ==`)
+    console.table(fresh)
+
     const { rows: buckets } = await client.query(`
       select case when in_accuracy_m <= 20 then '1. <=20m (excellent)'
                   when in_accuracy_m <= 50 then '2. 21-50m'

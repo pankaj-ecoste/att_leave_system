@@ -3203,6 +3203,26 @@ or where its office point was saved than the radius number itself (see open item
 version of the rejection message printed a stray "s" ("…50ms.") — fixed the same day
 (`apply-0060-message-wording-fix.mjs`).
 
+**Diagnostic run on live data 2026-10-03 (read-only; `gps-geofence-review.mjs` + an unbiased ping check):**
+- *Beware survivorship bias:* stored punch distances only include ACCEPTED punches, i.e. ones already
+  within the radius (max distance = exactly 50 m at both offices) — they can't judge whether a saved
+  point is well placed. The unbiased test uses the 2-hourly auto location pings (never filtered by the
+  geofence), good accuracy (<=30 m), within 200 m of the point, from staff who punched in there.
+- ECOSTE (control): centre of activity is **11 m** from its saved point — well placed.
+- MetaMask: the point re-entered by HR at 12:47 IST on 2026-10-03 (28.491452, 77.146133) is **27 m
+  from the real centre of activity** (~26 m east, 9 m south). Centre of 682 pings = **28.491369,
+  77.146394**. From that centre: median 11 m, 80% within 30 m, 90% within 54 m, 95% within 59 m.
+  So even a perfect point + 50 m radius leaves ~10% of good-GPS pings outside; a 60 m radius covers
+  ~95%. Recommendation given: move the point to the centre and set radius 60 (HR's call; done in
+  Admin -> Sites).
+- GPS quality of ALL 2,086 punch-ins: 86% within 50 m; 15% worse than 50 m; 75 punches (3.6%) had
+  accuracy >500 m (cell/Wi-Fi guess, mostly exactly 2000 m or ~4120 m) from 4 people repeatedly
+  (likely PCs/laptops or approximate-location phones) — those "inside" results carry no real
+  location proof. 3 people have consistently weak phone GPS (avg 104-181 m) — the 60 m cap may not
+  fully cover them.
+- Address text at MetaMask is one generic label ("South, Delhi, South Delhi, Delhi, 110047") for 468
+  of 471 punches — OSM has no finer name there; display only.
+
 **Still open (offered, not built):**
 1. **Punch screen shows a stale, accuracy-less distance** ("184m away · 50m radius" from ONE
    reading taken when the screen opened, never refreshed). Should keep updating and show GPS
