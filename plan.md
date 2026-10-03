@@ -3172,6 +3172,46 @@ Also not done: the same banner for the Admin panel's "Manager Approved" queue.
 **Files:** `src/lib/pendingApprovals.js(+test)`, `src/features/manager/PendingApprovalsBanner.jsx`,
 `src/hooks/useTeam.js`, `src/features/employee/EmployeeDashboard.jsx`.
 
+## 41. Geofence — staff standing at the office rejected as "outside" (2026-10-03)
+
+**Reported by the team:** staff exactly at the office are told they are outside. HR has had
+15-20 such reports (the admin has hit it once in 45 days). Most come from the **Metamask
+office, whose radius is 50 m**; the ecoste office and the plant "work very good".
+
+**Root cause (from the code; not yet confirmed per-complaint — see "still open"):** the
+phone's GPS reading is an ESTIMATE that comes with its own error figure (`accuracy`, metres),
+but the server's geofence (`employee_punch`, 0038) compared the one reported point with the
+radius and ignored that figure. Indoors / between buildings phones are routinely 50-200 m off,
+so on a tight radius (Metamask: 50 m) an honest person gets "Outside … radius". Why only some
+staff: phone quality and the exact spot decide GPS quality.
+
+**Fixed now (migration 0060, server-side):** accept if `distance <= radius + min(GPS accuracy, 60 m)`.
+- **60 m cap = the user's call** (I had proposed 100 m). The cap is what stops a very poor
+  reading (e.g. ±2 km cell-tower guess) being used to punch from far away. No accuracy sent =
+  no allowance. Metamask therefore accepts up to 110 m only for very weak readings; a sharp
+  fix (±5 m) still needs to be within ~55 m.
+- Anything accepted ONLY because of the allowance writes an audit row `PUNCH_GPS_ALLOWANCE`
+  ("accepted on GPS allowance: 56m from <office> (radius 50m, GPS accuracy ±20m)").
+- The rejection message now says how much allowance was applied.
+- Only the radius check changed (the apply script proves live == 0038 before, and live == the
+  0060 file after). Field/WFH punches (no office tile) were never rejected and are untouched.
+
+**Still open (offered, not built):**
+1. **Punch screen shows a stale, accuracy-less distance** ("184m away · 50m radius" from ONE
+   reading taken when the screen opened, never refreshed). Should keep updating and show GPS
+   strength ("weak — step near a window").
+2. **Rejections leave no record** (a rejected punch is rolled back; nothing stores it). Plan: the
+   phone reports the rejection via a new RPC authenticated by the employee's own token.
+3. **Check each office's saved point/radius** (`scripts/diagnostics/gps-geofence-review.mjs`,
+   read-only) — a point at the centre of a big building or a 50 m radius is a config problem no
+   GPS fix can solve. HR can also simply raise Metamask's radius in Admin → Sites.
+4. The address text on a punch is an OpenStreetMap label (zoom 16, cached per ~11 m cell, never
+   expires) — it can name a neighbouring locality; display only, never decides acceptance.
+
+**Files:** `supabase/migrations/0060_punch_gps_accuracy_allowance.sql`,
+`scripts/migrations/apply-0060-punch-gps-accuracy-allowance.mjs`,
+`scripts/diagnostics/gps-geofence-review.mjs`.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
