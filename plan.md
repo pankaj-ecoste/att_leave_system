@@ -3223,7 +3223,20 @@ version of the rejection message printed a stray "s" ("…50ms.") — fixed the 
 - Address text at MetaMask is one generic label ("South, Delhi, South Delhi, Delhi, 110047") for 468
   of 471 punches — OSM has no finer name there; display only.
 
+**Decision (user, 2026-10-03): keep the NEW MetaMask point (28.491452, 77.146133), radius 50 m.** It was
+read by phone from the centre of the MetaMask floor at 12:47 IST. For the record, in case it needs to be
+reverted: the OLD point was **28.491252, 77.146393** (reconstructed from 480 earlier punches, ~1 m error;
+it was never stored — the SITE_UPDATE audit entry only says "MetaMask"). The edit moved the point ~34 m.
+Evidence at decision time: all 12 MetaMask punches accepted today (09:00-10:47) were measured against the
+old point; Harsh Sharma (MetaMask, office) had no punch today and reported being rejected as outside (time
+of his attempt vs the 12:47 edit not known). On 862 real staff GPS readings the new point + 50 m +
+allowance counts ~90.6% as inside vs ~99% for the old point / measured centre (biased toward the old
+point, since only staff accepted there are in the data). The user judged a point read from the real
+floor centre to be right; re-check with fresh punches after a few days.
+
 **Still open (offered, not built):**
+0. **Sites edit should record old -> new coordinates and warn on a big move** (the audit entry today is
+   just the office name, so a past point can't be recovered without reconstructing it).
 1. **Punch screen shows a stale, accuracy-less distance** ("184m away · 50m radius" from ONE
    reading taken when the screen opened, never refreshed). Should keep updating and show GPS
    strength ("weak — step near a window").
