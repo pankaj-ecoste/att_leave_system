@@ -44,11 +44,14 @@ export async function fetchEffectiveStdHours(empId, fallback = 9) {
 // Employee login/session
 // ---------------------------------------------------------------------------
 
-export async function employeeLogin(employeeId, pin, deviceId) {
+// deviceNote (plan.md §38) is a short "how was the app opened / was the id new" string the
+// server adds to the audit log when a device is registered, restored or blocked.
+export async function employeeLogin(employeeId, pin, deviceId, deviceNote) {
   const { data, error } = await supabase.rpc('employee_login', {
     p_employee_id: employeeId,
     p_pin: pin,
     p_device_id: deviceId,
+    p_device_note: deviceNote,
   })
   if (error) {
     console.error(error)

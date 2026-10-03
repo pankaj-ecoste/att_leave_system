@@ -3061,6 +3061,52 @@ until it auto-refreshes (§20). Recovery if the company-wide cap ever trips for 
 employee from the public directory and types 3 wrong PINs (per-employee lock) — same
 class of issue, much lower impact (only that one person, no admin access).
 
+## 38. Device binding — "not your registered device" on the same phone (2026-10-03)
+
+**Reported by the team:** 3-4 of ~60 staff regularly hit "Access Denied — this is not your
+registered device" and ask HR for a reset, insisting it is the same phone and browser.
+Most staff (and the admin) never see it.
+
+**Root cause (design):** the "device" is not the phone — it is a random id the browser keeps
+in `localStorage` (§18/§19). The server cannot see the phone, so "same phone, id lost" and
+"someone else's phone" look identical. A phone can lose that id silently: cleaner apps /
+"clear data", private tabs, Safari's ~7-day cleanup, low-storage eviction, or the link
+opening inside WhatsApp's/Gmail's own in-app browser (separate storage from Chrome), or the
+home-screen icon vs Safari on iPhone. Which of these hits the 3-4 people is NOT yet
+confirmed — `scripts/diagnostics/device-binding-denials.mjs` (read-only) reads the audit log
+for the RESET -> BOUND -> BLOCKED cycle; the new notes below will answer it going forward.
+No browser-side scheme can be 100% permanent (a browser may always forget), so the fix is
+"lose it far less often, and always know why" — not "never lose it".
+
+**Decisions (user):**
+1. Keep the id in THREE places — localStorage, IndexedDB, a 400-day cookie — and ask the
+   browser for persistent storage (`navigator.storage.persist()`). If one is wiped the others
+   put it back (`initDeviceId()` at app start, before login). Existing ids get copied into the
+   backups the next time an already-registered phone opens the app.
+2. NO "request a reset" button (user: when a reset is truly needed they contact HR and use
+   the existing admin-panel Reset Device). Anti-sharing intent unchanged: a friend's phone
+   has no copy of the id in any store, and nothing here lets anyone self-register.
+3. Record WHY: login sends a short note (`id:new|restored-from-X|known; persist:yes/no;
+   <OS> <browser> <tab|home-screen-app>`, in-app browsers flagged); migration 0058 puts it
+   in the LOGIN_DEVICE_BOUND / LOGIN_DEVICE_BLOCKED audit rows and adds LOGIN_DEVICE_RESTORED
+   (counts the people the backups saved). Note text is stripped to plain characters, 120 max.
+4. Server-set cookie (Vercel function, immune to Safari's 7-day cap) and passkeys deliberately
+   NOT built — revisit only if the notes show iPhone/Safari wipes are the main cause.
+
+**Safety:** the bind/deny decision in `employee_login` is byte-for-byte 0039's. New param
+`p_device_note` has a DEFAULT and the 3-arg version is dropped in the same migration, so a
+phone running the pre-deploy app (3 named args) keeps logging in (§19 stale-client lesson).
+If NOTHING can store an id, `getDeviceId()` returns null as before (no binding to a
+throwaway value). IndexedDB is wrapped in a 1.5 s guard so it can never block login.
+
+**Files:** `src/lib/deviceIdentity.js` (pure, unit-tested), `src/lib/deviceId.js` (storage),
+`src/hooks/useAuth.js`, `src/api/auth.js`, migration `0058_login_device_note.sql`,
+`scripts/migrations/apply-0058-login-device-note.mjs` (rolled-back behaviour test).
+
+**Rollout:** apply migration first, then push the front-end. Watch the audit log for a week:
+BLOCKED rows with `id:new` = storage wiped / truly different phone; `InAppBrowser(...)` in the
+note = the WhatsApp-link problem (tell staff to open from Chrome / the home-screen icon).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

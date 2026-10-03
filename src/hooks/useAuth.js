@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { fetchDirectory, fetchAppSettings, employeeLogin as apiEmployeeLogin, employeeLogout as apiEmployeeLogout, adminLogin as apiAdminLogin, adminLogout as apiAdminLogout } from '../api/auth'
 import { fetchHolidays } from '../api/admin'
 import { fetchSites } from '../api/sites'
-import { getDeviceId } from '../lib/deviceId'
+import { getDeviceId, getDeviceNote, initDeviceId } from '../lib/deviceId'
 
 const SESSION_KEY = 'hrms_session'
 
@@ -30,7 +30,9 @@ export function useAuth() {
   useEffect(() => {
     ;(async () => {
       try {
-        const [dir, settings, hols, sts] = await Promise.all([fetchDirectory(), fetchAppSettings(), fetchHolidays(), fetchSites()])
+        // initDeviceId (plan.md §38) restores the device id from its backup copies if the main one
+        // was wiped; it never throws, and finishes before the login screen can be used.
+        const [dir, settings, hols, sts] = await Promise.all([fetchDirectory(), fetchAppSettings(), fetchHolidays(), fetchSites(), initDeviceId()])
         setDirectory(dir)
         setStdHours(settings.stdHours)
         setAdminEmail(settings.adminEmail)
@@ -89,7 +91,7 @@ export function useAuth() {
   }, [])
 
   async function employeeLogin(empId, pin) {
-    const result = await apiEmployeeLogin(empId, pin, getDeviceId())
+    const result = await apiEmployeeLogin(empId, pin, getDeviceId(), getDeviceNote())
     return result // { token, error, lockedUntil }
   }
 
