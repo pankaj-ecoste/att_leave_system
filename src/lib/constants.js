@@ -149,6 +149,11 @@ export const MIN_PUNCH_GAP_MIN = 5
 // the day falls through to Half Day/Absent as before. Client-side only, used by
 // calcStatus (lib/datetime.js) — no server mirror, this status is never stored
 // precomputed.
+// Attendance-correction (regularization) requests an employee may file per calendar month
+// (plan.md §39). The database enforces this in employee_submit_regularization — keep the
+// two numbers equal; this one only drives the on-screen counter.
+export const REGULARIZATION_MONTHLY_LIMIT = 5
+
 export const GRACE_PERIOD_MIN = 15
 
 // Leave policy quotas (plan.md §6A) — CL 12 / EL 6 / SL 4 per year, credited in full on

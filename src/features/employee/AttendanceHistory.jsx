@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { calcRawHrs, calcStatus, todayIST, explainShortfall } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
+import { regularizationQuota } from '../../lib/regularizationQuota'
 
 export function AttendanceHistory({ currentUser, attendance, stdHours, holidays, regularizations, submitRegularization }) {
   const [tab, setTab] = useState('attendance')
@@ -14,6 +15,9 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
   const [errs, setErrs] = useState({})
 
   const empId = currentUser.id
+  // plan.md §39 — at most 5 correction requests per calendar month. The database enforces
+  // it; this counter just tells staff where they stand before they tap.
+  const quota = regularizationQuota(regularizations, todayIST())
   // Current month only, day 1 through today — resets automatically once a new month
   // starts. Sunday/Holiday rows are synthesized when there's no punch record so the
   // day still shows up (an ordinary absent working day with no record stays hidden,
@@ -112,9 +116,14 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
 
       {tab === 'regularization' && (
         <>
-          <Button className="text-xs mb-4 w-full" onClick={() => { setShowRegModal(true); setForm({ date: '', inTime: '', outTime: '', reason: '' }); setErrs({}) }}>
+          <Button className="text-xs mb-2 w-full" disabled={quota.reached} onClick={() => { setShowRegModal(true); setForm({ date: '', inTime: '', outTime: '', reason: '' }); setErrs({}) }}>
             + Request Attendance Correction
           </Button>
+          <p className={`text-xs mb-4 text-center ${quota.reached ? 'text-red-300' : 'text-white/40'}`}>
+            {quota.reached
+              ? `You have used all ${quota.limit} correction requests for this month. The limit resets on the 1st — contact HR if you need more.`
+              : `${quota.used} of ${quota.limit} correction requests used this month (${quota.left} left)`}
+          </p>
           {regularizations.length === 0 ? (
             <p className="text-white/30 text-sm text-center py-6">No regularization requests yet</p>
           ) : (

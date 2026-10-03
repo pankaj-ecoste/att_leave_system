@@ -3107,6 +3107,38 @@ throwaway value). IndexedDB is wrapped in a 1.5 s guard so it can never block lo
 BLOCKED rows with `id:new` = storage wiped / truly different phone; `InAppBrowser(...)` in the
 note = the WhatsApp-link problem (tell staff to open from Chrome / the home-screen icon).
 
+## 39. Regularization — limited to 5 requests per employee per month (2026-10-03)
+
+**Asked by:** HR — "the number of regularization requests staff can file must be fixed, only 5."
+Before this there was no limit anywhere: `employee_submit_regularization` just inserted, and
+the screen had no counter.
+
+**Decided with the user:**
+| # | Decision |
+|---|---|
+| 1 | **5 per calendar month**, resetting on the 1st (IST) — not per financial year, not lifetime |
+| 2 | **Every request counts when filed**, rejected ones included — can't be dodged by getting requests rejected, and is the simplest rule to explain |
+| 3 | Counted by the month the request was **filed** (`created_at`, IST), not the date being corrected — fixing a day from last month still uses this month's allowance |
+
+**How:** migration `0059` — `employee_submit_regularization` (same signature) counts the
+employee's requests filed this IST month and raises a plain-language exception at 5 (hard
+block, like the PIN/device rules). A per-employee advisory lock stops two simultaneous taps
+both slipping under. Requests are never deleted (no soft-delete on this table), so the count
+can't be gamed. The screen (`AttendanceHistory.jsx`) shows "N of 5 correction requests used
+this month", and disables the button with an explanation at 5; the server error message is
+shown if a stale tab gets past it. `src/lib/regularizationQuota.js` (pure, unit-tested incl.
+the IST month boundary) drives the counter; `REGULARIZATION_MONTHLY_LIMIT = 5` in
+`constants.js` must equal the `5` in the SQL — the database is the authority.
+
+**Rollout notes:** staff who have ALREADY filed 5+ this month are blocked from filing more
+until the 1st (the apply script prints who, before applying). Manager/admin approval of
+requests is untouched. HR can raise the limit by changing the number in both places.
+
+**Files:** migration `0059_regularization_monthly_limit.sql`,
+`scripts/migrations/apply-0059-regularization-monthly-limit.mjs` (rolled-back test),
+`src/lib/regularizationQuota.js(+test)`, `src/lib/constants.js`,
+`src/features/employee/AttendanceHistory.jsx`.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
