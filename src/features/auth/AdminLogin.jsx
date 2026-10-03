@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
+import { adminLoginMessage } from './adminLoginMessage'
 
 export function AdminLogin({ adminLogin, onBack }) {
   const [pin, setPin] = useState('')
@@ -11,10 +12,10 @@ export function AdminLogin({ adminLogin, onBack }) {
   async function doLogin() {
     if (busy) return
     setBusy(true)
-    const token = await adminLogin(pin)
+    const result = await adminLogin(pin)
     setBusy(false)
-    if (!token) {
-      setError('Incorrect PIN, or too many attempts — please wait a few minutes and try again.')
+    if (!result.token) {
+      setError(adminLoginMessage(result))
       return
     }
     setPin('')

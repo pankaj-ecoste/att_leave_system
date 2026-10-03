@@ -67,13 +67,20 @@ export async function employeeLogout(token) {
 // Admin login/session
 // ---------------------------------------------------------------------------
 
-export async function adminLogin(pin) {
-  const { data, error } = await supabase.rpc('admin_login', { p_pin: pin })
+// plan.md §37 — the lock is per device (plus a company-wide safety cap), so the device id
+// goes along, and the answer says why a login failed instead of just "no token".
+export async function adminLogin(pin, deviceId) {
+  const { data, error } = await supabase.rpc('admin_login', { p_pin: pin, p_device_id: deviceId })
   if (error) {
     console.error(error)
-    return null
+    return { token: null, error: 'network' }
   }
-  return data || null // a uuid token, or null if the PIN was wrong / locked out
+  return {
+    token: data?.token || null,
+    error: data?.error || null,
+    lockedUntil: data?.locked_until || null,
+    triesLeft: data?.tries_left ?? null,
+  }
 }
 
 export async function adminLogout(token) {

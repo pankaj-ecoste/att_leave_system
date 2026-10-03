@@ -106,12 +106,12 @@ export function useAuth() {
   }
 
   async function adminLogin(pin) {
-    const token = await apiAdminLogin(pin)
-    if (token) {
-      setAdminToken(token)
+    const result = await apiAdminLogin(pin, getDeviceId())
+    if (result.token) {
+      setAdminToken(result.token)
       setView('admin')
     }
-    return token
+    return result // { token, error, lockedUntil, triesLeft }
   }
 
   async function adminLogout() {

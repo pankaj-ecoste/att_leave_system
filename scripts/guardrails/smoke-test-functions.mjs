@@ -59,7 +59,7 @@ const CALLS = [
   ['manager_decide_leave', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_leave_id: FAKE_UUID, p_status: 'Approved' }],
   ['manager_get_team_regularizations', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID }],
   ['manager_decide_regularization', { p_token: FAKE_UUID, p_manager_id: FAKE_UUID, p_reg_id: FAKE_UUID, p_status: 'Approved' }],
-  ['admin_login', { p_pin: '0000' }],
+  ['admin_login', { p_pin: '0000', p_device_id: 'smoke-test' }],
   ['admin_logout', { p_token: FAKE_UUID }],
   ['admin_update_settings', { p_token: FAKE_UUID, p_std_hours: 9 }],
   ['admin_get_audit_logs', { p_token: FAKE_UUID, p_limit: 10 }],

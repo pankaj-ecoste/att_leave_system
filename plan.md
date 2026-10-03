@@ -3019,6 +3019,48 @@ directions link in a new tab. Coordinates, never address labels, so a cross-chec
 measures the same thing the app did. Build + 94 tests pass; not click-tested in a
 browser this session (no login credentials held) — worth one click on the next review.
 
+## 37. Admin login — one shared lock let any staff member lock out the admin (2026-10-03)
+
+**Reported by the team:** a staff member opened "Admin Panel Login" by mistake, typed
+3 wrong PINs, and the real admin then got "please wait a few minutes" for 20 minutes.
+
+**Root cause (design, not a one-off bug):** the admin lockout was one global counter in
+`app_settings` (id = 1: `admin_failed_attempts` / `admin_locked_until`). The admin link
+is on the public staff screen, so anyone's wrong PINs locked everyone — and anyone could
+do it on purpose. The message was also identical for "typo" and "locked", with no time.
+
+**Decided with the user ("go ahead, build the 3 layers"):**
+1. **Per-device lock** — 3 wrong PINs lock only that device for 20 minutes
+   (device id = the same `getDeviceId()` used for punch/login binding, §18/§19).
+2. **Company-wide safety cap** — 30 wrong PINs from ALL devices in 20 minutes locks the
+   admin login for everyone (a device id is clearable, so layer 1 alone can be dodged).
+   Far above any accidental-staff-mistake volume. Hard block, per
+   [[hrms-security-hard-block-preference]]: right PIN is rejected while locked.
+3. **Clear messages** — wrong PIN says tries left; locked says until when and that other
+   devices are unaffected (`features/auth/adminLoginMessage.js`, unit-tested).
+Not done (offered, user kept link visible): hiding the "Admin Panel Login" link.
+
+**How (migration 0057):** table `admin_login_failures(device_id, failed_at)`, one row per
+wrong guess; "locked" is DERIVED from rows in the last 20 min (`_admin_login_unlock_at`),
+so there is no counter to forget to reset. Attempts made while locked are NOT recorded
+(a lock can't extend itself). `pg_advisory_xact_lock` serialises calls so parallel guesses
+can't all pass the check before being counted. Correct PIN clears that device's rows.
+Both locks write audit rows (`ADMIN_LOGIN_LOCKED`, `ADMIN_LOGIN_GLOBAL_LOCK`).
+`admin_login(p_pin, p_device_id)` now returns jsonb `{token, error, locked_until,
+tries_left}` (same shape as employee_login); the old 1-arg version is DROPPED. The legacy
+`app_settings.admin_*` lock columns are cleared and now unused (left in place).
+
+**Rollout order matters:** apply the migration FIRST
+(`scripts/migrations/apply-0057-admin-login-per-device-lockout.mjs` — it also runs a
+rolled-back behaviour test with a throwaway PIN), THEN push the front-end. A tab opened
+before the push calls the dropped 1-arg function and shows "could not reach the server"
+until it auto-refreshes (§20). Recovery if the company-wide cap ever trips for real:
+`scripts/setup/clear-admin-login-lock.mjs`.
+
+**Noted, not changed:** employee logins are still lockable by anyone who picks that
+employee from the public directory and types 3 wrong PINs (per-employee lock) — same
+class of issue, much lower impact (only that one person, no admin access).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
