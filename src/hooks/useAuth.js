@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchDirectory, fetchAppSettings, employeeLogin as apiEmployeeLogin, employeeLogout as apiEmployeeLogout, adminLogin as apiAdminLogin, adminLogout as apiAdminLogout } from '../api/auth'
+import { fetchDirectory, fetchFullDirectory, fetchAppSettings, fetchEmployeeAdminEmail, fetchAdminAdminEmail, employeeLogin as apiEmployeeLogin, employeeLogout as apiEmployeeLogout, adminLogin as apiAdminLogin, adminLogout as apiAdminLogout } from '../api/auth'
 import { fetchHolidays } from '../api/admin'
 import { fetchSites } from '../api/sites'
 import { getDeviceId, getDeviceNote, initDeviceId } from '../lib/deviceId'
@@ -60,12 +60,18 @@ export function useAuth() {
   // plan.md §13 — fired by the supabase.rpc wrapper (lib/supabase.js) the moment any
   // employee API call reports a dead session. Drops straight back to the login screen
   // instead of leaving the dashboard stuck looking logged-in but non-functional.
+  // Back to the minimal public login list (the full record is only kept while signed in).
+  const reloadPublicDirectory = useCallback(() => {
+    fetchDirectory().then(setDirectory).catch(err => console.error(err))
+  }, [])
+
   useEffect(() => {
     function handleExpired() {
       setEmployeeToken(null)
       setCurrentUser(null)
       setView('login')
       setSessionExpiredMessage('Your session expired — please log in again.')
+      reloadPublicDirectory()
       try {
         localStorage.removeItem(SESSION_KEY)
       } catch {
@@ -74,18 +80,38 @@ export function useAuth() {
     }
     window.addEventListener('hrms:employee-session-expired', handleExpired)
     return () => window.removeEventListener('hrms:employee-session-expired', handleExpired)
-  }, [])
+  }, [reloadPublicDirectory])
 
-  const loginAsEmployee = useCallback((token, emp, remember) => {
-    setEmployeeToken(token)
-    setCurrentUser(emp)
-    setView('employee')
-    setSessionExpiredMessage(null)
-    if (remember) {
+  // Loads the full directory and the admin email for this session first, so the
+  // dashboard never renders with only the minimal login-list fields.
+  const loginAsEmployee = useCallback(async (token, emp, remember) => {
+    try {
+      const [full, adminMail] = await Promise.all([
+        fetchFullDirectory(token, emp.id),
+        fetchEmployeeAdminEmail(token, emp.id),
+      ])
+      const me = full.find(e => e.id === emp.id)
+      if (!me) throw new Error('Employee record not found or inactive')
+      setDirectory(full)
+      setAdminEmail(adminMail)
+      setEmployeeToken(token)
+      setCurrentUser(me)
+      setView('employee')
+      setSessionExpiredMessage(null)
+      if (remember) {
+        try {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({ token, empId: emp.id }))
+        } catch {
+          // localStorage may be unavailable (private browsing) — remember-me just won't persist
+        }
+      }
+    } catch (err) {
+      console.error(err)
+      setSessionExpiredMessage('Could not load your details — please log in again.')
       try {
-        localStorage.setItem(SESSION_KEY, JSON.stringify({ token, empId: emp.id }))
+        localStorage.removeItem(SESSION_KEY)
       } catch {
-        // localStorage may be unavailable (private browsing) — remember-me just won't persist
+        /* ignore */
       }
     }
   }, [])
@@ -99,7 +125,9 @@ export function useAuth() {
     if (employeeToken) await apiEmployeeLogout(employeeToken)
     setEmployeeToken(null)
     setCurrentUser(null)
+    setAdminEmail(null)
     setView('login')
+    reloadPublicDirectory()
     try {
       localStorage.removeItem(SESSION_KEY)
     } catch {
@@ -112,6 +140,7 @@ export function useAuth() {
     if (result.token) {
       setAdminToken(result.token)
       setView('admin')
+      fetchAdminAdminEmail(result.token).then(setAdminEmail).catch(err => console.error(err))
     }
     return result // { token, error, lockedUntil, triesLeft }
   }
@@ -119,6 +148,7 @@ export function useAuth() {
   async function adminLogout() {
     if (adminToken) await apiAdminLogout(adminToken)
     setAdminToken(null)
+    setAdminEmail(null)
     setView('login')
   }
 

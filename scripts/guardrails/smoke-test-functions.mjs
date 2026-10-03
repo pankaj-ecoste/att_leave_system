@@ -40,10 +40,10 @@ const TODAY = new Date().toISOString().slice(0, 10)
 // callable", not "the fake call succeeds". A clean 401-style rejection is a pass.
 const CALLS = [
   ['fetch_directory', {}],
-  ['employee_login', { p_employee_id: FAKE_UUID, p_pin: '0000' }],
+  ['employee_login', { p_employee_id: FAKE_UUID, p_pin: '0000', p_device_id: 'smoke-test', p_device_note: null }],
   ['employee_logout', { p_token: FAKE_UUID }],
   ['employee_get_attendance', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
-  ['employee_punch', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_data: { date: TODAY } }],
+  ['employee_punch', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_data: { date: TODAY }, p_device_id: 'smoke-test' }],
   ['employee_apply_leave', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID, p_data: { date: TODAY } }],
   ['employee_get_leaves', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
   ['employee_get_leave_balances', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],

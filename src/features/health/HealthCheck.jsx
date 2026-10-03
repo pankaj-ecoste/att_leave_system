@@ -21,7 +21,7 @@ export function HealthCheck() {
     })
 
     const fnStart = performance.now()
-    supabase.rpc('fetch_directory').then(({ data, error }) => {
+    supabase.rpc('fetch_login_directory').then(({ data, error }) => {
       const ms = Math.round(performance.now() - fnStart)
       if (error) setFnCheck({ status: 'fail', detail: error.message, ms })
       else setFnCheck({ status: 'ok', detail: `${data.length} active employees returned`, ms })
@@ -30,7 +30,7 @@ export function HealthCheck() {
 
   const items = [
     { label: 'Database reachable', check: dbCheck },
-    { label: 'Functions responding (fetch_directory)', check: fnCheck },
+    { label: 'Functions responding (fetch_login_directory)', check: fnCheck },
   ]
 
   return (

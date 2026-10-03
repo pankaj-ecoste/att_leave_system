@@ -3402,6 +3402,68 @@ pass. Not click-tested in a browser this session (no login held) — first real 
 
 **Not in this change:** the old admin_settle_travel_period function stays in the database (unused by the UI) — removal is a later clean-up.
 
+## 46. Security hardening — live review of 2026-10-03, fixed without changing any user flow
+
+**Trigger:** a read-only review of production (2026-10-03) found the public key could
+reach more than it should. Fixed in two phases so the live app is never broken.
+
+**Found (live, verified with read-only queries):**
+- `fetch_directory()` and the `employees_directory` view returned email, phone, joining
+  date and more for every active employee to anyone holding the public key.
+- `leave_balance_editor` exposed every employee's email and leave balances. The app never
+  reads it.
+- The old 3-argument `admin_update_settings` was still live and changed the admin PIN
+  without the old-PIN check (the Day 3 bug, back again).
+- Admin PIN: 4-character minimum and a 30-per-20-minute company-wide cap allowed a full
+  4-digit search in about 5 days via direct calls.
+- Trigger functions and helpers were public; the public key held TRUNCATE/REFERENCES/
+  TRIGGER on every table (row-level protection does not cover TRUNCATE).
+- `reverse_geocode` (browser-called, so it stays public) could grow its cache without limit.
+- `app_settings_public` exposed the admin email.
+
+**Phase 1 — migration `0063` (applied to production, commits only if all checks pass):**
+- New `fetch_login_directory()` returns only id, name, employee number, company, active.
+- New token-checked `employee_fetch_directory`, `employee_fetch_admin_email`,
+  `admin_fetch_admin_email`, used after sign-in.
+- Dropped the orphaned 3-argument `admin_update_settings`.
+- Admin PIN: new PINs must be 8+ characters (existing PINs still work). Added a
+  24-hour company-wide cap (120 wrong PINs locks everyone until the oldest of them is
+  24 hours old). Trade-off: a sustained attack can lock the admin out for up to a day.
+- `reverse_geocode`: cached answers unchanged; new lookups capped at 1000/hour.
+- Trigger functions and `leave_balance_editor` closed to the public key.
+- TRUNCATE, REFERENCES and TRIGGER removed from `PUBLIC`, `anon`, `authenticated` on
+  every table. Note: revoking from `anon` alone does not work, because the rights also
+  come through `PUBLIC` (learned on Day 3; the first attempt here failed for this reason).
+- Verified before commit: every function the app calls still reachable (smoke test,
+  90/90); the signed-in full directory works; both triggers still fire; wrong-PIN
+  handling unchanged; the 120-failure cap locks; a 7-character PIN is refused.
+
+**Client changes (same screens, same flow):**
+- Login list uses `fetch_login_directory`. After sign-in, `useAuth` loads the full
+  record and admin email before the dashboard renders. On sign-out or expiry, it goes
+  back to the minimal list. Restore-from-storage goes through the same path.
+- Settings screen: admin PIN minimum raised to 8 (matches the server).
+- Health check page uses `fetch_login_directory`.
+- Smoke test: two signatures updated to what the app already sends (they had been stale
+  since device binding, 2026-09-07).
+
+**Phase 2 — migration `0064` (committed, NOT applied yet):** removes `fetch_directory`
+from the public key, closes the `employees_directory` view, and drops `admin_email`
+from `app_settings_public`. Must be applied only after the new app is live, or old browser
+tabs would break. The apply script checks everything before committing.
+
+**Deliberately not done:**
+- Upload limits for anonymous file uploads. A real limit needs a server-issued upload
+  step, which adds a step to every upload. Left for a decision.
+- Individual admin accounts. That changes the admin login flow. Left for a decision.
+- Rotating the database password and the service-role key. These are operational and
+  have to be done in the Supabase dashboard by the owner. The password also still sits
+  in plain text in `.claude/settings.local.json` and in chat history.
+
+**Diagnostic kept for re-use:** `scripts/diagnostics/check-public-exposure.mjs` (read-only)
+lists anything the public key can reach beyond the approved list. Current expected
+output: exactly the two Phase 2 items above. Run it after every migration.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

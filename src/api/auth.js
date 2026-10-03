@@ -2,29 +2,45 @@ import { supabase } from '../lib/supabase'
 import { rowToEmployee } from './mappers'
 
 // ---------------------------------------------------------------------------
-// Public reads (no login required) — power the login screen. Only touch the
-// view/table anon is allowed to read directly, per the RLS policies in
-// 0002_hrms_schema.sql.
+// Public reads (no login required) — power the login screen. Only the minimum the
+// login list needs (name, employee number, company, active). Everything else about
+// an employee comes after sign-in, through login-checked calls below (migration 0063).
 // ---------------------------------------------------------------------------
 
 export async function fetchDirectory() {
-  const { data, error } = await supabase.rpc('fetch_directory')
-  if (error) {
-    // fallback to the view if the RPC fails for any reason
-    const { data: d2, error: e2 } = await supabase.from('employees_directory').select('*')
-    if (e2) throw e2
-    return (d2 || []).map(rowToEmployee)
-  }
+  const { data, error } = await supabase.rpc('fetch_login_directory')
+  if (error) throw error
   return (data || []).map(rowToEmployee)
 }
 
+// The full directory, for a signed-in employee only (phone, email, etc. for the
+// leave-request manager details). Requires their session token.
+export async function fetchFullDirectory(token, empId) {
+  const { data, error } = await supabase.rpc('employee_fetch_directory', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return (data || []).map(rowToEmployee)
+}
+
+// Admin contact address — shown only to signed-in staff and admins.
+export async function fetchEmployeeAdminEmail(token, empId) {
+  const { data, error } = await supabase.rpc('employee_fetch_admin_email', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return data || null
+}
+
+export async function fetchAdminAdminEmail(token) {
+  const { data, error } = await supabase.rpc('admin_fetch_admin_email', { p_token: token })
+  if (error) throw error
+  return data || null
+}
+
 export async function fetchAppSettings() {
-  const { data, error } = await supabase.from('app_settings_public').select('std_hours, admin_email, birthday_message').single()
+  const { data, error } = await supabase.from('app_settings_public').select('std_hours, birthday_message').single()
   if (error) {
     console.error(error)
     return { stdHours: 9, adminEmail: null, birthdayMessage: null }
   }
-  return { stdHours: Number(data.std_hours) || 9, adminEmail: data.admin_email || null, birthdayMessage: data.birthday_message || null }
+  return { stdHours: Number(data.std_hours) || 9, adminEmail: null, birthdayMessage: data.birthday_message || null }
 }
 
 // One employee's target hours, resolved fresh (their override if set, else the org

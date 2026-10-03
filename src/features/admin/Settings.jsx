@@ -27,7 +27,7 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
 
   async function changePin() {
     if (!oldPin) { setPinMsg('Enter your current PIN'); setTimeout(() => setPinMsg(''), 3000); return }
-    if (newPin.length < 4) { setPinMsg('New PIN must be at least 4 characters'); setTimeout(() => setPinMsg(''), 3000); return }
+    if (newPin.length < 8) { setPinMsg('New PIN must be at least 8 characters'); setTimeout(() => setPinMsg(''), 3000); return }
     if (newPin !== confirmPin) { setPinMsg("New PIN and confirmation don't match"); setTimeout(() => setPinMsg(''), 3000); return }
     try {
       await updateSettings(stdHours, newPin, oldPin)
@@ -103,7 +103,7 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         <h3 className="text-white font-semibold mb-4">Change Admin PIN</h3>
         <Label>Current PIN</Label>
         <PinInput wrapperClassName="mb-2" className="tracking-widest" value={oldPin} onChange={e => setOldPin(e.target.value)} placeholder="Enter current PIN" />
-        <Label>New PIN (min 4 characters)</Label>
+        <Label>New PIN (min 8 characters)</Label>
         <PinInput wrapperClassName="mb-2" className="tracking-widest" value={newPin} onChange={e => setNewPin(e.target.value)} placeholder="Enter new PIN" />
         <Label>Confirm New PIN</Label>
         <PinInput wrapperClassName="mb-2" className="tracking-widest" value={confirmPin} onChange={e => setConfirmPin(e.target.value)} placeholder="Re-enter new PIN" />
