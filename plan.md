@@ -3464,6 +3464,38 @@ tabs would break. The apply script checks everything before committing.
 lists anything the public key can reach beyond the approved list. Current expected
 output: exactly the two Phase 2 items above. Run it after every migration.
 
+## 47. Visit save "Load failed" on weak signal; travel photos were never deleted (2026-10-05)
+
+**Report:** staff phone (Himanshu), Save Visit with a receipt → red "Load failed"; visit not saved.
+
+**Root cause (checked against DB and storage):** a save is three network calls (selfie upload,
+receipt upload, visit row). Full-size phone photos (2–9 MB) were sent raw, nothing retried, and a
+dropped call left orphan photos. The earlier "Space Design" visit saved fine, so the save logic
+itself is sound.
+
+**Second, larger finding:** the photo *delete* had never worked. Migration 0053 removed anon's
+read permission on storage; the client delete must look a file up first, so it silently removed
+nothing. So "Mark as Paid" and orphan clean-up left every photo behind. Fixed server-side in 0065
+(`storage_delete_objects_core`, service key kept write-only, same pattern as the signed-URL helper).
+Verified: 67 live visit photos still present; 3 orphan files removed.
+
+**Fix (frontend, `lib/travelUpload.js` + `useTravelJourney.addVisit`):**
+- Photos shrunk on the phone to ~1600 px JPEG before upload (falls back to the original if the
+  browser can't decode it, so it never blocks a save).
+- Network failures retried up to 3 times, with "Weak signal, retrying…" shown. Server rejections
+  (e.g. "Already punched out") are never retried.
+- The visit row itself is not blindly retried: after a network failure, the app first checks whether
+  the visit already exists, so a lost reply can't create a duplicate.
+- On final failure, just-uploaded photos are removed, but only if no saved visit uses them; if that
+  check itself can't reach the server, photos are kept.
+- Readable message: "Couldn't reach the server — check your signal and tap Save Visit again. Your
+  photos and details are still here."
+
+**Tests:** 194 pass (7 new for the retry, error and network-detection logic). Not click-tested on a
+phone this session. Ask Himanshu to retry on Wi-Fi once and on mobile data once to confirm.
+
+**Correction to §46:** the claim "Mark as Paid removes the photos" was true only on paper until 0065.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

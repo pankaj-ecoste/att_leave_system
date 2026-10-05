@@ -4,8 +4,9 @@ import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
   employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt, employeeRefineOwnTravelDistances,
   employeeGetTravelClaims, employeeSubmitTravelClaim,
-  employeeGetOwnTravelPhotoUrl,
+  employeeGetOwnTravelPhotoUrl, deleteTravelSelfies,
 } from '../api/travel'
+import { withRetry, friendlySaveError, shrinkImage } from '../lib/travelUpload'
 import { todayIST } from '../lib/datetime'
 
 // plan.md §28 — employee side of Travel Allowance journey logging. Only meaningful for
@@ -81,21 +82,56 @@ export function useTravelJourney(token, empId) {
           reject(new Error(err || 'Could not get your location'))
           return
         }
+        const uploaded = []
+        let photoPath = null
+        const note = () => setLocationStatus('Weak signal, retrying...')
         try {
           setAddingVisit(true)
           setLocationStatus('Saving...')
-          const photoPath = await uploadTravelSelfie(file)
-          const expensePhotoPath = expense?.file ? await uploadTravelReceipt(expense.file) : null
-          const visit = await employeeAddTravelVisit(token, empId, {
+          // Shrink first (a few hundred KB instead of 2-9 MB), then upload with retries.
+          const selfie = await shrinkImage(file)
+          photoPath = await withRetry(() => uploadTravelSelfie(selfie), { onRetry: note })
+          uploaded.push(photoPath)
+          let expensePhotoPath = null
+          if (expense?.file) {
+            const receipt = await shrinkImage(expense.file)
+            expensePhotoPath = await withRetry(() => uploadTravelReceipt(receipt), { onRetry: note })
+            uploaded.push(expensePhotoPath)
+          }
+          const payload = {
             date: todayIST(), lat: meta.lat, lon: meta.lon, accuracyM: meta.accuracy,
             siteNote, photoPath,
             expenseNote: expense?.note || null, expenseAmount: expense?.amount ?? null, expensePhotoPath,
-          })
+          }
+          // The save itself is NOT blindly retried: if the server saved it but the reply was
+          // lost, a retry would create a duplicate. So after a network failure we first check
+          // whether this photo's visit already exists.
+          let visit
+          try {
+            visit = await withRetry(() => employeeAddTravelVisit(token, empId, payload), { onRetry: note })
+          } catch (e) {
+            const saved = await employeeGetTravelJourney(token, empId).catch(() => null)
+            if (saved?.some(v => v.photoPath === photoPath)) {
+              visit = saved.find(v => v.photoPath === photoPath)
+            } else {
+              throw e
+            }
+          }
           await reload()
           resolve(visit)
           refineInBackground()
         } catch (e) {
-          reject(e)
+          // Failed save: remove the photos just uploaded so nothing is left orphaned — but only
+          // if no visit row ended up pointing at them.
+          if (uploaded.length) {
+            // If we can't check (no signal), keep the photos — deleting one a saved visit uses would lose evidence.
+            const linked = await employeeGetTravelJourney(token, empId).catch(() => null)
+            if (linked) {
+              const stillLinked = linked.some(v => uploaded.includes(v.photoPath) || uploaded.includes(v.expensePhotoPath))
+              if (!stillLinked) await deleteTravelSelfies(uploaded)
+            }
+          }
+          reject(new Error(friendlySaveError(e)))
         } finally {
           setAddingVisit(false)
           setLocationStatus('')
