@@ -216,6 +216,17 @@ describe('8h shift override end-to-end (plan.md §16)', () => {
   })
 })
 
+describe('late punch-in that still worked the full day (screenshot 2026-10-05)', () => {
+  it('10:05-19:05 (9h00) -> no incomplete flag, no note', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '10:05', outTime: '19:05' }, 9)).toBe(false)
+    expect(explainShortfall({ inTime: '10:05', outTime: '19:05' }, 9)).toBe(null)
+  })
+  it('10:09-19:07 (8h58) -> grace used, not incomplete', () => {
+    expect(hasIncompleteHoursFlag({ inTime: '10:09', outTime: '19:07' }, 9)).toBe(false)
+    expect(explainShortfall({ inTime: '10:09', outTime: '19:07' }, 9)).toBe('2 min short — grace period used')
+  })
+})
+
 describe('hasIncompleteHoursFlag', () => {
   const stdHours = 9
 

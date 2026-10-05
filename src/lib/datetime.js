@@ -195,6 +195,13 @@ export function shortfallMinutes(rec, stdHours) {
   const available = windowAvailableHours(rec.inTime)
   const cappedRaw = available == null ? raw : Math.min(raw, available)
 
+  // Late punch-in that still worked (nearly) the full stdHours — judge it on real hours,
+  // not the window-capped hours, so it reads as "met" or "grace used", never "incomplete".
+  const realShortMin = (stdHours - raw) * 60
+  if (available != null && available < stdHours && realShortMin <= GRACE_PERIOD_MIN) {
+    return Math.round(Math.max(0, realShortMin))
+  }
+
   // Same early-out as calcStatus: a late punch-in that used every minute of its
   // available window is Present outright — no grace or Partial Leave involved.
   if (available != null && available < stdHours && raw >= available) return null
@@ -250,6 +257,8 @@ export function hasIncompleteHoursFlag(rec, stdHours) {
   const available = windowAvailableHours(rec.inTime)
   if (available == null || available >= stdHours) return false
   const raw = calcRawHrs(rec.inTime, rec.outTime)
+  // Worked the full stdHours (or within the grace period of it) -> nothing is incomplete.
+  if ((stdHours - raw) * 60 <= GRACE_PERIOD_MIN) return false
   return raw >= available
 }
 
