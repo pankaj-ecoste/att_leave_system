@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { claimEmailText, claimGmailUrl, CLAIM_TO, CLAIM_CC } from './travelReport'
+import * as XLSX from 'xlsx'
+import { claimEmailText, claimGmailUrl, CLAIM_TO, CLAIM_CC, buildTravelReportWorkbook } from './travelReport'
 
 describe('claimEmailText', () => {
   it('writes subject, body and the attachment line', () => {
@@ -23,5 +24,51 @@ describe('claimGmailUrl', () => {
     expect(url.searchParams.get('cc')).toBe(CLAIM_CC.join(','))
     expect(url.searchParams.get('su')).toBe('Hi & bye')
     expect(url.searchParams.get('body')).toBe('line one\nline two')
+  })
+})
+
+describe('buildTravelReportWorkbook — standalone expenses (plan.md §48)', () => {
+  const employee = { name: 'Test', empNum: '1', taRateTier: 'executive' }
+  const visit = { id: 'v1', date: '2026-10-01', capturedAt: '2026-10-01T05:00:00Z', siteNote: 'Site A', lat: 28.6, lon: 77.2, legDistanceKm: 10, roadLegKm: null, distanceOverridden: false, expenseAmount: 40, expenseNote: 'Tea' }
+  const toll = { id: 'x1', date: '2026-10-01', capturedAt: '2026-10-01T09:00:00Z', category: 'Toll', amount: 150.5 }
+  const lunch = { id: 'x2', date: '2026-10-02', capturedAt: '2026-10-02T07:00:00Z', category: 'Lunch', amount: 200 }
+
+  it('adds each expense as its own row with type, date and amount, and counts it in the totals', () => {
+    const { wb, totalExpense } = buildTravelReportWorkbook({
+      employee, dates: ['2026-10-01'], journeyByDate: { '2026-10-01': [visit] }, attnByDate: {}, rate: 5,
+      expensesByDate: { '2026-10-01': [toll] },
+    })
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Day-wise Journey'])
+    const exp = rows.find(r => r.Type === 'Expense')
+    expect(exp).toMatchObject({ Date: '2026-10-01', 'Expense Note': 'Toll', 'Expense Amount (₹)': '150.50' })
+    expect(totalExpense).toBeCloseTo(190.5) // 40 visit expense + 150.50 toll
+    const summary = XLSX.utils.sheet_to_json(wb.Sheets['Summary'])[0]
+    expect(summary['Total Expenses (₹)']).toBe('190.50')
+  })
+
+  it('puts the expense after the visit when it was paid later (time order)', () => {
+    const { wb } = buildTravelReportWorkbook({
+      employee, dates: ['2026-10-01'], journeyByDate: { '2026-10-01': [visit] }, attnByDate: {}, rate: 5,
+      expensesByDate: { '2026-10-01': [toll] },
+    })
+    const types = XLSX.utils.sheet_to_json(wb.Sheets['Day-wise Journey']).map(r => r.Type)
+    expect(types).toEqual(['Visit', 'Expense'])
+  })
+
+  it('includes a day that has only an expense and no visit', () => {
+    const { wb, totalExpense, totalKm } = buildTravelReportWorkbook({
+      employee, dates: ['2026-10-02'], journeyByDate: {}, attnByDate: {}, rate: 5,
+      expensesByDate: { '2026-10-02': [lunch] },
+    })
+    expect(XLSX.utils.sheet_to_json(wb.Sheets['Day-wise Journey'])).toHaveLength(1)
+    expect(totalExpense).toBe(200)
+    expect(totalKm).toBe(0)
+  })
+
+  it('works unchanged when there are no standalone expenses', () => {
+    const { totalExpense } = buildTravelReportWorkbook({
+      employee, dates: ['2026-10-01'], journeyByDate: { '2026-10-01': [visit] }, attnByDate: {}, rate: 5,
+    })
+    expect(totalExpense).toBe(40)
   })
 })

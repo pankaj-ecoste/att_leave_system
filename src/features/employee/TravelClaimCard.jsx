@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { attnKey } from '../../api/mappers'
 import { todayIST } from '../../lib/datetime'
 import { downloadTravelReportFile, claimEmailText, claimGmailUrl } from '../../lib/travelReport'
+import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 
 // plan.md §46 — staff pick an end date, submit a claim for the unclaimed days up to it, the
 // report downloads, and a pre-written email to HR opens in Gmail. Gmail can't receive the file
@@ -15,12 +16,11 @@ function addDays(iso, n) {
   return d.toISOString().slice(0, 10)
 }
 
-export function TravelClaimCard({ currentUser, attendance, journey, claims, submitClaim }) {
+export function TravelClaimCard({ currentUser, attendance, journey, expenses = [], claims, submitClaim }) {
   const submitted = claims || []
   const claimedThrough = submitted.reduce((max, c) => (c.periodEnd > max ? c.periodEnd : max), '')
-  const unclaimedDates = [...new Set(journey.map(v => v.date))]
+  const unclaimedDates = allJourneyDates(journey, expenses.filter(x => !x.claimId))
     .filter(d => !claimedThrough || d > claimedThrough)
-    .sort()
   const firstUnclaimed = unclaimedDates[0] || null
   const minEnd = firstUnclaimed ? addDays(firstUnclaimed, 4) : null
   const today = todayIST()
@@ -39,8 +39,8 @@ export function TravelClaimCard({ currentUser, attendance, journey, claims, subm
     setBusy(true)
     try {
       const claim = await submitClaim(endDate)
-      const periodDates = [...new Set(journey.map(v => v.date))]
-        .filter(d => d >= claim.periodStart && d <= claim.periodEnd).sort()
+      const inPeriod = d => d >= claim.periodStart && d <= claim.periodEnd
+      const periodDates = allJourneyDates(journey, expenses).filter(inPeriod)
       const journeyByDate = {}
       for (const v of journey) {
         if (v.date >= claim.periodStart && v.date <= claim.periodEnd) (journeyByDate[v.date] ||= []).push(v)
@@ -51,6 +51,7 @@ export function TravelClaimCard({ currentUser, attendance, journey, claims, subm
       const fileName = downloadTravelReportFile(`travel_allowance_${currentUser.empNum || 'staff'}_${claim.periodStart}_${claim.periodEnd}`, {
         employee: { name: currentUser.name, empNum: currentUser.empNum, taRateTier: claim.rateTier },
         dates: periodDates, journeyByDate, attnByDate, rate: claim.ratePerKm, periodLabel,
+        expensesByDate: groupExpensesByDate(expenses.filter(x => inPeriod(x.date))),
       })
       const { subject, body } = claimEmailText({
         name: currentUser.name, empNum: currentUser.empNum, periodStart: claim.periodStart, periodEnd: claim.periodEnd,

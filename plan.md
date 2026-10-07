@@ -3496,6 +3496,31 @@ phone this session. Ask Himanshu to retry on Wi-Fi once and on mobile data once 
 
 **Correction to §46:** the claim "Mark as Paid removes the photos" was true only on paper until 0065.
 
+## 48. Travel — field staff can't log a toll paid on the way home (2026-10-07)
+
+**Ask (field staff, via HR):** a toll is paid between the last site and home, but the only place to enter an expense is inside "+ Add Visit" (selfie + site name + GPS). On the way home there is no site to attach it to.
+
+**Decisions (confirmed with admin 2026-10-07):**
+1. A standalone **"+ Add Expense"** button in My Journey, next to "+ Add Visit". Type (toll / parking / other), amount, **mandatory receipt photo**. No selfie, no site name, no distance.
+2. **Only between punch-in and punch-out.** No logging after punch-out, no backdating. The journey home is covered because staff are still punched in until they punch out at the end of the trip. (Server-enforced, like the visit rule.)
+3. Stored in a **new table** — the existing visit and expense columns are untouched. Saves the time and GPS point so HR can see where it was paid.
+4. Flows into the same places as visit expenses, as its own line: summary total, claim (§46), report download, admin Review, Mark as Paid (receipt photos removed on Paid, as §47).
+5. Staff may **delete** an expense they entered until the claim is submitted; no editing (a wrong amount is re-entered). Default chosen by me — change if HR wants otherwise.
+
+**Rejected:** a "return trip" fake visit (breaks the distance chain); allowing visits/expenses after punch-out (backdated, unverified — same reasoning as §28 decision 2).
+
+**Production guardrails:** migration touches live claim/summary/settlement functions → hash every pre-existing function before/after and abort on any unexpected change (as 0046–0065); rolled-back dry run on real data first; apply via one-off script.
+
+**Built 2026-10-07 (not yet applied or pushed):**
+- Migration `0066_travel_standalone_expenses.sql`: new `travel_expenses` table (type Toll/Lunch/Other, amount 0–100,000, bill photo required, best-effort GPS, `claim_id`); functions `employee_add_travel_expense` (server date, rejects unless punched in and not out), `employee_delete_travel_expense` (unclaimed only, audit-logged, receipt removed), and three read functions (staff / admin / manager). Changed in place with identical signatures and grants: `travel_summary_for_employee`, `travel_claim_totals`, `employee_submit_travel_claim`, `admin_mark_travel_claim_paid`, the three photo-URL functions and `travel_photo_is_orphaned`.
+- Dry run (`scripts/migrations/apply-0066-travel-standalone-expenses.mjs`, rolls back by default, `--apply` commits): all checks pass on real data — 17 unrelated functions byte-identical, rejections (not punched in, bad type, zero/huge amount, no photo, bad token), totals, claim pickup, delete blocked once claimed, Mark Paid on a throwaway claim.
+- App: "+ Add Expense" beside "+ Add Visit" (type dropdown, amount, rear-camera bill photo); per-day expense list for staff, manager and admin; report rows `Type = Expense` in time order and in the totals; expense-only days appear. The expense list loads separately and tolerates failure, so the existing journey screen cannot break if the function is missing.
+- Tests: 211 pass (17 new). Not click-tested in a browser — needs the migration live and a punched-in field login.
+- Order matters: apply migration 0066 BEFORE the new client goes live.
+- Left alone: legacy `admin_settle_travel_period` (unused by the UI) does not know about standalone expenses; the failed-save photo clean-up uses the client-side delete that §47 found ineffective, so a failed save may leave one orphan bill photo.
+
+**Status:** built and dry-run verified; awaiting go-ahead to apply 0066 and push.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

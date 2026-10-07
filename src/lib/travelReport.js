@@ -11,7 +11,7 @@ const SOURCE_LABELS = { routed: 'Road distance', estimated: 'Estimate (straight-
 
 // Day-wise Punch In -> visits -> Punch Out, then a summary sheet. `visits` must already be
 // limited to the wanted period.
-export function buildTravelReportWorkbook({ employee, dates, journeyByDate, attnByDate, rate, periodLabel, totals }) {
+export function buildTravelReportWorkbook({ employee, dates, journeyByDate, attnByDate, rate, periodLabel, expensesByDate = {} }) {
   const rows = []
   let totalKm = 0
   let totalExpense = 0
@@ -23,7 +23,23 @@ export function buildTravelReportWorkbook({ employee, dates, journeyByDate, attn
       rows.push({ Date: date, Time: record.inTime, Type: 'Punch In', 'Site / Client': record.inLocation || '', 'Distance (km)': '', Source: '', 'Expense Note': '', 'Expense Amount (₹)': '' })
     }
     let lastLat = record?.inLat, lastLon = record?.inLon
-    for (const v of visits) {
+    // Visits and standalone expenses (plan.md §48) interleaved by time, so a toll paid between
+    // two sites sits between them in the file. Only visits move the distance chain.
+    const items = [
+      ...visits.map(v => ({ kind: 'visit', at: v.capturedAt, v })),
+      ...(expensesByDate[date] || []).map(x => ({ kind: 'expense', at: x.capturedAt, x })),
+    ].sort((a, b) => new Date(a.at) - new Date(b.at))
+    for (const item of items) {
+      if (item.kind === 'expense') {
+        const x = item.x
+        rows.push({
+          Date: date, Time: new Date(x.capturedAt).toLocaleTimeString(), Type: 'Expense', 'Site / Client': '',
+          'Distance (km)': '', Source: '', 'Expense Note': x.category, 'Expense Amount (₹)': x.amount.toFixed(2),
+        })
+        totalExpense += x.amount || 0
+        continue
+      }
+      const v = item.v
       const leg = effectiveLegKm(v)
       rows.push({
         Date: date, Time: new Date(v.capturedAt).toLocaleTimeString(), Type: 'Visit', 'Site / Client': v.siteNote,

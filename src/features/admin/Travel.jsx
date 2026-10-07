@@ -9,17 +9,11 @@ import { adminFetchAttendance } from '../../api/attendance'
 import { adminGetTravelPhotoUrl } from '../../api/travel'
 import { dayPoints, effectiveLegKm } from '../../lib/travelPoints'
 import { downloadTravelReportFile, TIER_LABELS } from '../../lib/travelReport'
+import { TravelExpenseList } from '../../components/TravelExpenseList'
+import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
-
-function groupByDate(journey) {
-  const byDate = journey.reduce((acc, v) => {
-    (acc[v.date] ||= []).push(v)
-    return acc
-  }, {})
-  return Object.keys(byDate).sort()
-}
 
 // plan.md §28 — admin's Travel Allowance screen: rate tiers per eligible employee, the
 // two ₹/km rates, per-employee journey review (punch-in -> visits -> punch-out, same
@@ -29,7 +23,7 @@ function groupByDate(journey) {
 // (plan.md §28, "do not alter any running function").
 export function Travel({ token, travel, onAudit }) {
   const {
-    overview, taSettings, routingKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overview, taSettings, routingKeyStatus, loading, error: loadError, setRateTier, updateRates, loadEmployeeJourney, loadEmployeeExpenses, loadSettlements,
     overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, reload, claims, markClaimPaid,
   } = travel
   const [rateForm, setRateForm] = useState(null)
@@ -37,6 +31,7 @@ export function Travel({ token, travel, onAudit }) {
   const [googleKeyInput, setGoogleKeyInput] = useState(null)
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
+  const [expenses, setExpenses] = useState([])
   const [attnByDate, setAttnByDate] = useState({})
   const [settlements, setSettlements] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -77,11 +72,12 @@ export function Travel({ token, travel, onAudit }) {
       // refreshed after a refine found something new, so a visit added by the employee
       // while admin had this screen open could leave the list showing a stale km/visit
       // count even after Review showed the correct detail underneath it).
-      const [j, s] = await Promise.all([loadEmployeeJourney(row.empId), loadSettlements(row.empId), reload()])
+      const [j, s, ex] = await Promise.all([loadEmployeeJourney(row.empId), loadSettlements(row.empId), loadEmployeeExpenses(row.empId), reload()])
       setJourney(j)
       setSettlements(s)
-      if (j.length > 0) {
-        const dates = j.map(v => v.date).sort()
+      setExpenses(ex)
+      if (j.length > 0 || ex.length > 0) {
+        const dates = allJourneyDates(j, ex)
         dateRange = { from: dates[0], to: dates[dates.length - 1] }
       }
       setAttnByDate(dateRange ? await fetchAttnByDate(row.empId, dateRange.from, dateRange.to) : {})
@@ -165,11 +161,12 @@ export function Travel({ token, travel, onAudit }) {
   }
 
   function download(row) {
-    if (journey.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
+    if (journey.length === 0 && expenses.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
     const byDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
     downloadTravelReportFile(`travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}`, {
       employee: { name: row.empName, empNum: row.empNum, taRateTier: row.taRateTier },
-      dates: groupByDate(journey), journeyByDate: byDate, attnByDate, rate: rateFor(row),
+      dates: allJourneyDates(journey, expenses), journeyByDate: byDate, attnByDate, rate: rateFor(row),
+      expensesByDate: groupExpensesByDate(expenses),
       periodLabel: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
     })
   }
@@ -188,7 +185,8 @@ This removes those days' photos and points from the staff and admin panels. Only
     }
   }
 
-  const dates = groupByDate(journey)
+  const dates = allJourneyDates(journey, expenses)
+  const expensesByDate = groupExpensesByDate(expenses)
   const journeyByDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
 
   return (
@@ -334,25 +332,27 @@ This removes those days' photos and points from the staff and admin panels. Only
                           </div>
                         ))}
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
-                          <Button variant="secondary" className="text-xs" disabled={journey.length === 0} onClick={() => download(row)}>
+                          <Button variant="secondary" className="text-xs" disabled={journey.length === 0 && expenses.length === 0} onClick={() => download(row)}>
                             ⬇ Download Report
                           </Button>
                           {refining && <span className="text-indigo-300 text-xs">Refining road distances...</span>}
                         </div>
                         {dates.length === 0 && <p className="text-white/30 text-xs">No open visits.</p>}
                         {dates.map(date => {
-                          const visits = journeyByDate[date]
+                          const visits = journeyByDate[date] || []
                           const record = attnByDate[date]
                           return (
                             <div key={date} className="mb-4">
                               <div className="flex items-center justify-between mb-2">
                                 <p className="text-white/70 text-xs font-medium">{date}</p>
-                                <button
-                                  className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
-                                  onClick={() => { setShowMap(showMap && mapDate === date ? false : true); setMapDate(date) }}
-                                >
-                                  {showMap && mapDate === date ? 'Hide map' : 'View map'}
-                                </button>
+                                {visits.length > 0 && (
+                                  <button
+                                    className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
+                                    onClick={() => { setShowMap(showMap && mapDate === date ? false : true); setMapDate(date) }}
+                                  >
+                                    {showMap && mapDate === date ? 'Hide map' : 'View map'}
+                                  </button>
+                                )}
                               </div>
                               {showMap && mapDate === date && (
                                 <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
@@ -370,6 +370,7 @@ This removes those days' photos and points from the staff and admin panels. Only
                                   <Button variant="secondary" className="text-xs shrink-0" onClick={() => setOverrideVisit({ id: v.id, km: effectiveLegKm(v).km, reason: '' })}>Adjust</Button>
                                 )}
                               />
+                              <TravelExpenseList expenses={expensesByDate[date]} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setViewerUrl} />
                             </div>
                           )
                         })}

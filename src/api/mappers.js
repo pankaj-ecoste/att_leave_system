@@ -447,3 +447,20 @@ export function rowToTravelClaim(row) {
     paidAt: row.paid_at,
   }
 }
+
+// plan.md §48 — a standalone expense (toll / lunch / other) logged between punch-in and punch-out.
+export function rowToTravelExpense(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    empId: row.emp_id,
+    date: row.date,
+    capturedAt: row.captured_at,
+    category: row.category,
+    amount: Number(row.amount),
+    photoPath: row.photo_path,
+    lat: row.lat != null ? Number(row.lat) : null,
+    lon: row.lon != null ? Number(row.lon) : null,
+    claimId: row.claim_id || null,
+  }
+}

@@ -4,6 +4,8 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
 import { TravelDayChain } from '../../components/TravelDayChain'
+import { TravelExpenseList } from '../../components/TravelExpenseList'
+import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
 import { calcRawHrs, calcStatus, effectiveStdHours, todayIST } from '../../lib/datetime'
@@ -18,7 +20,7 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 export function TeamPanel({
   token, managerId, myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
   teamLocationLogs, teamLocationLoading, loadTeamLocationLogs, globalStdHours,
-  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance, fetchPhotoUrl,
+  teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelExpenses, loadTeamTravelAttendance, fetchPhotoUrl,
   teamError,
 }) {
   const [tab, setTab] = useState('requests')
@@ -27,6 +29,7 @@ export function TeamPanel({
   const [errMsg, setErrMsg] = useState('')
   const [expandedTravelEmp, setExpandedTravelEmp] = useState(null)
   const [travelJourney, setTravelJourney] = useState([])
+  const [travelExpenses, setTravelExpenses] = useState([])
   const [travelAttnByDate, setTravelAttnByDate] = useState({})
   const [travelJourneyLoading, setTravelJourneyLoading] = useState(false)
   const [showTravelMap, setShowTravelMap] = useState(false)
@@ -53,11 +56,12 @@ export function TeamPanel({
       // Refresh the outer summary row too, same fix as admin's Travel.jsx (plan.md
       // §31 follow-up) — otherwise a visit added since the list last loaded would show
       // a stale km/visit count in the row even after this panel shows the right detail.
-      const [journey] = await Promise.all([loadTeamTravelJourney(row.empId), loadTeamTravelSummary()])
+      const [journey, expenses] = await Promise.all([loadTeamTravelJourney(row.empId), loadTeamTravelExpenses(row.empId), loadTeamTravelSummary()])
       setTravelJourney(journey)
+      setTravelExpenses(expenses)
       // Date range comes from the freshly-loaded journey itself, not the possibly-stale
       // `row` snapshot, so it can't miss a day the employee added since.
-      const dates = journey.map(v => v.date).sort()
+      const dates = allJourneyDates(journey, expenses)
       setTravelAttnByDate(dates.length > 0 ? await loadTeamTravelAttendance(row.empId, dates[0], dates[dates.length - 1]) : {})
     } catch (err) {
       setErrMsg(err.message)
@@ -282,22 +286,23 @@ export function TeamPanel({
                     {expandedTravelEmp === row.empId && (
                       <div className="p-3 border-t border-white/10">
                         {travelJourneyLoading ? <p className="text-white/30 text-xs">Loading...</p> : (() => {
-                          const dates = [...new Set(travelJourney.map(v => v.date))].sort()
+                          const dates = allJourneyDates(travelJourney, travelExpenses)
+                          const expensesByDate = groupExpensesByDate(travelExpenses)
                           const byDate = travelJourney.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
                           if (dates.length === 0) return <p className="text-white/30 text-xs">No open visits.</p>
                           return dates.map(date => {
-                            const visits = byDate[date]
+                            const visits = byDate[date] || []
                             const record = travelAttnByDate[date]
                             return (
                               <div key={date} className="mb-4">
                                 <div className="flex items-center justify-between mb-2">
                                   <p className="text-white/70 text-xs font-medium">{date}</p>
-                                  <button
+                                  {visits.length > 0 && <button
                                     className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
                                     onClick={() => { setShowTravelMap(showTravelMap && travelMapDate === date ? false : true); setTravelMapDate(date) }}
                                   >
                                     {showTravelMap && travelMapDate === date ? 'Hide map' : 'View map'}
-                                  </button>
+                                  </button>}
                                 </div>
                                 {showTravelMap && travelMapDate === date && (
                                   <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
@@ -307,6 +312,7 @@ export function TeamPanel({
                                   </Suspense>
                                 )}
                                 <TravelDayChain visits={visits} attendanceRecord={record} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setTravelViewerUrl} />
+                                <TravelExpenseList expenses={expensesByDate[date]} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setTravelViewerUrl} />
                               </div>
                             )
                           })

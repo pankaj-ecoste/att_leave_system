@@ -4,7 +4,7 @@ import {
   adminSetTaRateTier, adminGetTaSettings, adminUpdateTaSettings,
   adminOverrideTravelVisitDistance, adminSettleTravelPeriod, deleteTravelSelfies,
   adminRefineTravelDistances, adminGetRoutingKeyStatus, adminSetOrsApiKey, adminSetGoogleMapsApiKey,
-  adminGetTravelClaims, adminMarkTravelClaimPaid,
+  adminGetTravelClaims, adminMarkTravelClaimPaid, adminGetEmployeeTravelExpenses,
 } from '../api/travel'
 
 // plan.md §28 — admin side of Travel Allowance. Deliberately its own hook, not folded
@@ -63,6 +63,16 @@ export function useAdminTravel(token) {
     return adminGetEmployeeTravelJourney(token, empId)
   }
 
+  // plan.md §48 — standalone expenses; never allowed to break the rest of the review screen.
+  async function loadEmployeeExpenses(empId) {
+    try {
+      return await adminGetEmployeeTravelExpenses(token, empId)
+    } catch (e) {
+      console.error('adminGetEmployeeTravelExpenses:', e)
+      return []
+    }
+  }
+
   async function loadSettlements(empId) {
     return adminGetTravelSettlements(token, empId)
   }
@@ -111,7 +121,7 @@ export function useAdminTravel(token) {
 
   return {
     claims, markClaimPaid,
-    overview, taSettings, routingKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadSettlements,
+    overview, taSettings, routingKeyStatus, loading, error, setRateTier, updateRates, loadEmployeeJourney, loadEmployeeExpenses, loadSettlements,
     overrideDistance, refineDistances, setOrsApiKey, setGoogleApiKey, settle, reload,
   }
 }

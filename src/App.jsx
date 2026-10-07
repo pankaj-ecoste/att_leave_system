@@ -129,7 +129,7 @@ export default function App() {
             teamLocationLogs: team.teamLocationLogs, teamLocationLoading: team.teamLocationLoading, loadTeamLocationLogs: team.loadTeamLocationLogs,
             decideLeave: team.decideLeave, decideRegularization: team.decideRegularization,
             teamTravelSummary: team.teamTravelSummary, teamTravelLoading: team.teamTravelLoading,
-            loadTeamTravelSummary: team.loadTeamTravelSummary, loadTeamTravelJourney: team.loadTeamTravelJourney,
+            loadTeamTravelSummary: team.loadTeamTravelSummary, loadTeamTravelJourney: team.loadTeamTravelJourney, loadTeamTravelExpenses: team.loadTeamTravelExpenses,
             loadTeamTravelAttendance: team.loadTeamTravelAttendance, fetchPhotoUrl: team.fetchPhotoUrl,
             teamError: team.error,
           }}

@@ -7,6 +7,8 @@ import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { attnKey } from '../../api/mappers'
 import { dayPoints } from '../../lib/travelPoints'
 import { TravelClaimCard } from './TravelClaimCard'
+import { TravelExpenseList } from '../../components/TravelExpenseList'
+import { EXPENSE_CATEGORIES, validateExpenseInput, groupExpensesByDate, allJourneyDates } from '../../lib/travelExpenses'
 
 // Only fetched when a map is actually opened (plan.md §28 decision 9).
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
@@ -17,7 +19,7 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 // distance + expense total, and a lazy map. Only rendered for Field / Office+Field
 // staff — gated by the caller (EmployeeDashboard) using the same requiresFieldNote()
 // check the punch screen already uses.
-export function MyJourney({ currentUser, attendance, journey, summary, settlements, claims, submitClaim, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl }) {
+export function MyJourney({ currentUser, attendance, journey, summary, settlements, claims, submitClaim, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl, expenses = [], addingExpense = false, addExpense, deleteExpense }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [siteNote, setSiteNote] = useState('')
   const [showExpense, setShowExpense] = useState(false)
@@ -32,6 +34,14 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
   const [viewerUrl, setViewerUrl] = useState(null)
   const fileInputRef = useRef(null)
   const expenseInputRef = useRef(null)
+  // plan.md §48 — standalone "+ Add Expense" (toll / lunch / other) form, separate from a visit's own optional expense.
+  const [showExpForm, setShowExpForm] = useState(false)
+  const [expCategory, setExpCategory] = useState('')
+  const [expAmount, setExpAmount] = useState('')
+  const [expFile, setExpFile] = useState(null)
+  const [expPreview, setExpPreview] = useState(null)
+  const [expErr, setExpErr] = useState('')
+  const standaloneInputRef = useRef(null)
 
   useEffect(() => {
     if (!pendingFile) { setPreviewUrl(null); return }
@@ -46,6 +56,35 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     setExpensePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [expenseFile])
+
+  useEffect(() => {
+    if (!expFile) { setExpPreview(null); return }
+    const url = URL.createObjectURL(expFile)
+    setExpPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [expFile])
+
+  function resetExpForm() {
+    setShowExpForm(false); setExpCategory(''); setExpAmount(''); setExpFile(null); setExpErr('')
+  }
+
+  function onStandaloneFileChosen(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) { setExpFile(file); setExpErr('') }
+  }
+
+  async function saveExpense() {
+    const problem = validateExpenseInput({ category: expCategory, amount: expAmount, hasPhoto: !!expFile })
+    if (problem) { setExpErr(problem); return }
+    try {
+      setExpErr('')
+      await addExpense({ category: expCategory, amount: Number(expAmount), file: expFile })
+      resetExpForm()
+    } catch (e) {
+      setExpErr(e.message)
+    }
+  }
 
   function pickPhoto() {
     fileInputRef.current?.click()
@@ -94,7 +133,8 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     (acc[v.date] ||= []).push(v)
     return acc
   }, {})
-  const dates = Object.keys(byDate).sort().reverse()
+  const expensesByDate = groupExpensesByDate(expenses)
+  const dates = allJourneyDates(journey, expenses).reverse()
 
   return (
     <div className="space-y-4">
@@ -109,11 +149,46 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
               {summary.totalExpense > 0 && ` · ₹${summary.totalExpense.toFixed(2)} expenses`}
             </p>
           </div>
-          <Button onClick={pickPhoto} disabled={addingVisit}>{addingVisit ? 'Saving...' : '+ Add Visit'}</Button>
+          <div className="flex flex-col gap-2 items-stretch">
+            <Button onClick={pickPhoto} disabled={addingVisit}>{addingVisit ? 'Saving...' : '+ Add Visit'}</Button>
+            {addExpense && <Button variant="secondary" onClick={() => setShowExpForm(true)} disabled={addingExpense || showExpForm}>+ Add Expense</Button>}
+          </div>
         </div>
         <input ref={fileInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={onFileChosen} />
         <input ref={expenseInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onExpenseFileChosen} />
+        <input ref={standaloneInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onStandaloneFileChosen} />
         {locationStatus && <p className="text-indigo-300 text-xs">{locationStatus}</p>}
+
+        {showExpForm && (
+          <div className="mt-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
+            <p className="text-white/60 text-xs mb-2">Add an expense — only between Punch In and Punch Out. The bill photo is required.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
+                value={expCategory} onChange={e => setExpCategory(e.target.value)}
+              >
+                <option value="" className="text-black">Select type *</option>
+                {EXPENSE_CATEGORIES.map(c => <option key={c} value={c} className="text-black">{c}</option>)}
+              </select>
+              <input
+                type="number" inputMode="decimal" min="0" step="0.01"
+                className="bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
+                value={expAmount} onChange={e => setExpAmount(e.target.value)} placeholder="Amount (₹) *"
+              />
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              {expPreview && <img src={expPreview} alt="Bill preview" className="w-10 h-10 rounded-lg object-cover shrink-0" />}
+              <Button variant="secondary" className="text-xs" onClick={() => standaloneInputRef.current?.click()}>
+                {expFile ? 'Retake Bill Photo' : 'Add Bill Photo *'}
+              </Button>
+            </div>
+            {expErr && <p className="text-red-400 text-xs mt-2">{expErr}</p>}
+            <div className="flex gap-2 mt-3">
+              <Button className="flex-1 text-xs" disabled={addingExpense} onClick={saveExpense}>{addingExpense ? 'Saving...' : 'Save Expense'}</Button>
+              <Button variant="secondary" className="text-xs" disabled={addingExpense} onClick={resetExpForm}>Cancel</Button>
+            </div>
+          </div>
+        )}
 
         {pendingFile && (
           <div className="mt-3 p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10">
@@ -168,25 +243,28 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
         )}
       </Card>
 
-      <TravelClaimCard currentUser={currentUser} attendance={attendance} journey={journey} claims={claims} submitClaim={submitClaim} />
+      <TravelClaimCard currentUser={currentUser} attendance={attendance} journey={journey} expenses={expenses} claims={claims} submitClaim={submitClaim} />
 
       {loading && dates.length === 0 ? (
         <p className="text-white/30 text-sm text-center py-8">Loading...</p>
       ) : dates.length === 0 ? (
         <Card><p className="text-white/30 text-sm text-center py-6">No visits logged yet. Punch in, then tap "+ Add Visit" at each site.</p></Card>
       ) : dates.map(date => {
-        const visits = byDate[date]
+        const visits = byDate[date] || []
+        const dayExpenses = expensesByDate[date] || []
         const record = attendance?.[attnKey(currentUser.id, date)]
         return (
           <Card key={date}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-white font-medium text-sm">{date}</p>
-              <button
-                className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
-                onClick={() => setOpenMapDate(openMapDate === date ? null : date)}
-              >
-                {openMapDate === date ? 'Hide map' : 'View map'}
-              </button>
+              {visits.length > 0 && (
+                <button
+                  className="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2"
+                  onClick={() => setOpenMapDate(openMapDate === date ? null : date)}
+                >
+                  {openMapDate === date ? 'Hide map' : 'View map'}
+                </button>
+              )}
             </div>
             {openMapDate === date && (
               <Suspense fallback={<div className="h-72 flex items-center justify-center"><Spinner /></div>}>
@@ -196,6 +274,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
               </Suspense>
             )}
             <TravelDayChain visits={visits} attendanceRecord={record} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setViewerUrl} selectedVisitId={selectedVisitId} onSelectVisit={setSelectedVisitId} />
+            <TravelExpenseList expenses={dayExpenses} fetchPhotoUrl={fetchPhotoUrl} onOpenPhoto={setViewerUrl} onDelete={deleteExpense} />
           </Card>
         )
       })}

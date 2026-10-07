@@ -5,7 +5,7 @@ import { managerGetTeamAttendance, managerGetTeamRegularizations, managerDecideR
 import { managerGetTeamLocationLogs } from '../api/location'
 import {
   managerGetTeamTravelSummary, managerGetTeamTravelJourney, managerGetTeamTravelAttendance,
-  managerGetTeamTravelPhotoUrl,
+  managerGetTeamTravelPhotoUrl, managerGetTeamTravelExpenses,
 } from '../api/travel'
 
 const PENDING_REFRESH_MS = 2 * 60 * 1000
@@ -135,6 +135,16 @@ export function useTeam(token, empId, onAudit) {
     return managerGetTeamTravelJourney(token, empId, memberEmpId)
   }
 
+  // plan.md §48 — standalone expenses; never allowed to break the rest of the team journey view.
+  async function loadTeamTravelExpenses(memberEmpId) {
+    try {
+      return await managerGetTeamTravelExpenses(token, empId, memberEmpId)
+    } catch (e) {
+      console.error('managerGetTeamTravelExpenses:', e)
+      return []
+    }
+  }
+
   // Punch-in/punch-out bookends for one team member's open journey dates, keyed by
   // date — mirrors what TravelDayChain needs, same shape adminFetchAttendance's map
   // uses on the admin side, just scoped to a date range instead of a whole month.
@@ -180,7 +190,7 @@ export function useTeam(token, empId, onAudit) {
   return {
     myTeam, teamLeaves, teamRegs, teamAttn, teamLoading, loadTeamAttendance, decideLeave, decideRegularization,
     teamLocationLogs, teamLocationLoading, loadTeamLocationLogs,
-    teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelAttendance,
+    teamTravelSummary, teamTravelLoading, loadTeamTravelSummary, loadTeamTravelJourney, loadTeamTravelExpenses, loadTeamTravelAttendance,
     fetchPhotoUrl, error,
   }
 }

@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import {
   rowToTravelVisit, rowToTravelSummary, rowToTravelOverviewRow, rowToTravelSettlement, rowToTaSettings,
-  rowToAttendance, rowToTravelClaim,
+  rowToAttendance, rowToTravelClaim, rowToTravelExpense,
 } from './mappers'
 
 // plan.md §28 — Travel Allowance verification. Same private-bucket pattern as
@@ -265,4 +265,42 @@ export async function adminMarkTravelClaimPaid(token, claimId) {
   if (error) throw error
   const row = data?.[0]
   return { claim: rowToTravelClaim(row?.claim), photoPaths: row?.photo_paths || [] }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone expenses (plan.md §48) — toll / lunch / other, between punch-in and punch-out
+// ---------------------------------------------------------------------------
+
+// The bill photo is uploaded first (same private bucket, same retry path as visit receipts), then
+// this saves the row. Location is best-effort — null when the signal was too weak to get one.
+export async function employeeAddTravelExpense(token, empId, { category, amount, photoPath, lat, lon, accuracyM }) {
+  const { data, error } = await supabase.rpc('employee_add_travel_expense', {
+    p_token: token, p_emp_id: empId, p_category: category, p_amount: amount, p_photo_path: photoPath,
+    p_lat: lat ?? null, p_lon: lon ?? null, p_accuracy_m: accuracyM ?? null,
+  })
+  if (error) throw error
+  return rowToTravelExpense(data)
+}
+
+export async function employeeGetTravelExpenses(token, empId) {
+  const { data, error } = await supabase.rpc('employee_get_travel_expenses', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return (data || []).map(rowToTravelExpense)
+}
+
+export async function employeeDeleteTravelExpense(token, empId, expenseId) {
+  const { error } = await supabase.rpc('employee_delete_travel_expense', { p_token: token, p_emp_id: empId, p_expense_id: expenseId })
+  if (error) throw error
+}
+
+export async function adminGetEmployeeTravelExpenses(token, empId) {
+  const { data, error } = await supabase.rpc('admin_get_employee_travel_expenses', { p_token: token, p_emp_id: empId })
+  if (error) throw error
+  return (data || []).map(rowToTravelExpense)
+}
+
+export async function managerGetTeamTravelExpenses(token, managerId, empId) {
+  const { data, error } = await supabase.rpc('manager_get_team_travel_expenses', { p_token: token, p_manager_id: managerId, p_emp_id: empId })
+  if (error) throw error
+  return (data || []).map(rowToTravelExpense)
 }

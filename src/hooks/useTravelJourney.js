@@ -5,6 +5,7 @@ import {
   employeeGetTravelSettlements, uploadTravelSelfie, uploadTravelReceipt, employeeRefineOwnTravelDistances,
   employeeGetTravelClaims, employeeSubmitTravelClaim,
   employeeGetOwnTravelPhotoUrl, deleteTravelSelfies,
+  employeeAddTravelExpense, employeeGetTravelExpenses, employeeDeleteTravelExpense,
 } from '../api/travel'
 import { withRetry, friendlySaveError, shrinkImage } from '../lib/travelUpload'
 import { todayIST } from '../lib/datetime'
@@ -19,6 +20,8 @@ export function useTravelJourney(token, empId) {
   const [summary, setSummary] = useState({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null })
   const [settlements, setSettlements] = useState([])
   const [claims, setClaims] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [addingExpense, setAddingExpense] = useState(false)
   const [loading, setLoading] = useState(false)
   const [addingVisit, setAddingVisit] = useState(false)
   const [locationStatus, setLocationStatus] = useState('')
@@ -27,13 +30,17 @@ export function useTravelJourney(token, empId) {
     if (!token || !empId) return
     try {
       setLoading(true)
-      const [j, s, st, cl] = await Promise.all([
+      const [j, s, st, cl, ex] = await Promise.all([
         employeeGetTravelJourney(token, empId),
         employeeGetTravelSummary(token, empId),
         employeeGetTravelSettlements(token, empId),
         employeeGetTravelClaims(token, empId),
+        // Standalone expenses (plan.md §48) load on their own: if this one call fails, the rest of
+        // the journey screen must still work exactly as before.
+        employeeGetTravelExpenses(token, empId).catch(e => { console.error('employeeGetTravelExpenses:', e); return null }),
       ])
       setJourney(j)
+      if (ex) setExpenses(ex)
       setSummary(s)
       setSettlements(st)
       setClaims(cl)
@@ -61,7 +68,7 @@ export function useTravelJourney(token, empId) {
   }, [token, empId, reload])
 
   useEffect(() => {
-    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); setClaims([]); return }
+    if (!token || !empId) { setJourney([]); setSummary({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null }); setSettlements([]); setClaims([]); setExpenses([]); return }
     reload().then(refineInBackground)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, empId])
@@ -140,6 +147,54 @@ export function useTravelJourney(token, empId) {
     })
   }
 
+  // plan.md §48 — a standalone expense (toll / lunch / other) between punch-in and punch-out. No
+  // selfie, no site, no distance. Location is best-effort: a weak signal on a highway must not stop
+  // someone logging a toll, and the bill photo is the real evidence. The server rejects it unless
+  // the person is punched in and not yet punched out.
+  async function addExpense({ category, amount, file }) {
+    const meta = await new Promise(resolve => {
+      getLocation((_label, err, m) => resolve(err ? null : m))
+    })
+    const note = () => setLocationStatus('Weak signal, retrying...')
+    let photoPath = null
+    try {
+      setAddingExpense(true)
+      setLocationStatus('Saving...')
+      const photo = await shrinkImage(file)
+      photoPath = await withRetry(() => uploadTravelReceipt(photo), { onRetry: note })
+      const payload = { category, amount, photoPath, lat: meta?.lat, lon: meta?.lon, accuracyM: meta?.accuracy }
+      let saved
+      try {
+        saved = await withRetry(() => employeeAddTravelExpense(token, empId, payload), { onRetry: note })
+      } catch (e) {
+        // Same rule as visits: never blindly re-send a save whose reply may have been lost (it
+        // could duplicate the expense) — first check whether this bill was already saved.
+        const now = await employeeGetTravelExpenses(token, empId).catch(() => null)
+        const found = now?.find(x => x.photoPath === photoPath)
+        if (!found) throw e
+        saved = found
+      }
+      await reload()
+      return saved
+    } catch (e) {
+      // Nothing saved → remove the just-uploaded bill, but only if no expense row points at it.
+      if (photoPath) {
+        const now = await employeeGetTravelExpenses(token, empId).catch(() => null)
+        if (now && !now.some(x => x.photoPath === photoPath)) await deleteTravelSelfies([photoPath])
+      }
+      throw new Error(friendlySaveError(e).replace('tap Save Visit again', 'tap Save Expense again').replace('Could not save the visit', 'Could not save the expense'))
+    } finally {
+      setAddingExpense(false)
+      setLocationStatus('')
+    }
+  }
+
+  // Only expenses not yet in a submitted claim can be deleted (the server enforces it and logs it).
+  async function deleteExpense(expense) {
+    await employeeDeleteTravelExpense(token, empId, expense.id)
+    await reload()
+  }
+
   // plan.md §33.2 — bound here (not called directly from TravelPhotoThumb) since only
   // this hook has token/empId in scope; a plain path is all the component needs to know.
   const fetchPhotoUrl = useCallback(path => employeeGetOwnTravelPhotoUrl(token, empId, path), [token, empId])
@@ -151,5 +206,5 @@ export function useTravelJourney(token, empId) {
     return claim
   }
 
-  return { journey, summary, settlements, claims, loading, addingVisit, locationStatus, addVisit, submitClaim, reload, fetchPhotoUrl }
+  return { journey, summary, settlements, claims, expenses, loading, addingVisit, addingExpense, locationStatus, addVisit, addExpense, deleteExpense, submitClaim, reload, fetchPhotoUrl }
 }
