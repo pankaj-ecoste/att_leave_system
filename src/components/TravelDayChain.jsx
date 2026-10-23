@@ -1,6 +1,7 @@
 import { TravelPhotoThumb } from './TravelPhotoThumb'
 import { haversineMeters } from '../lib/geo'
 import { effectiveLegKm, effectiveReturnLegKm, googleMapsDirectionsUrl } from '../lib/travelPoints'
+import { suspectDuplicateIds } from '../lib/travelDuplicates'
 
 // Opens Google Maps with the exact GPS points this leg was measured between (not the
 // address labels — see googleMapsDirectionsUrl). stopPropagation so clicking it on a
@@ -35,6 +36,8 @@ function SourceBadge({ source }) {
 // in one place instead of three near-identical copies.
 export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpenPhoto, selectedVisitId, onSelectVisit, renderVisitExtra }) {
   const lastVisit = visits[visits.length - 1]
+  // plan.md §52 — a visit that repeats an earlier one (same site, within 200 m, within 10 minutes).
+  const suspects = suspectDuplicateIds(visits)
   const returnFallbackKm = (lastVisit && attendanceRecord?.outLat != null)
     ? haversineMeters(lastVisit.lat, lastVisit.lon, attendanceRecord.outLat, attendanceRecord.outLon) / 1000
     : 0
@@ -75,6 +78,7 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
             <TravelPhotoThumb path={v.photoPath} fetchUrl={fetchPhotoUrl} onOpen={onOpenPhoto} className="w-12 h-12" />
             <div className="flex-1 min-w-0">
               <p className="text-white text-sm font-medium truncate">{v.siteNote}</p>
+              {suspects.has(v.id) && <p className="text-amber-300 text-xs font-medium">⚠ Possible duplicate — same place as the visit above</p>}
               <p className="text-white/30 text-xs">
                 {new Date(v.capturedAt).toLocaleTimeString()} · {leg.km.toFixed(1)} km · <SourceBadge source={leg.source} />
                 {leg.source === 'adjusted' && v.overrideReason ? `: ${v.overrideReason}` : ''}

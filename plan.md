@@ -3663,6 +3663,38 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Follow-up (2026-10-23, same day): name search on the admin Field Staff Journeys list.** A search box under the heading filters by part of the name or the employee number, ignoring capitals and extra spaces; several words must all match; shows "n of N" while searching and a "No one matches" line when empty (`lib/nameSearch.js`, 7 tests). Front-end only. Not yet pushed.
 
+## 52. Travel — the same visit saved more than once (HR-reported 2026-10-23)
+
+**Report:** Puneet Sharma's report showed one visit ("Siddharth", 5 Oct, 02:58 PM) twice, each with 36.87 km, so the distance was paid twice.
+
+**Root cause (confirmed from data + code):**
+- Tapping **Save Visit** first waits for GPS (10–30 s on a weak signal) and only then locks the button, so a second tap during the wait starts a second save. Both saves are answered by the same GPS fix and reach the server within milliseconds.
+- The server has no "this visit already exists" check, and each save looks up "the last visit" before the other is written, so BOTH measure from the same earlier point and BOTH get the full distance.
+- Scan of production (351 visits): 39 places saved more than once, 51 surplus rows; 29 of the 39 were saved within 3 seconds of each other (double tap); the rest are repeated taps over a few minutes (Anirudh: 9 saves of "Airport" in 4 minutes).
+- Real money: ~44 km (≈ ₹406) of double distance, and ~₹3,500 of double expenses — Anirudh ₹850 × 5 on one visit (≈ ₹3,400 extra, inside his submitted ₹20,250.13 claim) and Puneet ₹50 twice. Standalone "+ Add Expense" entries are clean (20, none duplicated).
+
+**Rejected:** a "next visit must be ≥ 2 km away" rule — checked against the 300 genuine visits: 51 (17%) were within 2 km of the previous point (different clients in the same complex/market). It would block real visits.
+
+**Decisions (confirmed with admin 2026-10-23):**
+1. **Same row can't be saved twice.** Each Save carries a unique ticket; the server stores it with a unique index. A repeated ticket returns the first row and creates nothing. The app locks the button at the first tap (before the GPS wait), for visits and for expenses.
+2. **Narrow safety net on the server** (older cached screens send no ticket): a visit is refused (the existing one is returned) only if it has the SAME site name, is within 200 m of it, and the earlier one was saved within 10 minutes. None of the 300 genuine visits would be affected. The server also handles one person's saves one at a time, so two saves can no longer measure from the same earlier point. The discarded attempt's uploaded photos are removed.
+3. **Expenses:** no guessing rules — the mandatory bill photo is the proof. Only the exact-ticket protection and the button lock (a genuine second expense, even the same amount, is always allowed).
+4. **Admin warning:** a "Possible duplicate" mark in the review for any visit that repeats an earlier one (same rule as 2).
+5. **Clean-up of existing data (delete, not hide):** within each repeated group keep ONE row — the one with the real leg (largest straight-line distance; ties → earliest) — and delete the copies. If the kept row has no expense but a copy had one, the expense moves to the kept row first (so a real ₹50 is not lost); if copies carry different expenses the group is left for manual review. Deleting with the analytics archive trigger paused (otherwise the duplicates would be ARCHIVED into analytics instead of removed). Back up first. Photos of the deleted copies are removed afterwards.
+6. **Submitted claims** that contained deleted rows are adjusted by exactly what was removed, shown to the admin before applying (Puneet ≈ −₹431.50, Anirudh ≈ −₹3,400 once HR has looked at the five ₹850 receipts). HR is told the amounts change.
+
+**Plan:** migration 0068 (ticket columns + unique indexes; `employee_add_travel_visit` and `employee_add_travel_expense` gain an optional `p_client_ticket`, old versions dropped so only one exists; older screens keep working). App: button lock + ticket, "Possible duplicate" mark. One-off clean-up script with dry run. Order: apply 0068 → push app → run clean-up.
+
+**Note on numbering:** another session added §49–§51 and a migration 0067 the same day; this section and migration 0068 follow on from those.
+
+**Built 2026-10-23 (not yet applied or pushed):**
+- Migration `0068_travel_no_double_save.sql` (+ `scripts/migrations/apply-0068-travel-no-double-save.mjs`, dry run by default). `client_ticket` columns + unique indexes; both save functions take an optional `p_client_ticket`, take a per-person advisory lock, return the first row for a repeated ticket; the visit function also refuses a same-name / ≤200 m / <10 min repeat and removes the discarded attempt's own photos (only files no row references). Dry run on real data: 25 unrelated functions byte-identical, one version of each function, same ticket → one row, repeat by name/spot refused, different name at the same spot allowed, same name 14 km away allowed, same spot after 11 min allowed, older 11-argument call still works, genuine second expense always allowed.
+- App: `lib/saveTicket.js` (one ticket per attempt, same on retry, fresh after success), the Save buttons lock at the first tap (`addVisit` / `addExpense` wrappers in `useTravelJourney`, an extra tap returns null and the form stays), `lib/travelDuplicates.js` + "⚠ Possible duplicate" mark in the day list. 276 tests pass (21 new), build clean.
+- Clean-up `scripts/data-fixes/fix-duplicate-visits-2026-10-23.mjs` (dry run by default; backup JSON first; archive trigger paused and checked; photo files kept unless `--delete-photos`). Dry run: 39 repeated groups → 38 fixed, 50 rows deleted (352 → 302), 1 group left for manual review (Mahesh · Icon, 10 Oct: a copy is 234 m away, ≈ ₹3, in no claim). Submitted claims that change: Puneet 3–15 Oct **₹8,340.23 → ₹7,908.30** (−38.19 km, −₹50 expense); Anirudh 5–19 Oct **₹20,250.13 → ₹16,850.13** (−₹3,400, the extra ₹850 × 4). All other claims unchanged. No Paid claim affected. Analytics archive unchanged after the delete.
+- Order: apply 0068 → push the app → run the clean-up with `--apply` → (later) `--delete-photos`.
+
+**Status:** built and dry-run verified; awaiting go-ahead to apply, push and clean up.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

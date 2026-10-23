@@ -67,12 +67,13 @@ export async function adminGetTravelPhotoUrl(token, path) {
 // ---------------------------------------------------------------------------
 
 export async function employeeAddTravelVisit(token, empId, {
-  date, lat, lon, accuracyM, siteNote, photoPath, expenseNote, expenseAmount, expensePhotoPath,
+  date, lat, lon, accuracyM, siteNote, photoPath, expenseNote, expenseAmount, expensePhotoPath, clientTicket,
 }) {
   const { data, error } = await supabase.rpc('employee_add_travel_visit', {
     p_token: token, p_emp_id: empId, p_date: date, p_lat: lat, p_lon: lon,
     p_accuracy_m: accuracyM ?? null, p_site_note: siteNote, p_photo_path: photoPath,
     p_expense_note: expenseNote || null, p_expense_amount: expenseAmount ?? null, p_expense_photo_path: expensePhotoPath || null,
+    p_client_ticket: clientTicket || null,
   })
   if (error) throw error
   return rowToTravelVisit(data)
@@ -278,10 +279,11 @@ export async function adminMarkTravelClaimPaid(token, claimId) {
 
 // The bill photo is uploaded first (same private bucket, same retry path as visit receipts), then
 // this saves the row. Location is best-effort — null when the signal was too weak to get one.
-export async function employeeAddTravelExpense(token, empId, { category, description, amount, photoPath, lat, lon, accuracyM }) {
+export async function employeeAddTravelExpense(token, empId, { category, description, amount, photoPath, lat, lon, accuracyM, clientTicket }) {
   const { data, error } = await supabase.rpc('employee_add_travel_expense', {
     p_token: token, p_emp_id: empId, p_category: category, p_amount: amount, p_photo_path: photoPath,
     p_lat: lat ?? null, p_lon: lon ?? null, p_accuracy_m: accuracyM ?? null, p_description: description || null,
+    p_client_ticket: clientTicket || null,
   })
   if (error) throw error
   return rowToTravelExpense(data)

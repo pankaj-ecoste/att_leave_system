@@ -356,6 +356,7 @@ export function rowToTravelVisit(row) {
     // once present; effectiveLegKm() in lib/travelPoints.js is the one place that
     // decides which number to actually show.
     roadLegKm: row.road_leg_km != null ? Number(row.road_leg_km) : null,
+    clientTicket: row.client_ticket || null,
     expenseNote: row.expense_note || null,
     expenseAmount: row.expense_amount != null ? Number(row.expense_amount) : null,
     expensePhotoPath: row.expense_photo_path || null,
@@ -457,6 +458,7 @@ export function rowToTravelExpense(row) {
     date: row.date,
     capturedAt: row.captured_at,
     category: row.category,
+    clientTicket: row.client_ticket || null,
     description: row.description || null,
     amount: Number(row.amount),
     photoPath: row.photo_path,

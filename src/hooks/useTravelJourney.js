@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getLocation } from './useGeolocation'
 import {
   employeeAddTravelVisit, employeeGetTravelJourney, employeeGetTravelSummary,
@@ -9,6 +9,7 @@ import {
 } from '../api/travel'
 import { withRetry, friendlySaveError, shrinkImage } from '../lib/travelUpload'
 import { todayIST } from '../lib/datetime'
+import { makeTicketStore } from '../lib/saveTicket'
 
 // plan.md §28 — employee side of Travel Allowance journey logging. Only meaningful for
 // Field / Office+Field staff (requiresFieldNote(workMode) in lib/constants.js already
@@ -80,7 +81,7 @@ export function useTravelJourney(token, empId) {
   // without a receipt file, but the UI (MyJourney.jsx) already enforces this before
   // ever calling addVisit, so the error path here is a defensive backstop, not the
   // primary guard.
-  async function addVisit(file, siteNote, expense) {
+  async function saveVisitNow(file, siteNote, expense, clientTicket) {
     setLocationStatus('Getting your location...')
     return new Promise((resolve, reject) => {
       getLocation(async (_label, err, meta) => {
@@ -109,6 +110,7 @@ export function useTravelJourney(token, empId) {
             date: todayIST(), lat: meta.lat, lon: meta.lon, accuracyM: meta.accuracy,
             siteNote, photoPath,
             expenseNote: expense?.note || null, expenseAmount: expense?.amount ?? null, expensePhotoPath,
+            clientTicket,
           }
           // The save itself is NOT blindly retried: if the server saved it but the reply was
           // lost, a retry would create a duplicate. So after a network failure we first check
@@ -118,8 +120,9 @@ export function useTravelJourney(token, empId) {
             visit = await withRetry(() => employeeAddTravelVisit(token, empId, payload), { onRetry: note })
           } catch (e) {
             const saved = await employeeGetTravelJourney(token, empId).catch(() => null)
-            if (saved?.some(v => v.photoPath === photoPath)) {
-              visit = saved.find(v => v.photoPath === photoPath)
+            const mine = v => v.photoPath === photoPath || v.clientTicket === clientTicket
+            if (saved?.some(mine)) {
+              visit = saved.find(mine)
             } else {
               throw e
             }
@@ -151,7 +154,7 @@ export function useTravelJourney(token, empId) {
   // selfie, no site, no distance. Location is best-effort: a weak signal on a highway must not stop
   // someone logging a toll, and the bill photo is the real evidence. The server rejects it unless
   // the person is punched in and not yet punched out.
-  async function addExpense({ category, description, amount, file }) {
+  async function saveExpenseNow({ category, description, amount, file }, clientTicket) {
     const meta = await new Promise(resolve => {
       getLocation((_label, err, m) => resolve(err ? null : m))
     })
@@ -162,7 +165,7 @@ export function useTravelJourney(token, empId) {
       setLocationStatus('Saving...')
       const photo = await shrinkImage(file)
       photoPath = await withRetry(() => uploadTravelReceipt(photo), { onRetry: note })
-      const payload = { category, description, amount, photoPath, lat: meta?.lat, lon: meta?.lon, accuracyM: meta?.accuracy }
+      const payload = { category, description, amount, photoPath, lat: meta?.lat, lon: meta?.lon, accuracyM: meta?.accuracy, clientTicket }
       let saved
       try {
         saved = await withRetry(() => employeeAddTravelExpense(token, empId, payload), { onRetry: note })
@@ -170,7 +173,7 @@ export function useTravelJourney(token, empId) {
         // Same rule as visits: never blindly re-send a save whose reply may have been lost (it
         // could duplicate the expense) — first check whether this bill was already saved.
         const now = await employeeGetTravelExpenses(token, empId).catch(() => null)
-        const found = now?.find(x => x.photoPath === photoPath)
+        const found = now?.find(x => x.photoPath === photoPath || x.clientTicket === clientTicket)
         if (!found) throw e
         saved = found
       }
@@ -186,6 +189,44 @@ export function useTravelJourney(token, empId) {
     } finally {
       setAddingExpense(false)
       setLocationStatus('')
+    }
+  }
+
+  // plan.md §52 — one save at a time, locked at the FIRST tap (the old code only locked after the
+  // GPS wait, so a second tap during that wait started a second save and the same visit was paid
+  // twice). An extra tap while a save is running does nothing and returns null (the caller keeps
+  // the form open). Each attempt also carries a ticket: tapping again or retrying after a weak-signal
+  // failure re-sends the SAME ticket, so the server hands back the first save instead of making a second.
+  const savingVisitRef = useRef(false)
+  const savingExpenseRef = useRef(false)
+  const visitTickets = useRef(makeTicketStore(() => crypto.randomUUID())).current
+  const expenseTickets = useRef(makeTicketStore(() => crypto.randomUUID())).current
+
+  async function addVisit(file, siteNote, expense) {
+    if (savingVisitRef.current) return null
+    savingVisitRef.current = true
+    setAddingVisit(true)
+    try {
+      const visit = await saveVisitNow(file, siteNote, expense, visitTickets.get(file))
+      visitTickets.clear()
+      return visit
+    } finally {
+      savingVisitRef.current = false
+      setAddingVisit(false)
+    }
+  }
+
+  async function addExpense(input) {
+    if (savingExpenseRef.current) return null
+    savingExpenseRef.current = true
+    setAddingExpense(true)
+    try {
+      const saved = await saveExpenseNow(input, expenseTickets.get(input.file))
+      expenseTickets.clear()
+      return saved
+    } finally {
+      savingExpenseRef.current = false
+      setAddingExpense(false)
     }
   }
 

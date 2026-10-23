@@ -80,8 +80,9 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     if (problem) { setExpErr(problem); return }
     try {
       setExpErr('')
-      await addExpense({ category: expCategory, description: expDescription.trim(), amount: Number(expAmount), file: expFile })
-      resetExpForm()
+      // null = a save was already running (an extra tap): leave the form as it is.
+      const saved = await addExpense({ category: expCategory, description: expDescription.trim(), amount: Number(expAmount), file: expFile })
+      if (saved) resetExpForm()
     } catch (e) {
       setExpErr(e.message)
     }
@@ -123,8 +124,9 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
     }
     try {
       setErr('')
-      await addVisit(pendingFile, siteNote.trim(), hasExpense ? { note: expenseNote.trim(), amount: Number(expenseAmount), file: expenseFile } : null)
-      resetForm()
+      // null = a save was already running (an extra tap): leave the form as it is.
+      const saved = await addVisit(pendingFile, siteNote.trim(), hasExpense ? { note: expenseNote.trim(), amount: Number(expenseAmount), file: expenseFile } : null)
+      if (saved) resetForm()
     } catch (e) {
       setErr(e.message)
     }
