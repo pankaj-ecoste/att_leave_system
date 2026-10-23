@@ -457,6 +457,7 @@ export function rowToTravelExpense(row) {
     date: row.date,
     capturedAt: row.captured_at,
     category: row.category,
+    description: row.description || null,
     amount: Number(row.amount),
     photoPath: row.photo_path,
     lat: row.lat != null ? Number(row.lat) : null,

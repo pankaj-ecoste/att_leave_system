@@ -71,4 +71,13 @@ describe('buildTravelReportWorkbook — standalone expenses (plan.md §48)', () 
     })
     expect(totalExpense).toBe(40)
   })
+
+  it('shows "Other – description" in the note column', () => {
+    const other = { id: 'x3', date: '2026-10-01', capturedAt: '2026-10-01T10:00:00Z', category: 'Other', description: 'parking', amount: 60 }
+    const { wb } = buildTravelReportWorkbook({
+      employee, dates: ['2026-10-01'], journeyByDate: {}, attnByDate: {}, rate: 5, expensesByDate: { '2026-10-01': [other] },
+    })
+    const row = XLSX.utils.sheet_to_json(wb.Sheets['Day-wise Journey'])[0]
+    expect(row['Expense Note']).toBe('Other – parking')
+  })
 })

@@ -151,7 +151,7 @@ export function useTravelJourney(token, empId) {
   // selfie, no site, no distance. Location is best-effort: a weak signal on a highway must not stop
   // someone logging a toll, and the bill photo is the real evidence. The server rejects it unless
   // the person is punched in and not yet punched out.
-  async function addExpense({ category, amount, file }) {
+  async function addExpense({ category, description, amount, file }) {
     const meta = await new Promise(resolve => {
       getLocation((_label, err, m) => resolve(err ? null : m))
     })
@@ -162,7 +162,7 @@ export function useTravelJourney(token, empId) {
       setLocationStatus('Saving...')
       const photo = await shrinkImage(file)
       photoPath = await withRetry(() => uploadTravelReceipt(photo), { onRetry: note })
-      const payload = { category, amount, photoPath, lat: meta?.lat, lon: meta?.lon, accuracyM: meta?.accuracy }
+      const payload = { category, description, amount, photoPath, lat: meta?.lat, lon: meta?.lon, accuracyM: meta?.accuracy }
       let saved
       try {
         saved = await withRetry(() => employeeAddTravelExpense(token, empId, payload), { onRetry: note })

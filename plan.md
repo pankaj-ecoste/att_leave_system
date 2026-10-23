@@ -3623,6 +3623,24 @@ under its old name) — 90/90 reachable now.
 **Not yet seen on a real device:** same honest gap as §50 — the real paid line has
 never been watched rendering for an actual paid claim, since none exist yet.
 
+## 49. Travel expenses — "Other" needs a free-text description (field staff, 2026-10-23)
+
+**Ask:** staff saw only a fixed dropdown (Toll / Lunch / Other) and wanted to say what an "Other" expense was.
+
+**Decisions (confirmed with admin 2026-10-23):**
+1. Dropdown stays Toll / Lunch / Other (HR can still total tolls and lunches cleanly). Choosing **Other** shows a required text box ("What was this for?", e.g. parking, tea, tyre repair), max 100 characters.
+2. Stored in a new optional `travel_expenses.description` column (additive; existing rows stay as they are, description empty). Only kept when the type is Other.
+3. Shown beside the expense on staff / manager / admin screens and in the report's note column as `Other – parking`.
+4. Enforced on the server too, not just the form.
+
+**Rejected:** dropping the dropdown for pure free text — reports could no longer be totalled by Toll or Lunch and spellings would differ.
+
+**Migration 0067:** add the column; replace `employee_add_travel_expense` with a version that takes `p_description` (old 8-argument version dropped so there is only one; the new parameter has a default, so an older app screen that does not send it keeps working for Toll and Lunch). Existing data untouched. Same guardrails as 0066: dry run first, unrelated functions must be byte-identical.
+
+**Built 2026-10-23 (not yet applied or pushed):** migration `0067_travel_expense_description.sql`; dry run (`scripts/migrations/apply-0067-travel-expense-description.mjs`, rolls back by default, `--apply` commits) passes on real data — 20 unrelated functions byte-identical, only one `employee_add_travel_expense` left, Other without text / spaces / over 100 characters rejected, Toll never keeps text, an older app screen still works for Lunch and is refused for a bare Other. App: text box appears when Other is chosen, description shown on all three screens and in the report as `Other – parking`. 231 tests pass (20 new), build clean. Order: apply 0067 BEFORE the new app goes live (the new screen sends the extra field).
+
+**Status:** built and dry-run verified; awaiting apply + push.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

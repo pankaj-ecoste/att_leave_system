@@ -8,7 +8,7 @@ import { attnKey } from '../../api/mappers'
 import { dayPoints } from '../../lib/travelPoints'
 import { TravelClaimCard } from './TravelClaimCard'
 import { TravelExpenseList } from '../../components/TravelExpenseList'
-import { EXPENSE_CATEGORIES, validateExpenseInput, groupExpensesByDate, allJourneyDates } from '../../lib/travelExpenses'
+import { EXPENSE_CATEGORIES, MAX_DESCRIPTION_LENGTH, validateExpenseInput, groupExpensesByDate, allJourneyDates } from '../../lib/travelExpenses'
 
 // Only fetched when a map is actually opened (plan.md §28 decision 9).
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
@@ -37,6 +37,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
   // plan.md §48 — standalone "+ Add Expense" (toll / lunch / other) form, separate from a visit's own optional expense.
   const [showExpForm, setShowExpForm] = useState(false)
   const [expCategory, setExpCategory] = useState('')
+  const [expDescription, setExpDescription] = useState('')
   const [expAmount, setExpAmount] = useState('')
   const [expFile, setExpFile] = useState(null)
   const [expPreview, setExpPreview] = useState(null)
@@ -65,7 +66,7 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
   }, [expFile])
 
   function resetExpForm() {
-    setShowExpForm(false); setExpCategory(''); setExpAmount(''); setExpFile(null); setExpErr('')
+    setShowExpForm(false); setExpCategory(''); setExpDescription(''); setExpAmount(''); setExpFile(null); setExpErr('')
   }
 
   function onStandaloneFileChosen(e) {
@@ -75,11 +76,11 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
   }
 
   async function saveExpense() {
-    const problem = validateExpenseInput({ category: expCategory, amount: expAmount, hasPhoto: !!expFile })
+    const problem = validateExpenseInput({ category: expCategory, description: expDescription, amount: expAmount, hasPhoto: !!expFile })
     if (problem) { setExpErr(problem); return }
     try {
       setExpErr('')
-      await addExpense({ category: expCategory, amount: Number(expAmount), file: expFile })
+      await addExpense({ category: expCategory, description: expDescription.trim(), amount: Number(expAmount), file: expFile })
       resetExpForm()
     } catch (e) {
       setExpErr(e.message)
@@ -176,6 +177,14 @@ export function MyJourney({ currentUser, attendance, journey, summary, settlemen
                 value={expAmount} onChange={e => setExpAmount(e.target.value)} placeholder="Amount (₹) *"
               />
             </div>
+            {expCategory === 'Other' && (
+              <input
+                type="text" maxLength={MAX_DESCRIPTION_LENGTH}
+                className="w-full mt-2 bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
+                value={expDescription} onChange={e => setExpDescription(e.target.value)}
+                placeholder="What was this for? (e.g. parking, tyre repair) *"
+              />
+            )}
             <div className="flex items-center gap-2 mt-2">
               {expPreview && <img src={expPreview} alt="Bill preview" className="w-10 h-10 rounded-lg object-cover shrink-0" />}
               <Button variant="secondary" className="text-xs" onClick={() => standaloneInputRef.current?.click()}>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateExpenseInput, groupExpensesByDate, sumExpenses, allJourneyDates, dayExpenseTotal, EXPENSE_CATEGORIES } from './travelExpenses'
+import { validateExpenseInput, groupExpensesByDate, sumExpenses, allJourneyDates, dayExpenseTotal, expenseLabel, EXPENSE_CATEGORIES } from './travelExpenses'
 
 describe('validateExpenseInput', () => {
   const good = { category: 'Toll', amount: '120', hasPhoto: true }
@@ -43,5 +43,28 @@ describe('grouping and totals', () => {
   it('a day with only an expense still appears', () => expect(allJourneyDates([], ex)).toEqual(['2026-10-01', '2026-10-03']))
   it('day total = visit expenses + standalone expenses', () => {
     expect(dayExpenseTotal([{ expenseAmount: 40 }, { expenseAmount: null }], [{ amount: 10 }])).toBe(50)
+  })
+})
+
+describe('"Other" needs a description (plan.md §49)', () => {
+  const base = { amount: '50', hasPhoto: true }
+  it('rejects Other with no text or only spaces', () => {
+    expect(validateExpenseInput({ ...base, category: 'Other' })).toBe('Write what this expense was for')
+    expect(validateExpenseInput({ ...base, category: 'Other', description: '   ' })).toBe('Write what this expense was for')
+  })
+  it('accepts Other with text', () => expect(validateExpenseInput({ ...base, category: 'Other', description: 'parking' })).toBeNull())
+  it('rejects a description over 100 characters', () => {
+    expect(validateExpenseInput({ ...base, category: 'Other', description: 'x'.repeat(101) })).toBe('Keep the description under 100 characters')
+    expect(validateExpenseInput({ ...base, category: 'Other', description: 'x'.repeat(100) })).toBeNull()
+  })
+  it('Toll and Lunch need no text', () => {
+    expect(validateExpenseInput({ ...base, category: 'Toll' })).toBeNull()
+    expect(validateExpenseInput({ ...base, category: 'Lunch', description: '' })).toBeNull()
+  })
+  it('labels: plain type, or "Other – text"', () => {
+    expect(expenseLabel({ category: 'Toll', description: null })).toBe('Toll')
+    expect(expenseLabel({ category: 'Other', description: ' parking ' })).toBe('Other – parking')
+    expect(expenseLabel({ category: 'Other', description: '' })).toBe('Other')
+    expect(expenseLabel(undefined)).toBe('')
   })
 })

@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { effectiveLegKm, effectiveReturnLegKm } from './travelPoints'
 import { haversineMeters } from './geo'
 import { todayIST } from './datetime'
+import { expenseLabel } from './travelExpenses'
 
 // plan.md §46 — shared by admin's Travel.jsx and the staff claim flow in MyJourney.jsx, so
 // both produce the same file. Moved out of Travel.jsx unchanged in logic.
@@ -34,7 +35,7 @@ export function buildTravelReportWorkbook({ employee, dates, journeyByDate, attn
         const x = item.x
         rows.push({
           Date: date, Time: new Date(x.capturedAt).toLocaleTimeString(), Type: 'Expense', 'Site / Client': '',
-          'Distance (km)': '', Source: '', 'Expense Note': x.category, 'Expense Amount (₹)': x.amount.toFixed(2),
+          'Distance (km)': '', Source: '', 'Expense Note': expenseLabel(x), 'Expense Amount (₹)': x.amount.toFixed(2),
         })
         totalExpense += x.amount || 0
         continue
