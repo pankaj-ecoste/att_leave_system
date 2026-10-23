@@ -3641,6 +3641,26 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Status:** built and dry-run verified; awaiting apply + push.
 
+## 50. Travel report — one formatted sheet per person, and a date range for admin downloads (2026-10-23)
+
+**Ask:** the report came out as two plain sheets (day-wise, summary). Wanted: ONE sheet named after the employee, properly formatted, with the amount worked out day by day (distance × rate), and a total and final figure at the end. Also: admin's Download Report always gave everything — wanted a start-to-end date filter.
+
+**Decisions:**
+1. **One sheet, named with the employee's name** (Excel limits: 31 characters, no `: \ / ? * [ ]`). Header block at the top: report title, employee, emp #, rate tier, rate ₹/km, period.
+2. **Columns:** Date · Time · Type · Site / Client · Distance (km) · Source · Expense Type / Note · Expense (₹) · Distance Amount (₹) · Day Total (₹).
+3. **Each day** lists Punch In, visits, standalone expenses (time order), Punch Out, then a bold **Day total** row: day km, **day km × rate**, day expenses, day total.
+4. **At the end:** Total distance (km), Rate, Distance amount, Total expenses, **FINAL TOTAL (₹)**.
+5. **Rounding rule:** the final distance amount = total km × rate rounded once to 2 decimals — the same rule the claim uses (§46), so the sheet's final figure always equals the claim amount HR pays. A day's amount is rounded for display, so the day amounts can differ from the final by a few paise.
+6. Plain numbers, not live formulas (nothing asked for them; fewer ways to go subtly wrong). Numbers are real numbers (not text), so HR can sum or sort them.
+7. Styled with `exceljs` (already used for the attendance register; plain `xlsx` drops styling), **loaded only when a report is downloaded** so the staff app does not get heavier.
+8. **Admin date filter:** From / To date boxes beside Download Report in the employee's review. Filled with the full period by default; the file contains only days inside the range, its period line and file name show the range. From after To, or an empty range, is refused with a message. The on-screen list and the claim flow are unchanged. Staff claim downloads keep their fixed claim period.
+
+**No database change.** Front-end only.
+
+**Built 2026-10-23 (not yet pushed):** `lib/travelReport.js` now builds a plain data model (`buildTravelReportModel`) and writes it as one styled sheet (`buildReportWorkbook`, exceljs, imported only when a report is downloaded — separate chunk in the build). `lib/travelReportRange.js` filters by From/To. Times in the file are Indian time `hh:mm AM/PM` (visits and punches now look the same). Admin Travel review has From / To boxes next to Download Report (prefilled with the whole open period); staff claim downloads unchanged except they wait for the file before opening Gmail. Tests: 255 pass (44 new/rewritten for this and §48/§49), build clean. A sample file is at `C:\ecoste\backups\SAMPLE-travel-report-layout.xlsx`. Not click-tested in a browser; the formatting was checked through the file's cells, not by eye in Excel.
+
+**Status:** built; awaiting the admin's look at the sample, then push.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

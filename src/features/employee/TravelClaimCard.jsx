@@ -52,7 +52,7 @@ export function TravelClaimCard({ currentUser, attendance, journey, expenses = [
       const attnByDate = {}
       for (const d of periodDates) attnByDate[d] = attendance?.[attnKey(currentUser.id, d)]
       const periodLabel = `${claim.periodStart} to ${claim.periodEnd}`
-      const fileName = downloadTravelReportFile(`travel_allowance_${currentUser.empNum || 'staff'}_${claim.periodStart}_${claim.periodEnd}`, {
+      const fileName = await downloadTravelReportFile(`travel_allowance_${currentUser.empNum || 'staff'}_${claim.periodStart}_${claim.periodEnd}`, {
         employee: { name: currentUser.name, empNum: currentUser.empNum, taRateTier: claim.rateTier },
         dates: periodDates, journeyByDate, attnByDate, rate: claim.ratePerKm, periodLabel,
         expensesByDate: groupExpensesByDate(expenses.filter(x => inPeriod(x.date))),

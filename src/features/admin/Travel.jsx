@@ -11,6 +11,7 @@ import { dayPoints, effectiveLegKm } from '../../lib/travelPoints'
 import { downloadTravelReportFile, TIER_LABELS } from '../../lib/travelReport'
 import { TravelExpenseList } from '../../components/TravelExpenseList'
 import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
+import { filterReportRange } from '../../lib/travelReportRange'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
@@ -32,6 +33,9 @@ export function Travel({ token, travel, onAudit }) {
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [reportFrom, setReportFrom] = useState('')
+  const [reportTo, setReportTo] = useState('')
+  const [downloading, setDownloading] = useState(false)
   const [attnByDate, setAttnByDate] = useState({})
   const [settlements, setSettlements] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -80,6 +84,9 @@ export function Travel({ token, travel, onAudit }) {
         const dates = allJourneyDates(j, ex)
         dateRange = { from: dates[0], to: dates[dates.length - 1] }
       }
+      // Report filter starts as the whole open period; admin narrows it before downloading.
+      setReportFrom(dateRange?.from || '')
+      setReportTo(dateRange?.to || '')
       setAttnByDate(dateRange ? await fetchAttnByDate(row.empId, dateRange.from, dateRange.to) : {})
     } catch (e) {
       setMsg(e.message)
@@ -160,15 +167,24 @@ export function Travel({ token, travel, onAudit }) {
     return row.taRateTier === 'manager' ? taSettings.managerRatePerKm : taSettings.executiveRatePerKm
   }
 
-  function download(row) {
-    if (journey.length === 0 && expenses.length === 0) { setMsg('Nothing to download — review the employee first.'); return }
-    const byDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
-    downloadTravelReportFile(`travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}`, {
-      employee: { name: row.empName, empNum: row.empNum, taRateTier: row.taRateTier },
-      dates: allJourneyDates(journey, expenses), journeyByDate: byDate, attnByDate, rate: rateFor(row),
-      expensesByDate: groupExpensesByDate(expenses),
-      periodLabel: row.firstDate ? `${row.firstDate} to ${row.lastDate}` : '',
-    })
+  // plan.md §50 — one formatted sheet; only the days between the From and To boxes (both ends
+  // included, empty = no limit). The file's period line and name show what it really contains.
+  async function download(row) {
+    setMsg('')
+    const picked = filterReportRange({ from: reportFrom, to: reportTo, journey, expenses })
+    if (picked.error) { setMsg(picked.error); return }
+    setDownloading(true)
+    try {
+      await downloadTravelReportFile(`travel_allowance_${(row.empNum || row.empName).replace(/\s+/g, '_')}_${picked.rangeSuffix}`, {
+        employee: { name: row.empName, empNum: row.empNum, taRateTier: row.taRateTier },
+        dates: picked.dates, journeyByDate: picked.journeyByDate, attnByDate, rate: rateFor(row),
+        expensesByDate: picked.expensesByDate, periodLabel: picked.periodLabel,
+      })
+    } catch (e) {
+      setMsg(`Could not create the report: ${e.message}`)
+    } finally {
+      setDownloading(false)
+    }
   }
 
   // plan.md §46 — Submitted -> Paid. Replaces the instant Settle & Pay.
@@ -340,8 +356,20 @@ This removes those days' photos and points from the staff and admin panels. Only
                           </p>
                         ))}
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
-                          <Button variant="secondary" className="text-xs" disabled={journey.length === 0 && expenses.length === 0} onClick={() => download(row)}>
-                            ⬇ Download Report
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <label className="text-white/50 text-xs">From</label>
+                            <input
+                              type="date" value={reportFrom} onChange={e => setReportFrom(e.target.value)}
+                              className="bg-white/5 border border-white/15 rounded-xl px-2 py-1.5 text-white text-xs"
+                            />
+                            <label className="text-white/50 text-xs">To</label>
+                            <input
+                              type="date" value={reportTo} onChange={e => setReportTo(e.target.value)}
+                              className="bg-white/5 border border-white/15 rounded-xl px-2 py-1.5 text-white text-xs"
+                            />
+                          </div>
+                          <Button variant="secondary" className="text-xs" disabled={downloading || (journey.length === 0 && expenses.length === 0)} onClick={() => download(row)}>
+                            {downloading ? 'Preparing...' : '⬇ Download Report'}
                           </Button>
                           {refining && <span className="text-indigo-300 text-xs">Refining road distances...</span>}
                         </div>
