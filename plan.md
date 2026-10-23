@@ -3521,6 +3521,40 @@ phone this session. Ask Himanshu to retry on Wi-Fi once and on mobile data once 
 
 **Status:** built and dry-run verified; awaiting go-ahead to apply 0066 and push.
 
+## 49. Repeated "not your registered device" — Metamask staff (Harsh Sharma, Mukul Yadav) (2026-10-23)
+
+**Problem (HR, 2026-10-23):** Harsh Sharma raises a device-reset request almost daily and says he uses the same phone; after each reset the device is blocked again within days. Mukul Yadav (Metamask) too.
+
+**Findings (read-only audit-log review, nothing changed):**
+- Harsh: 5 resets; every note since migration 0058 is `iPhone Safari browser-tab; persist:no`. Blocks begin with `id:new` (browser forgot its id), then `id:known`. Re-bound 10-21, blocked again 10-23. On 10-19 he was bound `id:known` at 14:21 and blocked `id:new` at 14:22 — two separate storage areas within one minute.
+- Mukul: 9 resets in 5 weeks, always Android Chrome tab, blocked 1–5 days after each re-bind with `id:new`. His few "Linux Chrome" rows sit within a minute of Android rows with the same id → most likely the same phone with "Desktop site" ticked, NOT proven a second device (this softens the two-phones reading in the 2026-10-07 finding). Reset 2026-10-23 10:57, not yet re-bound at time of writing.
+- **Company split:** Metamask 22 of 28 staff ever blocked, 33 resets (~1.2 per head); Asma Traexim 41 of 114, 29 resets (~0.25 per head). Metamask holds 7 of the 12 top-reset rows. Mixed iPhone + Android, one company → points to something shared at Metamask (a different link/address, a Private tab habit, an office cleaner/policy), not individual phones.
+- Why §38 did not help them: the id's three copies (localStorage, IndexedDB, script-written cookie) are all ordinary website data — one wipe or one different address removes all three. No `restored-from` entry exists for either person. All Safari/Chrome tabs report `persist:no`.
+- The one home-screen iPhone user in the log (Sameer Ansari) has a `restored` entry and zero blocks — one example, but consistent with installed-app storage being sturdier.
+
+**Constraints kept (unchanged decisions):** device binding stays a HARD block (§18/§38); NO self-service "reset my device" button; no auto-accept of a "similar looking" phone.
+
+**Plan — in order, each step stands on its own:**
+1. **Diagnostic note (small).** Add to the login device note: the web address the app was opened from (origin), a Private-tab/storage-available flag. Client-only + audit text; the note is already sanitised and length-capped (0058), bind/deny logic untouched. Then re-run the per-person timeline after 1–2 days — this says whether Metamask staff use a different link.
+2. **Canonical link (small).** If the app is opened from any address other than `APP_URL` (`src/lib/constants.js`), send the person to the proper address before login. Only useful if step 1 shows more than one address; HR to confirm which link Metamask staff were given.
+3. **Install-the-app prompt (medium).** Android: use the browser's install prompt; iPhone: show "Add to Home Screen" steps. Installed apps keep storage far more safely (Android Chrome grants installed apps persistent storage; home-screen iPhone apps have their own). Needs a one-time HR reset because the installed app has separate storage from the tab. Check the existing manifest/service worker first.
+4. **Server-set cookie (medium, partial).** A cookie set by our own Vercel function (HttpOnly) lasts much longer than the script-written one in Safari/Chrome but is still removed by "clear website data". Only worth doing if steps 1–3 leave gaps.
+5. **Passkeys, per-employee opt-in (large, ~1–2 days).** HR ticks a flag in the Employees tab; that person registers the phone once (Face ID/passcode) and every login proves the phone via WebAuthn. The key lives in the phone's keychain, not website data — immune to clearing Safari, tabs and Private mode, and a colleague's phone does not hold it, so it stays a hard block. Needs iOS 16+ / current Android; others stay on the current method. Needs: new table, Vercel function for the server check, register + login steps, fallback so nobody is locked out of a normal login. Would get its own migration, plan section, tests and a rolled-back dry run (as §46/§48). Reserve for anyone still blocked after steps 1–3.
+6. **Clearer messages + admin visibility (small).** Denial message says why (Private tab / wrong link / not the home-screen icon). Admin Reset screen shows the registered phone type (and when bound) so HR can tell a wrong reset from a real one — the readable-label idea from the 2026-10-07 finding.
+
+**Rejected:** self-service reset; automatic acceptance of a similar-looking phone (a colleague with the same model would pass — defeats the point); relaxing the check for named staff without proof (contradicts the hard-block decision).
+
+**Open questions for HR:** (a) which link / QR code / shortcut were Metamask staff given, and are any old links still in use? (b) Do Metamask phones run any cleaner, "security" app or managed-device policy? (c) Do Harsh/Mukul use Private tabs or open the app from links inside other apps?
+
+**Built 2026-10-23 (steps 1 and 6, client-only; NOT committed or pushed yet):**
+- No migration, no database function touched, bind/deny logic untouched. Files: `src/lib/deviceIdentity.js` (note gets optional `host:` and `store:`; new `safeHost`, `denialHint`), `src/lib/deviceId.js` (records which stores accepted the id; `getDenialHint()`), `src/features/auth/LoginScreen.jsx` (original denial sentence kept, one specific hint appended when there is one).
+- Note stays under the server's 120-char cap in the realistic worst case; in the rarest longest case the server trims only the new tail.
+- Hint order: wrong web address → in-app browser → "browser has no saved record" (new id, not home-screen app) → nothing. Advice only; never changes who gets in.
+- Tests: 222 pass (11 new); production build OK. Not click-tested in a browser.
+- After deploy: wait 1–2 days, then read the `host:` and `store:` values in the audit notes for Metamask staff (run `scripts/diagnostics/device-binding-denials.mjs` or the per-person timeline). Then decide steps 2, 3, 5.
+
+**Status:** steps 1 and 6 built and tested, awaiting go-ahead to commit and push; steps 2, 3, 4 wait for what step 1 shows; step 5 held in reserve. (The admin-screen "registered phone type" part of step 6 is NOT built — it needs a new column and changes to the Reset function, which is held back to avoid touching live functions.)
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

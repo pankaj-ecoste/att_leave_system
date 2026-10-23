@@ -1,4 +1,5 @@
-import { pickDeviceId, describeClient, buildDeviceNote } from './deviceIdentity'
+import { pickDeviceId, describeClient, buildDeviceNote, denialHint } from './deviceIdentity'
+import { APP_URL } from './constants'
 
 const STORAGE_KEY = 'hrms_device_id'
 const IDB_NAME = 'hrms'
@@ -106,6 +107,7 @@ export function initDeviceId() {
           id: saved.some(Boolean) ? id : null,
           fresh,
           restoredFrom: found.source && found.source !== 'localStorage' ? found.source : null,
+          stored: (saved[0] ? 'L' : '') + (saved[2] ? 'I' : '') + (saved[1] ? 'C' : '') || 'none', // plan.md §49
           persisted: await requestPersistence(),
         }
       } catch {
@@ -135,14 +137,34 @@ export function getDeviceId() {
 // device block was (new id vs restored vs known, and how the app was opened).
 export function getDeviceNote() {
   try {
-    const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true
     return buildDeviceNote({
       fresh: state ? state.fresh : false,
       restoredFrom: state ? state.restoredFrom : null,
       persisted: state ? state.persisted : undefined,
-      client: describeClient(navigator.userAgent, standalone),
+      client: describeClientNow(),
+      host: location.host,
+      stored: state ? state.stored : undefined,
     })
   } catch {
     return null
+  }
+}
+
+function describeClientNow() {
+  const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || navigator.standalone === true
+  return describeClient(navigator.userAgent, standalone)
+}
+
+// plan.md §49 — a specific "what to try" sentence for the device-denied message ('' = none).
+export function getDenialHint() {
+  try {
+    return denialHint({
+      fresh: state ? state.fresh : false,
+      client: describeClientNow(),
+      host: location.host,
+      appHost: new URL(APP_URL).host,
+    })
+  } catch {
+    return ''
   }
 }

@@ -4,6 +4,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
 import { PinInput } from '../../components/ui/PinInput'
+import { getDenialHint } from '../../lib/deviceId'
 
 // Company -> employee picker -> PIN entry. The employee list here is intentionally the
 // public directory (name/company/job title only, no email/phone) — see the RLS notes
@@ -30,7 +31,7 @@ export function LoginScreen({ directory, employeeLogin, onLoggedIn, onShowAdminL
     setBusy(false)
     if (!result.token) {
       if (result.error === 'device_denied') {
-        setError('Access Denied — this is not your registered device. Contact HR to reset your device.')
+        setError(['Access Denied — this is not your registered device. Contact HR to reset your device.', getDenialHint()].filter(Boolean).join(' '))
       } else if (result.error === 'locked') {
         const until = result.lockedUntil ? new Date(result.lockedUntil).toLocaleTimeString() : 'a few minutes'
         setError(`Too many incorrect attempts. Try again after ${until}.`)

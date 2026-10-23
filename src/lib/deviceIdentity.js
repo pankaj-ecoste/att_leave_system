@@ -49,8 +49,41 @@ export function describeClient(userAgent, standalone) {
 // says WHY. id: new = this browser had no id at all (storage wiped, private tab, a truly
 // different phone, or first ever visit); restored-from-X = the main copy was gone but a
 // backup copy saved the day; known = the normal case.
-export function buildDeviceNote({ fresh, restoredFrom, persisted, client }) {
+//
+// plan.md §49 — two optional extras, appended AFTER the existing parts so the server's 120-char
+// cap can only ever trim the new tail: host = which web address the app was opened from
+// (browser storage is separate per address), stored = which storage areas accepted the id
+// (L localStorage, I IndexedDB, C cookie; "none" = the browser refused all three).
+export function buildDeviceNote({ fresh, restoredFrom, persisted, client, host, stored }) {
   const id = fresh ? 'new' : restoredFrom ? `restored-from-${restoredFrom}` : 'known'
   const persist = persisted === true ? 'yes' : persisted === false ? 'no' : 'unknown'
-  return `id:${id}; persist:${persist}; ${client}`
+  let note = `id:${id}; persist:${persist}; ${client}`
+  const h = safeHost(host)
+  if (h) note += `; host:${h}`
+  if (typeof stored === 'string' && stored) note += `; store:${stored}`
+  return note
+}
+
+// Only plain host characters, capped — the server strips anything else anyway; this keeps the
+// note readable and short.
+export function safeHost(host) {
+  return String(host || '').toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 30)
+}
+
+// plan.md §49 — one extra sentence for the "not your registered device" message, chosen from
+// what we know about HOW the app was opened. Advice only: it never changes who is allowed in.
+// '' means "nothing specific to add".
+export function denialHint({ fresh, client, host, appHost }) {
+  const h = safeHost(host)
+  const official = safeHost(appHost)
+  if (h && official && h !== official) {
+    return `You opened the app from ${h}. Please use the official link (${official}) and try again.`
+  }
+  if (/InAppBrowser/.test(client || '')) {
+    return 'You opened the app inside another app. Open it in Chrome or Safari, or from your home-screen icon, and try again.'
+  }
+  if (fresh && !/home-screen-app/.test(client || '')) {
+    return 'This browser has no saved record of your phone. If this is your own phone, avoid Private tabs, open the app the same way each time, and tell HR how you opened it.'
+  }
+  return ''
 }
