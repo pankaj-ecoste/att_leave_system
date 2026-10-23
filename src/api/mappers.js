@@ -357,6 +357,7 @@ export function rowToTravelVisit(row) {
     // decides which number to actually show.
     roadLegKm: row.road_leg_km != null ? Number(row.road_leg_km) : null,
     clientTicket: row.client_ticket || null,
+    claimId: row.claim_id || null,
     expenseNote: row.expense_note || null,
     expenseAmount: row.expense_amount != null ? Number(row.expense_amount) : null,
     expensePhotoPath: row.expense_photo_path || null,

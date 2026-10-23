@@ -42,7 +42,10 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
     ? haversineMeters(lastVisit.lat, lastVisit.lon, attendanceRecord.outLat, attendanceRecord.outLon) / 1000
     : 0
   const returnLeg = effectiveReturnLegKm(attendanceRecord, returnFallbackKm)
-  const dayKm = visits.reduce((s, v) => s + effectiveLegKm(v).km, 0) + (attendanceRecord?.outTime ? returnLeg.km : 0)
+  // plan.md §53 — the way back to base counts only on a day that has at least one visit (the server never
+  // counts it otherwise), so a day with only expenses shows 0 km.
+  const hasVisits = visits.length > 0
+  const dayKm = visits.reduce((s, v) => s + effectiveLegKm(v).km, 0) + (attendanceRecord?.outTime && hasVisits ? returnLeg.km : 0)
 
   // Where each leg starts: punch-in for the first visit, the previous visit after that.
   // Same chain the distance itself is measured along, so a Google Maps cross-check of a
@@ -99,8 +102,11 @@ export function TravelDayChain({ visits, attendanceRecord, fetchPhotoUrl, onOpen
           <span className="w-12 h-12 rounded-lg bg-red-500/20 flex items-center justify-center text-red-300 text-xs font-bold shrink-0">OUT</span>
           <div className="flex-1 min-w-0">
             <p className="text-red-300 text-sm font-medium truncate">{attendanceRecord.outLocation || 'Punch Out'}</p>
-            <p className="text-white/30 text-xs">{attendanceRecord.outTime} · {returnLeg.km.toFixed(1)} km · <SourceBadge source={returnLeg.source} /></p>
-            {attendanceRecord.outLat != null && (
+            <p className="text-white/30 text-xs">
+              {attendanceRecord.outTime}
+              {hasVisits && <> · {returnLeg.km.toFixed(1)} km · <SourceBadge source={returnLeg.source} /></>}
+            </p>
+            {hasVisits && attendanceRecord.outLat != null && (
               <p className="text-xs mt-0.5"><CheckOnGoogleMaps from={lastPoint} to={{ lat: attendanceRecord.outLat, lon: attendanceRecord.outLon }} /></p>
             )}
           </div>

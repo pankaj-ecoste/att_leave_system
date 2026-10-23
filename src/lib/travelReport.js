@@ -67,10 +67,16 @@ export function buildTravelReportModel({ employee, dates, journeyByDate, attnByD
     }
 
     if (record?.outTime) {
-      const fallbackKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
-      const returnLeg = effectiveReturnLegKm(record, fallbackKm)
-      lines.push({ kind: 'out', time: record.outTime, type: 'Punch Out', site: record.outLocation || '', km: returnLeg.km, source: SOURCE_LABELS[returnLeg.source] })
-      dayKm += returnLeg.km
+      // plan.md §53 — the way back to base counts only on a day that has at least one visit (the server
+      // never counts it otherwise). On a day with only expenses the Punch Out row still shows, with no km.
+      if (visits.length > 0) {
+        const fallbackKm = (lastLat != null && record.outLat != null) ? haversineMeters(lastLat, lastLon, record.outLat, record.outLon) / 1000 : 0
+        const returnLeg = effectiveReturnLegKm(record, fallbackKm)
+        lines.push({ kind: 'out', time: record.outTime, type: 'Punch Out', site: record.outLocation || '', km: returnLeg.km, source: SOURCE_LABELS[returnLeg.source] })
+        dayKm += returnLeg.km
+      } else {
+        lines.push({ kind: 'out', time: record.outTime, type: 'Punch Out', site: record.outLocation || '' })
+      }
     }
 
     const dayDistanceAmount = round2(dayKm * rate)

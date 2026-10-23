@@ -8,7 +8,8 @@ import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { adminFetchAttendance } from '../../api/attendance'
 import { adminGetTravelPhotoUrl } from '../../api/travel'
 import { dayPoints, effectiveLegKm } from '../../lib/travelPoints'
-import { downloadTravelReportFile, TIER_LABELS } from '../../lib/travelReport'
+import { downloadTravelReportFile, buildTravelReportModel, TIER_LABELS } from '../../lib/travelReport'
+import { rowsOfClaim, groupByDate } from '../../lib/claimRows'
 import { TravelExpenseList } from '../../components/TravelExpenseList'
 import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 import { filterReportRange } from '../../lib/travelReportRange'
@@ -189,6 +190,34 @@ export function Travel({ token, travel, onAudit }) {
     }
   }
 
+  // plan.md §53 — a claim's report is built from the claim's OWN rows (claim_id), with the claim's own
+  // rate and tier, so it always matches the claim. (The date-range report above picks rows by date, which
+  // also lists a visit saved after the claim on its end date.) If the two ever disagree by more than ₹1
+  // the file is still produced, but the admin is told before paying.
+  async function downloadClaimReport(claim, row) {
+    setMsg('')
+    const mine = rowsOfClaim({ visits: journey, expenses, claimId: claim.id })
+    if (mine.dates.length === 0) { setMsg('This claim has no rows left to report on.'); return }
+    const args = {
+      employee: { name: row.empName, empNum: row.empNum, taRateTier: claim.rateTier },
+      dates: mine.dates, journeyByDate: groupByDate(mine.visits), attnByDate, rate: claim.ratePerKm,
+      expensesByDate: groupExpensesByDate(mine.expenses), periodLabel: `${claim.periodStart} to ${claim.periodEnd}`,
+    }
+    setDownloading(true)
+    try {
+      const model = buildTravelReportModel(args)
+      await downloadTravelReportFile(`travel_claim_${(row.empNum || row.empName).replace(/\s+/g, '_')}_${claim.periodStart}_${claim.periodEnd}`, args)
+      const diff = Math.round((model.totals.grandTotal - claim.amount) * 100) / 100
+      if (Math.abs(diff) > 1) {
+        setMsg(`⚠ The report totals ₹${model.totals.grandTotal.toFixed(2)} but the claim says ₹${claim.amount.toFixed(2)} (difference ₹${diff.toFixed(2)}). Check before paying.`)
+      }
+    } catch (e) {
+      setMsg(`Could not create the report: ${e.message}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   // plan.md §46 — Submitted -> Paid. Replaces the instant Settle & Pay.
   async function doMarkPaid(claim, empName) {
     if (!window.confirm(`Mark ${empName}'s claim ${claim.periodStart} to ${claim.periodEnd} (₹${claim.amount.toFixed(2)}) as PAID?
@@ -357,7 +386,10 @@ This removes those days' photos and points from the staff and admin panels. Only
                               <p className="text-amber-200 text-xs font-medium">Claim submitted — awaiting payment</p>
                               <p className="text-white/60 text-xs">{c.periodStart} to {c.periodEnd} · {c.totalKm.toFixed(1)} km + ₹{c.expenseAmount.toFixed(2)} expenses = <span className="text-white font-medium">₹{c.amount.toFixed(2)}</span></p>
                             </div>
-                            <Button className="text-xs" onClick={() => doMarkPaid(c, row.empName)}>Mark as Paid</Button>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button variant="secondary" className="text-xs" disabled={downloading} onClick={() => downloadClaimReport(c, row)}>⬇ Claim report</Button>
+                              <Button className="text-xs" onClick={() => doMarkPaid(c, row.empName)}>Mark as Paid</Button>
+                            </div>
                           </div>
                         ))}
                         {/* Paid claims: the detailed visits/expenses behind these are already gone

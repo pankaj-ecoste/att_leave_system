@@ -4,7 +4,8 @@ import { Button } from '../../components/ui/Button'
 import { attnKey } from '../../api/mappers'
 import { todayIST } from '../../lib/datetime'
 import { downloadTravelReportFile, claimEmailText, claimGmailUrl } from '../../lib/travelReport'
-import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
+import { groupExpensesByDate } from '../../lib/travelExpenses'
+import { rowsForNewClaim, firstUnclaimedDate, groupByDate } from '../../lib/claimRows'
 
 // plan.md §46 — staff pick an end date, submit a claim for the unclaimed days up to it, the
 // report downloads, and a pre-written email to HR opens in Gmail. Gmail can't receive the file
@@ -22,10 +23,10 @@ export function TravelClaimCard({ currentUser, attendance, journey, expenses = [
   // The detailed visits behind these are already gone (0065/0066) — one line each is
   // the whole point, not a full breakdown. Capped server-side to the 5 most recent (0067).
   const paid = allClaims.filter(c => c.status === 'Paid')
-  const claimedThrough = submitted.reduce((max, c) => (c.periodEnd > max ? c.periodEnd : max), '')
-  const unclaimedDates = allJourneyDates(journey, expenses.filter(x => !x.claimId))
-    .filter(d => !claimedThrough || d > claimedThrough)
-  const firstUnclaimed = unclaimedDates[0] || null
+  // plan.md §53 — "unclaimed" is decided the way the server decides it: rows with no claim yet. (The old
+  // "after the last claim's end date" rule hid a visit saved after a claim on its end date, and made the
+  // 5-day minimum look stricter than the server's.)
+  const firstUnclaimed = firstUnclaimedDate(journey, expenses)
   const minEnd = firstUnclaimed ? addDays(firstUnclaimed, 4) : null
   const today = todayIST()
 
@@ -43,19 +44,18 @@ export function TravelClaimCard({ currentUser, attendance, journey, expenses = [
     setBusy(true)
     try {
       const claim = await submitClaim(endDate)
-      const inPeriod = d => d >= claim.periodStart && d <= claim.periodEnd
-      const periodDates = allJourneyDates(journey, expenses).filter(inPeriod)
-      const journeyByDate = {}
-      for (const v of journey) {
-        if (v.date >= claim.periodStart && v.date <= claim.periodEnd) (journeyByDate[v.date] ||= []).push(v)
-      }
+      // The report holds exactly what this claim contains: the rows that had no claim yet, up to the
+      // end date (what the server just stamped) — not every row whose date happens to fall in the period.
+      const mine = rowsForNewClaim({ visits: journey, expenses, endDate: claim.periodEnd })
+      const periodDates = mine.dates
+      const journeyByDate = groupByDate(mine.visits)
       const attnByDate = {}
       for (const d of periodDates) attnByDate[d] = attendance?.[attnKey(currentUser.id, d)]
       const periodLabel = `${claim.periodStart} to ${claim.periodEnd}`
       const fileName = await downloadTravelReportFile(`travel_allowance_${currentUser.empNum || 'staff'}_${claim.periodStart}_${claim.periodEnd}`, {
         employee: { name: currentUser.name, empNum: currentUser.empNum, taRateTier: claim.rateTier },
         dates: periodDates, journeyByDate, attnByDate, rate: claim.ratePerKm, periodLabel,
-        expensesByDate: groupExpensesByDate(expenses.filter(x => inPeriod(x.date))),
+        expensesByDate: groupExpensesByDate(mine.expenses),
       })
       const { subject, body } = claimEmailText({
         name: currentUser.name, empNum: currentUser.empNum, periodStart: claim.periodStart, periodEnd: claim.periodEnd,

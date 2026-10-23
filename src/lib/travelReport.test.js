@@ -155,3 +155,22 @@ describe('buildReportWorkbook — the actual sheet', () => {
     expect(back.worksheets[0].name).toBe('Himanshu Bansal')
   })
 })
+
+describe('return leg only counts on a day with visits (plan.md §53)', () => {
+  const outRecord = { inTime: '09:00', inLocation: 'Office', inLat: 28.5, inLon: 77.1, outTime: '18:00', outLocation: 'Home', outLat: 28.5, outLon: 77.1, travelReturnRoadKm: 9.9 }
+  it('a day with only an expense adds no km, even though punch-out has a road distance', () => {
+    const m = buildTravelReportModel({
+      employee, rate, dates: ['2026-10-10'], journeyByDate: {}, attnByDate: { '2026-10-10': outRecord },
+      expensesByDate: { '2026-10-10': [{ id: 'x', date: '2026-10-10', capturedAt: '2026-10-10T07:00:00Z', category: 'Toll', description: null, amount: 100 }] },
+    })
+    expect(m.days[0].dayKm).toBe(0)
+    expect(m.totals).toMatchObject({ totalKm: 0, distanceAmount: 0, totalExpense: 100, grandTotal: 100 })
+    const out = m.days[0].lines.find(l => l.kind === 'out')
+    expect(out).toBeTruthy()
+    expect(out.km).toBeUndefined()
+  })
+  it('a day WITH a visit still counts the way back', () => {
+    const m = buildTravelReportModel({ employee, rate, dates: ['2026-10-10'], journeyByDate: { '2026-10-10': [{ ...day2visit, date: '2026-10-10' }] }, attnByDate: { '2026-10-10': outRecord } })
+    expect(m.days[0].dayKm).toBeCloseTo(7.5 + 9.9)
+  })
+})

@@ -3696,6 +3696,28 @@ never been watched rendering for an actual paid claim, since none exist yet.
 **APPLIED 2026-10-23:** migration 0068 committed (352 visits + 20 expenses untouched); app pushed (f11d1dc); clean-up committed — 50 duplicate rows deleted (352 → 302), Puneet 3–15 Oct claim ₹8,340.23 → ₹7,908.30, Anirudh 5–19 Oct claim ₹20,250.13 → ₹16,850.13, every other claim unchanged; analytics archive unchanged, archive trigger back on. Verified afterwards straight from production (one "Siddharth" row for Puneet, one "Airport" row with a single ₹850 for Anirudh, one "DPS School" with ₹50). Backups: `C:\ecoste\backups\travel-before-duplicate-cleanup-2026-10-23-12-23.json`.
 **Still open:** (a) the 55 photo files of the deleted copies are KEPT — remove later (HR to look at Anirudh's five ₹850 receipts first); the script's `--delete-photos` only works in the same run as `--apply`, so a later removal needs a small "paths from the backup file" step; (b) Mahesh · Icon, 10 Oct left for a person (copy 234 m away, ≈ ₹3, in no claim); (c) HR must be told the two claim amounts changed; (d) the new Save lock + ticket has not been watched on a real phone.
 
+## 53. Travel — a claim's report did not match the claim's distance (HR-reported 2026-10-23)
+
+**Report:** Anirudh Pratap Singh's claim says 827.7 km + ₹8,573.00 = ₹16,850.13, but the report HR generated for the same period showed 871.70 km (₹8,716.96) and a final ₹17,289.96. Expenses matched, distance did not.
+
+**Root cause (reproduced from his real data — the report builder gives exactly 871.70 km for 5–19 Oct):** the claim itself is right (827.71 km = the sum of the 10 days inside it). The report overstated it by 43.99 km for two separate reasons:
+1. **Rows picked by date, not by claim.** He submitted the claim at ~12:28 on 19 Oct (end date 19 Oct) and kept working; his 19 Oct afternoon visit (34.10 km) was saved AFTER the submission, so it is correctly not in the claim — but a report for "5–19 Oct" still lists it. The same overlap lists an earlier claim's rows again in a later claim's report.
+2. **A return trip counted on a day with no visits** (introduced with standalone expenses, §48): on 10 Oct he logged only expenses; the report (and the on-screen day list) still added a 9.88 km punch-in → punch-out "return leg". The server never counts a return leg without a visit that day.
+
+**Fix (front-end only, no database change):**
+1. A claim's report is built from the claim's OWN rows (`claim_id`), with the claim's own rate and tier. Admin gets a "Download claim report" button in the claim box; a mismatch of more than ₹1 between that report and the claim amount is shown as a warning instead of passing silently. The date-range report stays for general use (it covers whatever falls in those dates).
+2. A return leg counts only on a day that has at least one visit — in the report AND in the on-screen day list (`TravelDayChain`), matching the server.
+3. The staff claim flow selects its rows by claim membership too (unclaimed rows up to the end date), and "unclaimed dates" now come from rows with no `claim_id` — the same rule the server uses — instead of "after the last claim's end date" (which hid a visit saved after a claim on its end date and made the 5-day minimum look stricter than the server's).
+4. `claim_id` is now exposed on visits (it was only on expenses).
+
+**Not done (needs a decision):** forbidding a claim whose end date is today, so a half-finished day can never be split between a claim and the next one. It needs a server change in `employee_submit_travel_claim`.
+
+**No money is lost:** the 19 Oct visit stays unclaimed and goes into his next claim; the claim amount ₹16,850.13 stands.
+
+**Built 2026-10-23 (not yet pushed):** `lib/claimRows.js` (`rowsOfClaim`, `rowsForNewClaim`, `firstUnclaimedDate`, `groupByDate`); `claimId` on visits (mapper); report builder + `TravelDayChain` count the way back only on a day with a visit; admin "⬇ Claim report" button in each Submitted claim box (own rows, own rate and tier, warns when the report differs from the claim by more than ₹1); staff claim card selects rows by claim membership and takes "unclaimed" from `claim_id`. 288 tests pass (12 new), build clean. **Checked against production:** the claim report built from each claim's own rows equals the stored claim for all 7 claims (difference ₹0.00 each, including Puneet 3–15 Oct and Anirudh 5–19 Oct after the §52 clean-up).
+
+**Status:** built and verified; the "end date can't be today" rule is still undecided.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
