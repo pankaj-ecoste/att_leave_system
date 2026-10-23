@@ -322,7 +322,7 @@ This removes those days' photos and points from the staff and admin panels. Only
                   <div className="p-3 border-t border-white/10">
                     {detailLoading ? <p className="text-white/30 text-xs">Loading...</p> : (
                       <>
-                        {claims.filter(c => c.empId === row.empId).map(c => (
+                        {claims.filter(c => c.empId === row.empId && c.status === 'Submitted').map(c => (
                           <div key={c.id} className="flex items-center justify-between gap-3 flex-wrap p-3 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10">
                             <div>
                               <p className="text-amber-200 text-xs font-medium">Claim submitted — awaiting payment</p>
@@ -330,6 +330,14 @@ This removes those days' photos and points from the staff and admin panels. Only
                             </div>
                             <Button className="text-xs" onClick={() => doMarkPaid(c, row.empName)}>Mark as Paid</Button>
                           </div>
+                        ))}
+                        {/* Paid claims: the detailed visits/expenses behind these are already gone
+                            (0065/0066) — one line each is the whole point, not a full breakdown.
+                            Capped server-side to the 5 most recent per employee (0067). */}
+                        {claims.filter(c => c.empId === row.empId && c.status === 'Paid').map(c => (
+                          <p key={c.id} className="text-xs text-white/40 mb-1.5">
+                            {c.periodStart} to {c.periodEnd} · <span className="text-emerald-400/80">Paid</span> ₹{c.amount.toFixed(2)}
+                          </p>
                         ))}
                         <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <Button variant="secondary" className="text-xs" disabled={journey.length === 0 && expenses.length === 0} onClick={() => download(row)}>

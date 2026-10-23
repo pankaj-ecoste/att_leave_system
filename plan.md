@@ -3588,6 +3588,41 @@ shrink the 549 MB already stored, and it's separate from the orphaned-file probl
 found in the same review (§ — not yet numbered, 146 MB of photos attached to nothing,
 still growing as of 2026-10-21).
 
+## 51. Paid travel claims — one line instead of vanishing with no trace (2026-10-23)
+
+**Trigger:** while checking (read-only) that "Mark as Paid" really deletes the detailed
+data as designed, found that both `employee_get_travel_claims` and
+`admin_get_travel_claims` have only ever returned `status = 'Submitted'` claims
+(0062) — once a claim is paid, it doesn't just lose its detail, it vanishes from both
+screens completely, with no trace at all. Asked for: no full entry after payment, but
+not nothing either — one simple confirmation line, in both the admin panel and the
+staff screen.
+
+**Fix (migration 0067):** both functions now also return each employee's 5 most
+recent Paid claims (a per-employee cap via `row_number() over (partition by emp_id
+...)` on the admin side, so one prolific employee's history can't crowd out
+everyone else's), ordered with Submitted claims first, then Paid ones by most recent.
+Same signatures, same return shape as 0062 — a pure body change.
+
+Frontend: the admin "Review" panel and the staff travel-claim card both now split
+what they already receive by `status` — `Submitted` keeps the exact existing detailed
+box (admin: + the Mark as Paid button); `Paid` renders as one muted line
+(`2026-09-22 to 2026-09-30 · Paid ₹4351.43`), no button, no breakdown, since the
+detailed visits/photos behind it are already gone (§47/§49... see 0065/0066).
+
+**Verified:** since no claim has ever actually been marked Paid in production yet,
+the apply script creates 7 disposable fake Paid claims (10 days apart) and 1 fake
+Submitted claim for a real employee, inside a transaction it rolls back — confirmed
+live: exactly 5 of the 7 paid claims surface (the most recent 5, not an arbitrary 5),
+the oldest is correctly excluded, the newest is correctly included, and the Submitted
+claim is never affected by the cap. `npm run build`/`npm run test` (225 tests) and
+the schema guardrail all green. Smoke test: also fixed one unrelated stale entry
+found along the way (`fetch_directory`, locked down back in §46/0064, still listed
+under its old name) — 90/90 reachable now.
+
+**Not yet seen on a real device:** same honest gap as §50 — the real paid line has
+never been watched rendering for an actual paid claim, since none exist yet.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

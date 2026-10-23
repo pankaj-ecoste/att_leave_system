@@ -17,7 +17,11 @@ function addDays(iso, n) {
 }
 
 export function TravelClaimCard({ currentUser, attendance, journey, expenses = [], claims, submitClaim }) {
-  const submitted = claims || []
+  const allClaims = claims || []
+  const submitted = allClaims.filter(c => c.status === 'Submitted')
+  // The detailed visits behind these are already gone (0065/0066) — one line each is
+  // the whole point, not a full breakdown. Capped server-side to the 5 most recent (0067).
+  const paid = allClaims.filter(c => c.status === 'Paid')
   const claimedThrough = submitted.reduce((max, c) => (c.periodEnd > max ? c.periodEnd : max), '')
   const unclaimedDates = allJourneyDates(journey, expenses.filter(x => !x.claimId))
     .filter(d => !claimedThrough || d > claimedThrough)
@@ -103,6 +107,17 @@ export function TravelClaimCard({ currentUser, attendance, journey, expenses = [
               <span className="text-white/60">{c.periodStart} – {c.periodEnd} · {c.totalKm.toFixed(1)} km</span>
               <span className="text-amber-300 font-medium">₹{c.amount.toFixed(2)} · Submitted</span>
             </div>
+          ))}
+        </div>
+      )}
+
+      {paid.length > 0 && (
+        <div className="mt-3">
+          <p className="text-white/30 text-xs font-medium uppercase tracking-wide mb-1.5">Paid</p>
+          {paid.map(c => (
+            <p key={c.id} className="text-white/40 text-xs py-0.5">
+              {c.periodStart} – {c.periodEnd} · <span className="text-emerald-400/70">Paid</span> ₹{c.amount.toFixed(2)}
+            </p>
           ))}
         </div>
       )}

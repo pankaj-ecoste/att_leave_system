@@ -39,7 +39,7 @@ const TODAY = new Date().toISOString().slice(0, 10)
 // are called with a fake token/id on purpose: the goal is "the function exists and is
 // callable", not "the fake call succeeds". A clean 401-style rejection is a pass.
 const CALLS = [
-  ['fetch_directory', {}],
+  ['fetch_login_directory', {}],
   ['employee_login', { p_employee_id: FAKE_UUID, p_pin: '0000', p_device_id: 'smoke-test', p_device_note: null }],
   ['employee_logout', { p_token: FAKE_UUID }],
   ['employee_get_attendance', { p_token: FAKE_UUID, p_emp_id: FAKE_UUID }],
