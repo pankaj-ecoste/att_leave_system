@@ -12,6 +12,7 @@ import { downloadTravelReportFile, TIER_LABELS } from '../../lib/travelReport'
 import { TravelExpenseList } from '../../components/TravelExpenseList'
 import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 import { filterReportRange } from '../../lib/travelReportRange'
+import { filterByNameOrNumber } from '../../lib/nameSearch'
 
 const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({ default: m.JourneyMap })))
 
@@ -33,6 +34,7 @@ export function Travel({ token, travel, onAudit }) {
   const [expandedEmp, setExpandedEmp] = useState(null)
   const [journey, setJourney] = useState([])
   const [expenses, setExpenses] = useState([])
+  const [search, setSearch] = useState('')
   const [reportFrom, setReportFrom] = useState('')
   const [reportTo, setReportTo] = useState('')
   const [downloading, setDownloading] = useState(false)
@@ -201,6 +203,7 @@ This removes those days' photos and points from the staff and admin panels. Only
     }
   }
 
+  const shownRows = filterByNameOrNumber(overview, search, r => r.empName, r => r.empNum)
   const dates = allJourneyDates(journey, expenses)
   const expensesByDate = groupExpensesByDate(expenses)
   const journeyByDate = journey.reduce((acc, v) => { (acc[v.date] ||= []).push(v); return acc }, {})
@@ -301,15 +304,25 @@ This removes those days' photos and points from the staff and admin panels. Only
       </Card>
 
       <Card>
-        <h3 className="text-white font-semibold mb-3">Field Staff Journeys</h3>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <h3 className="text-white font-semibold">Field Staff Journeys</h3>
+          {overview.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Input className="!w-64 py-2 text-sm" placeholder="Search by name or emp #..." value={search} onChange={e => setSearch(e.target.value)} autoComplete="off" />
+              {search.trim() && <span className="text-white/40 text-xs whitespace-nowrap">{shownRows.length} of {overview.length}</span>}
+            </div>
+          )}
+        </div>
         {(msg || loadError) && <p className="text-red-400 text-xs mb-3">{msg || loadError}</p>}
         {loading && overview.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-4">Loading...</p>
         ) : overview.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-4">No Field / Office+Field staff found.</p>
+        ) : shownRows.length === 0 ? (
+          <p className="text-white/30 text-sm text-center py-4">No one matches "{search.trim()}".</p>
         ) : (
           <div className="space-y-2">
-            {overview.map(row => (
+            {shownRows.map(row => (
               <div key={row.empId} className="border border-white/10 rounded-xl overflow-hidden">
                 <div className="flex items-center gap-3 p-3 bg-white/5 flex-wrap">
                   <div className="flex-1 min-w-[140px]">

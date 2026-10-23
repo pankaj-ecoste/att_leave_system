@@ -3659,7 +3659,9 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Built 2026-10-23 (not yet pushed):** `lib/travelReport.js` now builds a plain data model (`buildTravelReportModel`) and writes it as one styled sheet (`buildReportWorkbook`, exceljs, imported only when a report is downloaded — separate chunk in the build). `lib/travelReportRange.js` filters by From/To. Times in the file are Indian time `hh:mm AM/PM` (visits and punches now look the same). Admin Travel review has From / To boxes next to Download Report (prefilled with the whole open period); staff claim downloads unchanged except they wait for the file before opening Gmail. Tests: 255 pass (44 new/rewritten for this and §48/§49), build clean. A sample file is at `C:\ecoste\backups\SAMPLE-travel-report-layout.xlsx`. Not click-tested in a browser; the formatting was checked through the file's cells, not by eye in Excel.
 
-**Status:** built; awaiting the admin's look at the sample, then push.
+**Pushed 2026-10-23 (f9bcded).**
+
+**Follow-up (2026-10-23, same day): name search on the admin Field Staff Journeys list.** A search box under the heading filters by part of the name or the employee number, ignoring capitals and extra spaces; several words must all match; shows "n of N" while searching and a "No one matches" line when empty (`lib/nameSearch.js`, 7 tests). Front-end only. Not yet pushed.
 
 ## Appendix — Reference
 
