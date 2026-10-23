@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { compressImage } from '../lib/imageCompress'
 
 const LEAVE_DOCUMENTS_BUCKET = 'leave-documents'
 
@@ -7,8 +8,12 @@ const LEAVE_DOCUMENTS_BUCKET = 'leave-documents'
 // application is only created after this upload succeeds). See 0019 migration.
 export async function uploadLeaveDocument(file) {
   const id = crypto.randomUUID()
-  const path = `${id}/${file.name}`
-  const { error } = await supabase.storage.from(LEAVE_DOCUMENTS_BUCKET).upload(path, file, {
+  // A larger ceiling and higher quality than the travel photos (api/travel.js) — a
+  // medical certificate needs to stay legible for HR to actually read it. PDFs pass
+  // through untouched (compressImage only ever resizes image/* files).
+  const toUpload = await compressImage(file, { maxDim: 1800, quality: 0.85 })
+  const path = `${id}/${toUpload.name}`
+  const { error } = await supabase.storage.from(LEAVE_DOCUMENTS_BUCKET).upload(path, toUpload, {
     cacheControl: '3600',
     upsert: false,
   })

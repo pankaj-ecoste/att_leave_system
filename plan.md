@@ -3555,6 +3555,39 @@ phone this session. Ask Himanshu to retry on Wi-Fi once and on mobile data once 
 
 **Status:** steps 1 and 6 built and tested, awaiting go-ahead to commit and push; steps 2, 3, 4 wait for what step 1 shows; step 5 held in reserve. (The admin-screen "registered phone type" part of step 6 is NOT built — it needs a new column and changes to the Reset function, which is held back to avoid touching live functions.)
 
+## 50. Compress photos in the browser before upload (2026-10-23)
+
+**Trigger:** the 3-month health review (read-only, no code touched) found storage had
+grown to 549 MB — 392 MB of travel selfies, 157 MB of leave documents — while the
+actual database tables totalled only 22 MB. A phone camera photo is routinely 2-6 MB
+at full resolution; nothing between the camera and the upload ever reduced that.
+
+**Fix:** `src/lib/imageCompress.js` — resizes and re-encodes an image in the browser
+(via `createImageBitmap(file, { imageOrientation: 'from-image' })` + canvas, so a
+portrait iPhone photo doesn't come out sideways) before it's uploaded. Never the
+reason an upload fails: any error, or a result that isn't actually smaller than the
+original, falls back to the original file untouched — same posture as
+`reverse_geocode()`. PDFs and anything that isn't `image/*` pass through unchanged.
+
+Wired into both upload paths with different ceilings, not the same setting for both:
+`uploadLeaveDocument` (`api/documents.js`) uses 1800px/85% quality, since a medical
+certificate needs to stay legible for HR; `uploadTravelPhoto` (`api/travel.js`, shared
+by the selfie, the visit-attached receipt, and the standalone expense photo — all
+three go through this one function) uses 1280px/80%, since those only need to clearly
+show a face or a line item.
+
+**Verified:** `imageCompress.test.js` proves the safety contract that matters most —
+non-image files pass through untouched, and a file is never discarded if compression
+fails or doesn't actually help. The real resize/re-encode path needs a real phone
+browser to watch (this project's tests run under plain Node, which has no canvas),
+so that part is **not yet verified on a real device** — code and build are clean,
+225 tests green, but nobody has watched an actual iPhone photo shrink yet.
+
+**Deliberately not done:** this only affects photos uploaded from now on — it doesn't
+shrink the 549 MB already stored, and it's separate from the orphaned-file problem
+found in the same review (§ — not yet numbered, 146 MB of photos attached to nothing,
+still growing as of 2026-10-21).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

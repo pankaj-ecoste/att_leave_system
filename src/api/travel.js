@@ -3,6 +3,7 @@ import {
   rowToTravelVisit, rowToTravelSummary, rowToTravelOverviewRow, rowToTravelSettlement, rowToTaSettings,
   rowToAttendance, rowToTravelClaim, rowToTravelExpense,
 } from './mappers'
+import { compressImage } from '../lib/imageCompress'
 
 // plan.md §28 — Travel Allowance verification. Same private-bucket pattern as
 // api/documents.js's leave-documents bucket: unguessable client-generated path, private
@@ -15,8 +16,12 @@ function extFor(file) {
 
 async function uploadTravelPhoto(file, kind) {
   const id = crypto.randomUUID()
-  const path = `${id}/${kind}.${extFor(file)}`
-  const { error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).upload(path, file, {
+  // A selfie or receipt only needs to clearly show a face/line-item, not full camera
+  // resolution — a smaller ceiling than leave documents (api/documents.js), where
+  // legibility for HR review matters more.
+  const toUpload = await compressImage(file, { maxDim: 1280, quality: 0.8 })
+  const path = `${id}/${kind}.${extFor(toUpload)}`
+  const { error } = await supabase.storage.from(TRAVEL_SELFIES_BUCKET).upload(path, toUpload, {
     cacheControl: '3600',
     upsert: false,
   })
