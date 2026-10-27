@@ -3748,6 +3748,16 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **REVISED later the same day (2026-10-27): the merge was undone on purpose.** HR prefers TWO entries — he picks the Asma or the Metamask tile at login and sees only that company's team and approvals. `undo-ankur-hora-merge-2026-10-27.mjs` (APPLIED) brought #1254 back with its 9 Metamask reports and 23 leave decisions, and blanked the email copied onto #1213 (#1254 keeps `info@ecoste.in`). Two live entries again: #1213 Asma (21 reports), #1254 Metamask (9). **Kept:** the cross-company manager dropdown (§55 item 1) — it's still useful (e.g. Prithvi Maan, Metamask, reports to Paramjit Singh, Asma) and its "· Asma" / "· Metamask" label tells the two Ankur Hora entries apart. **Trade-off HR accepted:** two PINs, two attendance/leave records, and he counts twice in headcount (live total is 81, which already includes both entries).
 
+## 56. Earned Leave — same-day application, like Casual Leave (HR request 2026-10-27)
+
+**Before:** Earned Leave could only be applied for a date at least 7 days away — enforced in `employee_apply_leave` ("Earned Leave must be applied at least 7 days in advance") AND in the apply screen (date picker `min` + note).
+
+**Now:** Earned Leave joins Casual Leave and Partial Leave in the "today or any future date; only a PAST date is rejected" rule. Untouched: balance check (can't apply for more than the current balance), half-day eligibility, probation/notice-period 1-leave cap, Plant restriction, duplicate-same-day check, manager → admin approval flow.
+
+**Built:** migration `0070_earned_leave_same_day.sql` (copied from the LIVE function, only the date-rule branch edited) + `scripts/migrations/apply-0070-earned-leave-same-day.mjs` (dry-run walk-through: EL today accepted, EL half-day in 2 days accepted, EL yesterday rejected, CL unchanged, same-day duplicate blocked, no-balance rejected; 15/15 pass, rolled back). `LeaveApply.jsx`: 7-day constant, date `min`, default date and note removed. `LeavePolicy.jsx`: one sentence added to the Earned Leave section. `daysFromTodayIST` kept (has tests).
+
+**Order:** apply 0070 to the database first (the old app still enforces 7 days client-side, so nothing breaks), then push the screen change.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

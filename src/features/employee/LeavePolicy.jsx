@@ -31,7 +31,7 @@ export function LeavePolicy() {
       </Section>
 
       <Section title={`Earned Leave — ${LEAVE_POLICY.EARNED.perYear} days/year`}>
-        <p>Credited ½ day/month, full day or half day. At year-end, up to 3 unused days are paid out to you in May; anything beyond 3 lapses.</p>
+        <p>Credited ½ day/month, full day or half day. At year-end, up to 3 unused days are paid out to you in May; anything beyond 3 lapses. Like Casual Leave, it can be applied for today or any future date — no advance notice needed.</p>
       </Section>
 
       <Section title={`Sick Leave — ${LEAVE_POLICY.SICK.perYear} days/year`}>

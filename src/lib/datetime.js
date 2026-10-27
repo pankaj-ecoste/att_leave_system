@@ -59,8 +59,8 @@ export function effectiveProbationEnd(probationEndDate, joiningDate) {
   return `${end.getUTCFullYear()}-${pad2(end.getUTCMonth() + 1)}-${pad2(end.getUTCDate())}`
 }
 
-// N days from today in IST, as YYYY-MM-DD — used for advance-notice rules (e.g. Earned
-// Leave's 7-day minimum). Same "call at point of use, never cache" rule as todayIST.
+// N days from today in IST, as YYYY-MM-DD — for advance-notice style date rules (none
+// are active now; Earned Leave's 7-day minimum was removed in plan.md §56). Same "call at point of use, never cache" rule as todayIST.
 export function daysFromTodayIST(days) {
   const d = nowIST()
   d.setUTCDate(d.getUTCDate() + days)

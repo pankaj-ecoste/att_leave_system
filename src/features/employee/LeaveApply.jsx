@@ -5,11 +5,9 @@ import { Input, Label } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { getLocation } from '../../hooks/useGeolocation'
 import { uploadLeaveDocument } from '../../api/documents'
-import { todayIST, daysFromTodayIST } from '../../lib/datetime'
+import { todayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
 import { buildLeaveNotifyMailto } from '../../lib/notify'
-
-const EARNED_LEAVE_ADVANCE_DAYS = 7
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -42,10 +40,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
-    // Earned Leave needs 7 days' notice — default straight to the earliest allowed
-    // date instead of today, so the employee isn't set up to fail the server check.
-    const date = label === 'Earned Leave' ? daysFromTodayIST(EARNED_LEAVE_ADVANCE_DAYS) : todayIST()
-    setForm({ type: label, date, dayPart: 'full', reason: '', location: null })
+    setForm({ type: label, date: todayIST(), dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
     setFile(null)
@@ -236,12 +231,8 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         <Label>Date</Label>
         <Input
           type="date" className="mb-3" value={form.date}
-          min={form.type === 'Earned Leave' ? daysFromTodayIST(EARNED_LEAVE_ADVANCE_DAYS) : undefined}
           onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
         />
-        {form.type === 'Earned Leave' && (
-          <p className="text-white/30 text-xs mb-3 -mt-2">Earned Leave can only be availed at least {EARNED_LEAVE_ADVANCE_DAYS} days in advance</p>
-        )}
         {form.type === 'Sick Leave' && (
           <div className="mb-3 p-3 rounded-xl border bg-rose-500/10 border-rose-500/20">
             <p className="text-rose-300 text-xs font-medium mb-2">Prescription / medical certificate is mandatory for Sick Leave</p>
