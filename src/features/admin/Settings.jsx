@@ -3,12 +3,13 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { PinInput } from '../../components/ui/PinInput'
+import { DropdownLists } from './DropdownLists'
 
 const HOLIDAY_TYPES = ['Public', 'Optional', 'Restricted', 'Company']
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! May Supreme Energy bless you. We are thankful to have you in our workspace. — By Ankur Hora and Team'
 
-export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, adminEmail, birthdayMessage, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports }) {
+export function Settings({ employees, attendanceCount, leaves, auditLogs, holidays, stdHours, adminEmail, birthdayMessage, updateSettings, resetLeaveBalancesForNewFY, addHoliday, deleteHoliday, onAudit, lastImports, dropdowns, addDropdownOption, removeDropdownOption }) {
   const [oldPin, setOldPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -119,6 +120,8 @@ export function Settings({ employees, attendanceCount, leaves, auditLogs, holida
         {stdMsg && <p className="text-red-400 text-xs mb-2">{stdMsg}</p>}
         <Button className="text-xs" onClick={saveStdHours}>Save</Button>
       </Card>
+
+      <DropdownLists dropdowns={dropdowns} addDropdownOption={addDropdownOption} removeDropdownOption={removeDropdownOption} onAudit={onAudit} />
 
       <Card>
         <h3 className="text-white font-semibold mb-1">Admin Notification Email</h3>

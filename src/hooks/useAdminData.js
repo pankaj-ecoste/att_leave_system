@@ -18,6 +18,8 @@ import {
   adminFetchEmployeeAssets as apiFetchEmployeeAssets, adminUpsertEmployeeAsset as apiUpsertEmployeeAsset,
   adminDeleteEmployeeAsset as apiDeleteEmployeeAsset, adminMarkAssetsReturned as apiMarkAssetsReturned,
 } from '../api/assets'
+import { adminFetchDropdownOptions, adminAddDropdownOption as apiAddDropdownOption, adminRemoveDropdownOption as apiRemoveDropdownOption } from '../api/dropdowns'
+import { groupOptions, tidyOption } from '../lib/dropdownOptions'
 
 // Everything an admin session needs that ISN'T attendance (see useAdminAttendance for
 // why that one is separate) — employees, leave applications + balances, audit log,
@@ -37,15 +39,16 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
   const [holidays, setHolidays] = useState([])
   const [sites, setSites] = useState([])
   const [todaysBirthdays, setTodaysBirthdays] = useState([])
+  const [dropdownRows, setDropdownRows] = useState([])
 
   useEffect(() => {
     if (!token) {
-      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([]); setSites([]); setTodaysBirthdays([])
+      setEmployees([]); setLeaves([]); setLeaveBalances({}); setAuditLogs([]); setAdminRegs([]); setHolidays([]); setSites([]); setTodaysBirthdays([]); setDropdownRows([])
       return
     }
     ;(async () => {
       try {
-        const [emps, lvs, lb, logs, regs, hols, sts, bdays] = await Promise.all([
+        const [emps, lvs, lb, logs, regs, hols, sts, bdays, dds] = await Promise.all([
           adminFetchEmployees(token),
           adminFetchLeaves(token, { limit: 2000 }),
           adminFetchLeaveBalances(token, { limit: 3000 }),
@@ -54,8 +57,10 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
           fetchHolidays(),
           fetchSites(),
           adminGetTodaysBirthdays(token),
+          // A failure here must not blank the whole admin panel — the dropdowns just stay empty.
+          adminFetchDropdownOptions(token).catch(err => { console.error('dropdown lists', err); return [] }),
         ])
-        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols); setSites(sts); setTodaysBirthdays(bdays)
+        setEmployees(emps); setLeaves(lvs); setLeaveBalances(lb); setAuditLogs(logs); setAdminRegs(regs); setHolidays(hols); setSites(sts); setTodaysBirthdays(bdays); setDropdownRows(dds)
       } catch (err) {
         console.error(err)
       }
@@ -164,6 +169,18 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
     setHolidays(prev => prev.filter(h => h.id !== id))
   }
 
+  // --- Dropdown lists (plan.md §54) ---
+  const dropdowns = groupOptions(dropdownRows)
+  async function addDropdownOption(kind, value) {
+    const created = await apiAddDropdownOption(token, kind, tidyOption(value))
+    setDropdownRows(prev => [...prev, created])
+    return created
+  }
+  async function removeDropdownOption(id) {
+    await apiRemoveDropdownOption(token, id)
+    setDropdownRows(prev => prev.filter(o => o.id !== id))
+  }
+
   // --- Sites (P3-1) ---
   async function createSite(site) {
     const created = await apiCreateSite(token, site)
@@ -188,5 +205,6 @@ export function useAdminData(token, stdHours, onStdHoursChange, adminEmail, onAd
     createSite, updateSite, deleteSite,
     todaysBirthdays, markBirthdayWished,
     fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned,
+    dropdowns, addDropdownOption, removeDropdownOption,
   }
 }

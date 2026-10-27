@@ -72,7 +72,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
           </>
         )}
         {tab === 'leaves' && <LeaveApprovals token={token} employees={admin.employees} leaves={admin.leaves} adminRegs={admin.adminRegs} decideLeave={admin.decideLeave} decideRegularization={admin.decideRegularization} onAudit={onAudit} />}
-        {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} resetPunchDevice={admin.resetPunchDevice} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} adminEmail={admin.adminEmail} onAudit={onAudit} />}
+        {tab === 'employees' && <Employees employees={admin.employees} leaveBalances={admin.leaveBalances} createEmployee={admin.createEmployee} updateEmployee={admin.updateEmployee} setEmploymentStatus={admin.setEmploymentStatus} toggleEmployeeStatus={admin.toggleEmployeeStatus} deleteEmployee={admin.deleteEmployee} resetPunchDevice={admin.resetPunchDevice} upsertLeaveBalance={admin.upsertLeaveBalance} bulkUpsertLeaveBalances={admin.bulkUpsertLeaveBalances} fetchEmployeeAssets={admin.fetchEmployeeAssets} upsertEmployeeAsset={admin.upsertEmployeeAsset} deleteEmployeeAsset={admin.deleteEmployeeAsset} markAssetsReturned={admin.markAssetsReturned} dropdowns={admin.dropdowns} addDropdownOption={admin.addDropdownOption} adminEmail={admin.adminEmail} onAudit={onAudit} />}
         {tab === 'sites' && <Sites sites={admin.sites} createSite={admin.createSite} updateSite={admin.updateSite} deleteSite={admin.deleteSite} onAudit={onAudit} />}
         {tab === 'travel' && <Travel token={token} travel={travel} onAudit={onAudit} />}
         {tab === 'reports' && <Reports token={token} employees={admin.employees} stdHours={admin.stdHours} holidays={admin.holidays} onAudit={onAudit} />}
@@ -82,6 +82,7 @@ export function AdminPanel({ token, onLogout, admin, attendanceHook, imports, on
             employees={admin.employees} attendanceCount={Object.keys(attendanceHook.attendance).length} leaves={admin.leaves} auditLogs={admin.auditLogs}
             holidays={admin.holidays} stdHours={admin.stdHours} adminEmail={admin.adminEmail} birthdayMessage={admin.birthdayMessage} updateSettings={admin.updateSettings} resetLeaveBalancesForNewFY={admin.resetLeaveBalancesForNewFY}
             addHoliday={admin.addHoliday} deleteHoliday={admin.deleteHoliday} onAudit={onAudit}
+            dropdowns={admin.dropdowns} addDropdownOption={admin.addDropdownOption} removeDropdownOption={admin.removeDropdownOption}
             lastImports={{
               leaveBalance: imports.leaveBalance.sheet?.importedAt,
             }}

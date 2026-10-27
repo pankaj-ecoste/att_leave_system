@@ -7,6 +7,8 @@ import { COMPANIES, SHIFTS, LEAVE_TYPES, EMPLOYMENT_STATUSES, WORK_MODES, getShi
 import { todayIST } from '../../lib/datetime'
 import { probationCompleted } from '../../lib/adminAlerts'
 import { buildConfirmationGmailLink } from '../../lib/notify'
+import { DROPDOWN_LISTS, missingRequired } from '../../lib/dropdownOptions'
+import { DropdownField } from './DropdownField'
 
 // Sub Dept and Cost Center dropped from the form per your request — the columns and
 // mapper still carry them through untouched for anyone imported with values already,
@@ -16,14 +18,13 @@ import { buildConfirmationGmailLink } from '../../lib/notify'
 // editable field once the employee already exists.
 const FORM_FIELDS = [
   ['name', 'Full Name*'], ['pin', 'PIN* (leave blank on edit to keep current)'],
-  ['jobTitle', 'Job Title'], ['dept', 'Department'], ['bu', 'Business Unit'],
-  ['locationInfo', 'Location'], ['email', 'Email'], ['phone', 'Phone'],
+  ['email', 'Email'], ['phone', 'Phone'],
   ['joiningDate', 'Joining Date', 'date'], ['dateOfBirth', 'Date of Birth', 'date'],
 ]
 const EMPTY_FORM = { name: '', pin: '', company: COMPANIES[0], empNum: '', jobTitle: '', bu: '', dept: '', locationInfo: '', manager: '', managerEmpId: '', email: '', phone: '', joiningDate: '', dateOfBirth: '', shiftType: 'none', employmentStatus: 'Probation', workMode: 'office', stdHoursOverride: '' }
 const EMPTY_ASSET = { assetType: '', serialNumber: '', assignedDate: '', status: '', assignedBy: '' }
 
-export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, resetPunchDevice, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, adminEmail, onAudit }) {
+export function Employees({ employees, leaveBalances, createEmployee, updateEmployee, toggleEmployeeStatus, deleteEmployee, setEmploymentStatus, resetPunchDevice, upsertLeaveBalance, bulkUpsertLeaveBalances, fetchEmployeeAssets, upsertEmployeeAsset, deleteEmployeeAsset, markAssetsReturned, dropdowns, addDropdownOption, adminEmail, onAudit }) {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -59,6 +60,10 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
   async function save() {
     if (!form.name || !form.company) return
     if (!form.id && !form.pin) { setErrMsg('PIN is required for a new employee.'); return }
+    if (!form.id) {
+      const missing = missingRequired(form)
+      if (missing.length) { setErrMsg(`Please pick: ${missing.join(', ')}.`); return }
+    }
     try {
       if (form.id) {
         const before = employees.find(e => e.id === form.id)
@@ -188,6 +193,13 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
     } catch (err) { setErrMsg(err.message) }
   }
 
+  const renderTextField = ([k, l, t]) => (
+    <div key={k}>
+      <Label>{l}</Label>
+      <Input type={t || 'text'} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
+    </div>
+  )
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -248,12 +260,12 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
         <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4 mb-4">
           <h4 className="text-white font-medium mb-3">{form.id ? 'Edit' : 'New'} Employee</h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {FORM_FIELDS.map(([k, l, t]) => (
-              <div key={k}>
-                <Label>{l}</Label>
-                <Input type={t || 'text'} value={form[k] || ''} onChange={e => setForm(p => ({ ...p, [k]: e.target.value }))} />
-              </div>
+            {FORM_FIELDS.slice(0, 2).map(renderTextField)}
+            {DROPDOWN_LISTS.map(l => (
+              <DropdownField key={l.kind} label={l.label} required={!form.id} options={dropdowns?.[l.kind]} value={form[l.field]}
+                onChange={v => setForm(p => ({ ...p, [l.field]: v }))} onAdd={text => addDropdownOption(l.kind, text)} />
             ))}
+            {FORM_FIELDS.slice(2).map(renderTextField)}
             <div>
               <Label>{form.id ? 'Emp Number' : 'Emp Number (auto-assigned)'}</Label>
               {form.id

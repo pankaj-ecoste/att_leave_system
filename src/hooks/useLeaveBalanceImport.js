@@ -3,6 +3,7 @@ import { adminCreateEmployee, adminUpdateEmployee } from '../api/employees'
 import { adminFetchImportedSheet, adminSetImportedSheet, adminClearImportedSheet } from '../api/imports'
 import { gField, findEmpInSnap } from '../lib/importHelpers'
 import { COMPANIES } from '../lib/constants'
+import { matchOption } from '../lib/dropdownOptions'
 
 // 'LOP' — renamed from 'Unpaid Leave' (P4B-11) to match the leave_type value the app
 // now stores; an import sheet still using the old "Unpaid Leave" column header won't be
@@ -26,7 +27,7 @@ function resolveCompany(row, fallback) {
 // Excel importer #1 — leave balance / employee master data. One row per employee:
 // identity + org fields, plus optional [Leave Type] - Accrued/Consumed/Balance/
 // AnnualQuota/Unit columns. Missing employees are auto-created.
-export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsertLeaveBalances, onAudit) {
+export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsertLeaveBalances, onAudit, dropdowns) {
   const [sheet, setSheet] = useState(null)
   const [status, setStatus] = useState('')
 
@@ -56,9 +57,17 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
       const wb = XLSX.read(ab, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-      let created = 0, updated = 0
+      let created = 0, updated = 0, unmatched = 0
       let currentEmployees = [...employees]
       const balanceRecords = []
+      // plan.md §54 — a cell must match a dropdown value (ignoring case/spaces); otherwise it is left
+      // blank (the server would refuse an unknown value) and counted for the summary.
+      const pick = (kind, raw) => {
+        if (!raw) return ''
+        const hit = matchOption(dropdowns?.[kind], raw)
+        if (!hit) unmatched++
+        return hit || ''
+      }
 
       for (const row of rows) {
         const name = gField(row, 'Employee Name', 'Name', 'EMPLOYEE NAME')
@@ -67,11 +76,11 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
         let emp = findEmpInSnap(empNum, name, currentEmployees)
         const fields = {
           empNum: empNum || emp?.empNum || '',
-          jobTitle: gField(row, 'Job Title', 'Designation'),
-          bu: gField(row, 'Business Unit', 'BU'),
-          dept: gField(row, 'Department', 'Dept'),
+          jobTitle: pick('job_title', gField(row, 'Job Title', 'Designation')),
+          bu: pick('business_unit', gField(row, 'Business Unit', 'BU')),
+          dept: pick('department', gField(row, 'Department', 'Dept')),
           subDept: gField(row, 'Sub Department', 'Sub Dept'),
-          locationInfo: gField(row, 'Location'),
+          locationInfo: pick('location', gField(row, 'Location')),
           costCenter: gField(row, 'Cost Center'),
           manager: gField(row, 'Reporting Manager', 'Manager'),
         }
@@ -109,7 +118,7 @@ export function useLeaveBalanceImport(token, employees, setEmployees, bulkUpsert
       setEmployees(currentEmployees)
       if (balanceRecords.length) await bulkUpsertLeaveBalances(balanceRecords)
       await persistSheet({ filename: file.name, rows, cols: rows.length > 0 ? Object.keys(rows[0]) : [], importedAt: new Date().toISOString() })
-      setStatus(`Imported: ${created} created, ${updated} updated (${currentEmployees.length} total)`)
+      setStatus(`Imported: ${created} created, ${updated} updated (${currentEmployees.length} total)` + (unmatched ? ` — ${unmatched} Job Title / Department / Business Unit / Location cell(s) did not match the dropdown lists and were left blank` : ''))
       onAudit?.('IMPORT', `Leave balance: ${file.name}`, 'admin')
     } catch (err) {
       setStatus(`Error: ${err.message}`)

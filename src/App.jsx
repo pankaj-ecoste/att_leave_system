@@ -46,7 +46,7 @@ export default function App() {
 
   const adminAttendance = useAdminAttendance(auth.adminToken, auth.stdHours)
   const admin = useAdminData(auth.adminToken, auth.stdHours, auth.setStdHours, auth.adminEmail, auth.setAdminEmail, auth.birthdayMessage, auth.setBirthdayMessage)
-  const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances)
+  const leaveBalanceImport = useLeaveBalanceImport(auth.adminToken, admin.employees, admin.setEmployees, admin.bulkUpsertLeaveBalances, undefined, admin.dropdowns)
   const adminTravel = useAdminTravel(auth.adminToken)
   const updatingToLatest = useAutoRefresh(empAttendance.isPunching)
 

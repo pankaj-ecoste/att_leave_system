@@ -3718,6 +3718,22 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Status:** built and verified; the "end date can't be today" rule is still undecided.
 
+## 54. Dropdowns for Job Title, Department, Business Unit, Location + one-time data clean-up (HR-requested 2026-10-27)
+
+**Why:** these four were free-text boxes. Real data (125 staff): 84 different job titles ("operator"/"OPERATOR", "CRE" = "Customer Relations Executive" = "Customer Relationship Executive", "security gaurd"), Business Unit typed as "HO"/"Head Office"/"Asma", "PLANT"/"Plant"/"plant", even "Sr. BDM" (a job title) as a business unit; Department "HR"/"Human Resource"/"Human Resources", "Managment"; Location "Ghitorni"/"Ghirtoni". Anything that groups by these (reports, analytics, filters) splits one real group into several.
+
+**Decisions (all taken from the recommendation HR accepted):**
+1. The four fields become **dropdowns**; the option lists live in the **database** (`dropdown_options`: kind + value, case-insensitive unique), so HR can add a value without a code change.
+2. **"+ Add new…"** inside each dropdown (admin only) adds a value on the spot. Values are tidied on the way in (trim, collapse spaces) and a case-only duplicate is refused ("operator" when "Operator" exists).
+3. **Hard block on the server** (same posture as the security hard-block preference): `admin_create_employee` / `admin_update_employee` reject a value that is not in the list. On UPDATE only a value that is being *changed* is checked, so an employee still holding an old value can be edited for something else. Blank is allowed by the server.
+4. **Required in the Add form** (front-end): Job Title, Department, Business Unit, Location must be picked for a NEW employee. Editing an old employee does not force them.
+5. Removing a list value is allowed only when **no employee uses it** (server-checked). No rename screen (a rename is a one-off script, like the clean-up).
+6. Excel import (`useLeaveBalanceImport`) matches each cell to the list ignoring case/spaces; no match → the field is left blank and the import summary says how many cells didn't match. The import never creates list values.
+7. Edit form: if an employee holds a value not in the list, it is still shown (marked "not in list") so editing never silently wipes it.
+8. **Clean-up of existing staff** is a one-off script, dry-run by default, JSON backup before applying. It tidies spacing/case/typos, merges true duplicates (HO→Head Office, PLANT→Plant, HR→Human Resources, …) and seeds the lists from the result. Anything it cannot decide by itself (e.g. 6 staff with BU "Lamora" after the Lamora company was removed, department "MetaMask") is **listed for HR's decision and left unchanged** — never guessed.
+
+**Noted, not changed here:** 32 staff have Business Unit "Plant" but company "Asma Traexim Pvt Ltd", not "Asma + Production Plant", so the plant leave restriction (§11) does not apply to them. HR to decide.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
