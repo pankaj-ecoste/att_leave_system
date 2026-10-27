@@ -9,6 +9,7 @@ import { probationCompleted } from '../../lib/adminAlerts'
 import { buildConfirmationGmailLink } from '../../lib/notify'
 import { DROPDOWN_LISTS, missingRequired } from '../../lib/dropdownOptions'
 import { DropdownField } from './DropdownField'
+import { managerChoices } from '../../lib/managerOptions'
 
 // Sub Dept and Cost Center dropped from the form per your request — the columns and
 // mapper still carry them through untouched for anyone imported with values already,
@@ -274,7 +275,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
             </div>
             <div>
               <Label>Company*</Label>
-              <Select value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value, managerEmpId: '', manager: '' }))}>
+              <Select value={form.company} onChange={e => setForm(p => ({ ...p, company: e.target.value }))}>
                 {COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
@@ -282,7 +283,7 @@ export function Employees({ employees, leaveBalances, createEmployee, updateEmpl
               <Label>Reporting Manager</Label>
               <Select value={form.managerEmpId || ''} onChange={e => { const mgr = employees.find(x => x.id === e.target.value); setForm(p => ({ ...p, managerEmpId: e.target.value, manager: mgr ? mgr.name : '' })) }}>
                 <option value="">— No Manager —</option>
-                {employees.filter(e => e.active && e.company === form.company && e.id !== form.id).sort((a, b) => a.name.localeCompare(b.name)).map(e => <option key={e.id} value={e.id}>{e.name}{e.jobTitle ? ` (${e.jobTitle})` : ''}</option>)}
+                {managerChoices(employees, form.id).map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
               </Select>
             </div>
             <div>

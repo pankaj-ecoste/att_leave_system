@@ -3734,6 +3734,18 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Noted, not changed here:** 32 staff have Business Unit "Plant" but company "Asma Traexim Pvt Ltd", not "Asma + Production Plant", so the plant leave restriction (§11) does not apply to them. HR to decide.
 
+## 55. One entry per person — Ankur Hora can manage staff of any company (HR-requested 2026-10-27)
+
+**Why there were two entries:** the Edit form's Reporting Manager dropdown listed same-company staff only, so Ankur Hora was entered twice (#1213 Asma, #1254 Metamask) to be manager of both companies' staff.
+
+**Finding:** the database never needed that. Every manager function (`manager_decide_leave`, `employee_get_my_team`, `manager_get_team_*`, …) works off `manager_emp_id` and never looks at the company. Only the form's dropdown filter (and a line that blanked the manager whenever the company was changed) was company-bound.
+
+**Done:**
+1. `lib/managerOptions.js` `managerChoices` — the dropdown now offers every active employee (any company), A-Z, labelled "Name (Title) · Company", and changing an employee's company no longer clears their manager. Tested (`managerOptions.test.js`).
+2. One-off `scripts/data-fixes/merge-ankur-hora-2026-10-27.mjs` (APPLIED): kept **#1213 (Asma)**, moved #1254's 9 direct reports to it (now 30), re-pointed his 23 past leave decisions, copied the email `info@ecoste.in`, soft-removed #1254 (his 1 attendance day and 3 balance rows stay in the database).
+
+**Note:** he logs in from the Asma tile only now. His company can be changed in Edit if HR prefers Metamask. Prithvi Maan (Metamask) already reports to Paramjit Singh (Asma) — the same cross-company link, set earlier in §54.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
