@@ -3758,6 +3758,14 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Order:** apply 0070 to the database first (the old app still enforces 7 days client-side, so nothing breaks), then push the screen change.
 
+## 57. Database holds only the 83 real staff; the live "Delete" is permanent (2026-10-27)
+
+**Found while cleaning up:** the LIVE database does not match migration 0017 (soft delete). `admin_delete_employee` is a **hard delete** (cascades through attendance, leave, balances, travel …) and `admin_get_employees` does **not** hide soft-removed staff — so people "removed" with `deleted_at` still showed in the admin Employees list as Inactive, and the app's Delete button erased for good (5 plant staff were erased that way at 15:45 IST; they had no attendance). Same class of drift as the 2026-09-04 leave-approval functions: a later migration (`0023_v2_phase_a.sql` redefines both functions) overwrote 0017's bodies.
+
+**Done (APPLIED):** `scripts/data-fixes/purge-removed-staff-2026-10-27.mjs` permanently erased the remaining 38 soft-removed employees and everything attached (attendance 15, sessions 7, leave accruals 224, balances 225, payouts 37, location logs 16, travel claim/settlement/visits 1/1/3). Full-row backup: `C:\ecoste\backups\removed-staff-full-backup-2026-10-27-11-11.json`. The `employees` table is now exactly the 83 live staff, no removed-marked rows. Three travel photos stay in Storage (orphaned, not deleted). Anyone needed later is added from scratch.
+
+**Open — decision for HR:** with the live Delete being permanent, deleting a leaver erases their whole history. Restoring 0017's soft delete (Delete hides + keeps history; list hides removed) would be a small migration — not done because HR said future staff can simply be re-added.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
