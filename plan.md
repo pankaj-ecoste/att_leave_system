@@ -3764,7 +3764,7 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Done (APPLIED):** `scripts/data-fixes/purge-removed-staff-2026-10-27.mjs` permanently erased the remaining 38 soft-removed employees and everything attached (attendance 15, sessions 7, leave accruals 224, balances 225, payouts 37, location logs 16, travel claim/settlement/visits 1/1/3). Full-row backup: `C:\ecoste\backups\removed-staff-full-backup-2026-10-27-11-11.json`. The `employees` table is now exactly the 83 live staff, no removed-marked rows. Three travel photos stay in Storage (orphaned, not deleted). Anyone needed later is added from scratch.
 
-**Open — decision for HR:** with the live Delete being permanent, deleting a leaver erases their whole history. Restoring 0017's soft delete (Delete hides + keeps history; list hides removed) would be a small migration — not done because HR said future staff can simply be re-added.
+**FIXED (same day, APPLIED):** migration `0071_restore_safe_delete.sql` re-applies 0017's design — Delete now only marks the employee (`deleted_at` + `active = false`, audit-logged) and keeps their history; the admin Employees list hides marked staff. Login, the directory and team lists already check `active`, so a deleted person can't sign in or appear. Numbered after 0023 so a replay can't overwrite it again. Rehearsed in a rolled-back transaction (21 checks, `scripts/migrations/apply-0071-restore-safe-delete.mjs`). To bring someone back, a developer clears `deleted_at` and sets `active = true`.
 
 ## Appendix — Reference
 
