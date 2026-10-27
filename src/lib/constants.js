@@ -6,16 +6,14 @@
 export const COMPANIES = [
   'Asma Traexim Pvt Ltd',
   'Metamask Design Solutions LLP',
-  'Lamora Buildtech Pvt Ltd',
   'Asma + Production Plant',
 ]
 export const COMPANY_COLORS = [
   'from-violet-600 to-indigo-600',
   'from-cyan-600 to-blue-600',
-  'from-emerald-600 to-teal-600',
   'from-orange-600 to-red-600',
 ]
-export const COMPANY_ICONS = ['A', 'M', 'L', 'P']
+export const COMPANY_ICONS = ['A', 'M', 'P']
 
 // V2 decision 1/3 (plan.md §11) — Plant is a 4th company value, not a new entity.
 // These 8 types are hidden from Plant employees' Apply Leave screen AND blocked
