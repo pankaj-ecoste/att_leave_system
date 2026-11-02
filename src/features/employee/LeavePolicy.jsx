@@ -59,6 +59,10 @@ export function LeavePolicy() {
         <p>An unapproved absence is treated as double: 1 day absent without permission = 2 days LOP.</p>
       </Section>
 
+      <Section title="Applying for several days">
+        <p>Choose a From and To date to apply for several days in one go — Sundays and holidays in between are skipped. The days must fit in your balance; if they do not, nothing is applied and you can apply the rest as LOP. Once you have applied for a leave type, you can apply for that same type again only after your manager/admin has approved or rejected it. Other types, LOP, Work From Home and On Duty are not affected.</p>
+      </Section>
+
       <Section title="Half-day leave">
         <p>Casual, Sick and Earned Leave can each be taken as a half day (morning or afternoon) — deducts half a day from your balance instead of a full day.</p>
       </Section>

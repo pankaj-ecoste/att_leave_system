@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { employeeFetchLeaves, employeeApplyLeave, employeeFetchLeaveBalances } from '../api/leave'
+import { employeeFetchLeaves, employeeApplyLeaveRange, employeeFetchLeaveBalances } from '../api/leave'
 import { employeeSubmitRegularization, employeeGetRegularizations } from '../api/attendance'
 import { LEAVE_TYPES, PLANT_COMPANY, PLANT_RESTRICTED_LEAVE_TYPES } from '../lib/constants'
 import { todayIST } from '../lib/datetime'
@@ -45,18 +45,20 @@ export function useEmployeeLeave(token, empId, onAudit) {
   }
 
   async function applyLeave(currentUser, form) {
-    const saved = await employeeApplyLeave(token, empId, {
+    const saved = await employeeApplyLeaveRange(token, empId, {
       empName: currentUser.name,
       company: currentUser.company,
       leaveType: form.type,
       date: form.date,
+      endDate: form.endDate || null,
       dayPart: form.dayPart || 'full',
       reason: form.reason,
       location: form.location || null,
       documentPath: form.documentPath || null,
     })
-    if (saved) setLeaves(prev => [saved, ...prev])
-    onAudit?.('LEAVE_APPLY', `${currentUser.name} applied ${form.type} on ${form.date}`, currentUser.name)
+    if (saved.length) setLeaves(prev => [...saved.slice().reverse(), ...prev])
+    const when = saved.length > 1 ? `${saved[0].date} to ${saved[saved.length - 1].date} (${saved.length} days)` : form.date
+    onAudit?.('LEAVE_APPLY', `${currentUser.name} applied ${form.type} on ${when}`, currentUser.name)
     return saved
   }
 

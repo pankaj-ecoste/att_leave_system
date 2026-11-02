@@ -15,6 +15,27 @@ export async function employeeFetchLeaves(token, empId) {
   return (data || []).map(rowToLeave)
 }
 
+// plan.md §58 — one or several days (leave.endDate, optional). Returns the saved rows, one per working day.
+export async function employeeApplyLeaveRange(token, empId, leave) {
+  const { data, error } = await supabase.rpc('employee_apply_leave_range', {
+    p_token: token,
+    p_emp_id: empId,
+    p_data: {
+      emp_name: leave.empName,
+      company: leave.company,
+      leave_type: leave.leaveType,
+      date: leave.date,
+      end_date: leave.endDate || null,
+      day_part: leave.dayPart || 'full',
+      reason: leave.reason,
+      location: leave.location || null,
+      document_path: leave.documentPath || null,
+    },
+  })
+  if (error) throw error
+  return (data || []).map(rowToLeave)
+}
+
 export async function employeeApplyLeave(token, empId, leave) {
   const { data, error } = await supabase.rpc('employee_apply_leave', {
     p_token: token,

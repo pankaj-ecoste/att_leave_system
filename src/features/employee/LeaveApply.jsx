@@ -8,6 +8,7 @@ import { uploadLeaveDocument } from '../../api/documents'
 import { todayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
 import { buildLeaveNotifyMailto } from '../../lib/notify'
+import { daysInRange, hasWaitingRequest, rangeLabel } from '../../lib/leaveRange'
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -20,7 +21,7 @@ function monthlyPartialCount(leaves, empId, label) {
 
 export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory, adminEmail }) {
   const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
+  const [form, setForm] = useState({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
   const [errs, setErrs] = useState({})
   const [locationStatus, setLocationStatus] = useState('')
   const [file, setFile] = useState(null)
@@ -37,10 +38,14 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   // (plan.md §12 V3 decision 4); still counted as pending here since nothing new lands
   // in that state anymore.
   const manager = currentUser.managerEmpId ? (directory || []).find(e => e.id === currentUser.managerEmpId) : null
+  // plan.md §58 — a person can have only one set of requests of a type waiting at a time (LOP / WFH / On Duty exempt)
+  const waiting = form.type ? hasWaitingRequest(leaves, currentUser.id, form.type, todayIST()) : false
+  const waitingMessage = `You already have a ${form.type} request waiting for approval — you can apply again once it is approved or rejected.`
+  const chosenDays = daysInRange(form.date, form.dayPart !== 'full' ? '' : form.endDate)
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
-    setForm({ type: label, date: todayIST(), dayPart: 'full', reason: '', location: null })
+    setForm({ type: label, date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
     setFile(null)
@@ -50,7 +55,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
 
   function closeModal() {
     setModalOpen(false)
-    setForm({ type: '', date: todayIST(), dayPart: 'full', reason: '', location: null })
+    setForm({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
     setErrs({})
     setLocationStatus('')
     setFile(null)
@@ -61,6 +66,8 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     const nextErrs = {}
     if (!form.type) nextErrs.type = 'Please select a leave type'
     if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
+    if (form.endDate && form.endDate < form.date) nextErrs.date = 'The last day cannot be before the first day'
+    if (waiting) nextErrs.submit = waitingMessage
     const needsLocation = form.type === 'Work From Home' || form.type === 'On Duty'
     if (needsLocation && !form.location) nextErrs.location = `Location is required for ${form.type}`
     if (form.type === 'Sick Leave' && !file) nextErrs.file = 'A prescription or medical certificate is required for Sick Leave'
@@ -81,7 +88,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     setUploading(false)
 
     try {
-      await applyLeave(currentUser, { ...form, documentPath })
+      await applyLeave(currentUser, { ...form, endDate: form.dayPart !== 'full' ? '' : form.endDate, documentPath })
     } catch (err) {
       // Includes the server's own balance check (P4-9 — "Insufficient X balance"),
       // surfaced plainly rather than as an unhandled error (§8C).
@@ -91,7 +98,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
     // Stay open one more step — offer to notify the manager + admin by email — instead
     // of closing immediately (P4-6, revised: nudge, not silent).
-    setSubmitted({ type: form.type, date: form.date, dayPart: form.dayPart, reason: form.reason })
+    setSubmitted({ type: form.type, date: rangeLabel(chosenDays) || form.date, dayPart: form.dayPart, reason: form.reason, days: chosenDays.length })
   }
 
   function captureLocation() {
@@ -197,7 +204,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
             <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-emerald-600/15 border border-emerald-500/30">
               <span className="w-8 h-8 rounded-lg bg-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0">✓</span>
               <div>
-                <p className="text-white text-sm font-medium">{submitted.type} application submitted</p>
+                <p className="text-white text-sm font-medium">{submitted.type} application submitted{submitted.days > 1 ? `  (${submitted.days} days)` : ''}</p>
                 <p className="text-white/40 text-xs">{submitted.date} · now Pending with {manager ? 'your manager' : 'admin'}</p>
               </div>
             </div>
@@ -228,11 +235,24 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
           <span className="text-white text-sm font-medium">{form.type}</span>
         </div>
         {errs.type && <p className="text-red-400 text-xs mb-2">{errs.type}</p>}
-        <Label>Date</Label>
-        <Input
-          type="date" className="mb-3" value={form.date}
-          onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
-        />
+        {waiting && <p className="mb-3 p-3 rounded-xl border bg-amber-500/10 border-amber-500/30 text-amber-300 text-xs">{waitingMessage}</p>}
+        <div className="grid grid-cols-2 gap-2 mb-1">
+          <div>
+            <Label>{form.dayPart === 'full' ? 'From' : 'Date'}</Label>
+            <Input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+          </div>
+          {form.dayPart === 'full' && (
+            <div>
+              <Label>To <span className="text-white/30">(optional)</span></Label>
+              <Input type="date" min={form.date} value={form.endDate} onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))} />
+            </div>
+          )}
+        </div>
+        {errs.date && <p className="text-red-400 text-xs mb-1">{errs.date}</p>}
+        {form.endDate && chosenDays.length > 0 && (
+          <p className="text-white/40 text-xs mb-3">{chosenDays.length} day{chosenDays.length > 1 ? 's' : ''} — Sundays and holidays are skipped automatically. All days are applied together; if one cannot be applied, none is.</p>
+        )}
+        {!form.endDate && <div className="mb-2" />}
         {form.type === 'Sick Leave' && (
           <div className="mb-3 p-3 rounded-xl border bg-rose-500/10 border-rose-500/20">
             <p className="text-rose-300 text-xs font-medium mb-2">Prescription / medical certificate is mandatory for Sick Leave</p>
@@ -273,7 +293,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         {errs.location && <p className="text-red-400 text-xs mb-2">{errs.location}</p>}
         {errs.submit && <p className="text-red-400 text-xs mb-2">{errs.submit}</p>}
         <div className="flex gap-2 mt-3">
-          <Button className="flex-1" disabled={uploading} onClick={submit}>{uploading ? 'Uploading...' : 'Submit Application'}</Button>
+          <Button className="flex-1" disabled={uploading || waiting} onClick={submit}>{uploading ? 'Uploading...' : 'Submit Application'}</Button>
           <Button variant="secondary" onClick={closeModal}>Cancel</Button>
         </div>
         </>

@@ -3768,6 +3768,22 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **FIXED (same day, APPLIED):** migration `0071_restore_safe_delete.sql` re-applies 0017's design — Delete now only marks the employee (`deleted_at` + `active = false`, audit-logged) and keeps their history; the admin Employees list hides marked staff. Login, the directory and team lists already check `active`, so a deleted person can't sign in or appear. Numbered after 0023 so a replay can't overwrite it again. Rehearsed in a rolled-back transaction (21 checks, `scripts/migrations/apply-0071-restore-safe-delete.mjs`). To bring someone back, a developer clears `deleted_at` and sets `active = true`.
 
+## 58. Leave: apply for several days at once, then wait for approval; no overdrawn balances (HR request 2026-11-02)
+
+**Problem:** leave is only deducted when approved, but the balance was only checked when applying. Two pending requests could each pass the check and together take a balance below 0 (live example: Lalit, Metamask, CL -1).
+
+**Decisions (locked with HR):**
+1. One application can cover a range of days (From / To). Sundays and listed holidays inside the range are skipped by the server. Half-day = one date only.
+2. After applying, the person cannot apply for the SAME leave type again until all their requests of that type are approved or rejected. Other types are not blocked (Sick stays available while a Casual is pending).
+3. Exempt from the wait: LOP, Work From Home, On Duty. All other types are covered by it.
+4. A range is all-or-nothing, and its total days must fit in (balance - days already waiting for approval). Otherwise nothing is saved and the message says to apply as LOP. This closes the overdraw gap at apply time.
+5. No negative leave: if a balance is used up the answer is always LOP.
+6. Pending requests whose date has already passed do NOT block a new request (a manager who forgot would otherwise lock staff out; 19 such requests exist on 2026-11-02, oldest 24 Aug). They still reserve their days against the balance.
+7. Hard block on the server: new private function apply_leave_core (not callable from the app); employee_apply_leave and the new employee_apply_leave_range are thin, token-checked wrappers.
+8. Range limit 31 days. Lalit's CL -1 is set to 0 by a separate data fix.
+
+**Not changed:** manager/admin approval screens (each day is still its own row), the monthly credit, leave policy rules for probation.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1
