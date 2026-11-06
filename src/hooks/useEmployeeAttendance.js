@@ -7,6 +7,7 @@ import { attnKey } from '../api/mappers'
 import { calcStatus, calcRawHrs, todayIST, isWithinCooldown } from '../lib/datetime'
 import { PUNCH_COOLDOWN_MS, MIN_PUNCH_GAP_MIN, ACCEPTABLE_GPS_ACCURACY_M } from '../lib/constants'
 import { getLocation } from './useGeolocation'
+import { punchBlockReason } from '../lib/punchGuard'
 
 const AUTO_LOC_INTERVAL_MS = 2 * 60 * 60 * 1000 // every 2 hours, while punched in (plan.md Decision 5)
 const OD_INTERVAL_MS = 5 * 60 * 1000 // every 5 minutes, while On Duty is approved for today
@@ -16,6 +17,11 @@ const OD_INTERVAL_MS = 5 * 60 * 1000 // every 5 minutes, while On Duty is approv
 // because all three only make sense in relation to "am I punched in right now".
 export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
   const [attendance, setAttendance] = useState({})
+  // 'loading' | 'ready' | 'error' — whether today's record has really been read from the server.
+  // Until it is 'ready' the punch tiles stay off, so an unloaded (empty) record can never
+  // pass for "not punched in yet" (plan.md §59).
+  const [attendanceStatus, setAttendanceStatus] = useState('loading')
+  const [reloadTick, setReloadTick] = useState(0)
   const [locationStatus, setLocationStatus] = useState('')
   const [locationBlocked, setLocationBlocked] = useState(false)
   const [odTrackLog, setOdTrackLog] = useState([])
@@ -30,10 +36,18 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
   useEffect(() => {
     if (!token || !empId) {
       setAttendance({})
+      setAttendanceStatus('loading')
       return
     }
-    employeeFetchAttendance(token, empId).then(setAttendance).catch(console.error)
-  }, [token, empId])
+    let cancelled = false
+    setAttendanceStatus('loading')
+    employeeFetchAttendance(token, empId)
+      .then(map => { if (!cancelled) { setAttendance(map); setAttendanceStatus('ready') } })
+      .catch(e => { console.error(e); if (!cancelled) setAttendanceStatus('error') })
+    return () => { cancelled = true }
+  }, [token, empId, reloadTick])
+
+  const reloadAttendance = useCallback(() => setReloadTick(t => t + 1), [])
 
   useEffect(() => () => {
     if (autoLocIntervalRef.current) clearInterval(autoLocIntervalRef.current)
@@ -143,6 +157,12 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
     setIsPunching(true)
     setLocationStatus('Capturing location... please wait')
     setLocationBlocked(false)
+    // Read today's record straight from the server while the GPS is being captured (the two
+    // run side by side, so this adds no waiting) — one tiny single-day request. The screen's
+    // own copy may be stale or never have loaded; this is the truth the punch is built on
+    // (plan.md §59).
+    const today = todayIST()
+    const freshPromise = employeeFetchAttendance(token, currentUser.id, { from: today, to: today }).catch(() => null)
     return new Promise(resolve => {
       getLocation(async (loc, err, meta) => {
         if (!loc) {
@@ -155,7 +175,29 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
         }
         setLocationBlocked(false)
         const key = todayKey(currentUser.id)
-        const rec = attendance[key] || { empId: currentUser.id, date: todayIST() }
+        const fresh = await freshPromise
+        if (!fresh) {
+          // Can't confirm today's record -> don't guess. A punch needs the internet anyway.
+          setLocationStatus("Couldn't check today's attendance — check your internet and try again")
+          setTimeout(() => setLocationStatus(''), 5000)
+          punchingRef.current = false
+          setIsPunching(false)
+          resolve()
+          return
+        }
+        // Bring the screen in line with the server (flips the tile to Punch Out if needed).
+        setAttendance(prev => ({ ...prev, ...fresh }))
+        setAttendanceStatus('ready')
+        const blockReason = punchBlockReason(fresh[key], type)
+        if (blockReason) {
+          setLocationStatus(blockReason)
+          setTimeout(() => setLocationStatus(''), 6000)
+          punchingRef.current = false
+          setIsPunching(false)
+          resolve()
+          return
+        }
+        const rec = fresh[key] || { empId: currentUser.id, date: todayIST() }
         const next = { ...rec }
         const now = new Date()
         const t = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -221,7 +263,7 @@ export function useEmployeeAttendance(token, empId, stdHours, onAudit) {
   }
 
   return {
-    attendance, setAttendance, todayKey, todayRecord, persist, punch, isPunching,
+    attendance, setAttendance, todayKey, todayRecord, persist, punch, isPunching, attendanceStatus, reloadAttendance,
     locationStatus, locationBlocked,
     odTrackingActive, odTrackLog,
     startOdTracking, stopOdTracking, checkAndStartOdTracking, stopAutoLocTracking,

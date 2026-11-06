@@ -3784,6 +3784,25 @@ never been watched rendering for an actual paid claim, since none exist yet.
 
 **Not changed:** manager/admin approval screens (each day is still its own row), the monthly credit, leave policy rules for probation.
 
+## 59. A day has ONE punch-in — second punch-in no longer overwrites the morning (Ashish Singh, 2026-11-06)
+
+**Report:** Ashish punched in in the morning (app confirmed), but in the evening the app showed "Absent" and offered Punch In.
+**Found (read-only first):** 5 Nov location log had TWO punch-ins (10:03 AM and 6:48 PM); the attendance row held only 18:48. `employee_punch`
+let a second "in" overwrite `in_time`. The Punch In/Out button was chosen only from the phone's copy of today's record (`PunchPanel.phaseOf`),
+which starts empty and was loaded once with errors only sent to the console. No device block involved. 6 Nov: only one log (evening), cause unproven.
+**Fixes (all three shipped):**
+1. **Server (migration 0073, LIVE):** `employee_punch` raises "You are already punched in today at HH:MM. Use Punch Out when you leave." for a second
+   punch-in. Punch-out untouched (re-punching out stays a valid correction). Built from the live function body, not the repo copy. Self-tested in a rolled-back transaction.
+2. **App (needs push/deploy):** `useEmployeeAttendance` tracks `attendanceStatus` (loading/ready/error); punch tiles are off until ready, error shows Retry,
+   the "Today's Status" badge no longer says Absent while loading. `punch()` also reads today's single row fresh from the server *in parallel with the GPS capture*
+   (no extra waiting, one tiny request) and builds the punch from it — so the status written on punch-out is computed from the real in-time too.
+   Pure helpers + tests: `src/lib/punchGuard.js`.
+3. **Data:** Ashish 5 Nov in_time restored to 10:03:56 (proof: location log). Backup: `scripts/data-fixes/backup-ashish-attendance-2026-11-05.json`.
+   His 5 Nov punch-out is NOT set — HR decides (his 6:48 PM tap was probably meant as the out).
+**Speed/scale/security:** +1 single-day request per punch (parallel with GPS); no new tables/columns; guard is one comparison on a row already read; no new grants.
+**Open:** checked last 60 days (location_logs punch_in count vs attendance row): the same overwrite also hit Harshit Sharma (12 Sep, 23 Sep, 24 Sep, 13 Oct, 4 Nov), Shivam Jatav (28 Oct), Rahul (7 Sep, 9 Sep), Komal (13 Oct, minor). Not corrected — awaiting HR's go-ahead (their punch-outs are also affected, so HR should decide each).
+`PUNCH_DEVICE_BLOCKED` audit rows written just before a `raise` are rolled back with it — worth checking separately.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

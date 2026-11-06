@@ -110,6 +110,8 @@ export default function App() {
           punch={(type, currentUser, opts) => empAttendance.punch(type, currentUser, opts)}
           sites={auth.sites}
           isPunching={empAttendance.isPunching}
+          attendanceStatus={empAttendance.attendanceStatus}
+          reloadAttendance={empAttendance.reloadAttendance}
           locationStatus={empAttendance.locationStatus}
           locationBlocked={empAttendance.locationBlocked}
           odTrackingActive={empAttendance.odTrackingActive}

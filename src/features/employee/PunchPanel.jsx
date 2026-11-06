@@ -5,6 +5,7 @@ import { calcRawHrs, calcOvertimeHours, todayIST } from '../../lib/datetime'
 import { fmtHrs } from '../../lib/format'
 import { haversineMeters, nearestSite } from '../../lib/geo'
 import { getLocation } from '../../hooks/useGeolocation'
+import { punchAvailability } from '../../lib/punchGuard'
 
 // A polite (non-blocking) reminder of the ideal punch slots, derived from the flexible
 // work window rather than hardcoded text — stays correct if WORK_WINDOW_* or stdHours
@@ -51,7 +52,7 @@ function PunchTile({ title, subtitle, phase, disabled, onClick, highlight, title
   )
 }
 
-export function PunchPanel({ currentUser, record, stdHours, holidays, sites, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog }) {
+export function PunchPanel({ currentUser, record, stdHours, holidays, sites, punch, isPunching, attendanceStatus = 'ready', onRetryAttendance, locationStatus, locationBlocked, odTrackingActive, odTrackLog }) {
   const [note, setNote] = useState('')
   // A soft, silent location fetch purely to highlight the nearest office tile and show
   // live distances before the employee taps anything (plan.md §6B — "highlights the
@@ -60,6 +61,10 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
   const [liveCoords, setLiveCoords] = useState(null)
 
   const phase = phaseOf(record)
+  // Until today's record is really loaded, the tiles stay off (plan.md §59) — an empty,
+  // not-yet-loaded record must never look like "not punched in yet".
+  const availability = punchAvailability(attendanceStatus)
+  const tilesOff = isPunching || !availability.enabled
   const workMode = currentUser?.workMode || 'office'
   const showOfficeTiles = workMode === 'office' || workMode === 'both'
   const showFieldTile = workMode === 'field' || workMode === 'both'
@@ -132,6 +137,15 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
           </div>
         )}
 
+        {!availability.enabled && (
+          <div className={`rounded-lg p-3 mb-3 text-xs text-center border ${availability.canRetry ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-blue-500/10 text-blue-300 border-blue-500/20'}`}>
+            <p>{availability.message}</p>
+            {availability.canRetry && onRetryAttendance && (
+              <button onClick={onRetryAttendance} className="mt-2 px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold">Retry</button>
+            )}
+          </div>
+        )}
+
         {phase === 'done' ? (
           <div className="rounded-xl p-4 text-center bg-emerald-500/10 border border-emerald-500/20">
             <p className="text-emerald-300 text-sm font-medium">Punched in and out for today</p>
@@ -152,7 +166,7 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
                   subtitle={distance == null ? 'Locating…' : `${Math.round(distance)}m away · ${site.radiusM}m radius`}
                   phase={phase}
                   highlight={isNearest}
-                  disabled={isPunching}
+                  disabled={tilesOff}
                   onClick={() => punch(phase, { siteId: site.id })}
                 />
               )
@@ -162,7 +176,7 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
                 title="Field"
                 subtitle="No location check — note required"
                 phase={phase}
-                disabled={isPunching || noteMissing}
+                disabled={tilesOff || noteMissing}
                 onClick={() => punch(phase, { fieldNote: note })}
               />
             )}
@@ -171,7 +185,7 @@ export function PunchPanel({ currentUser, record, stdHours, holidays, sites, pun
                 title="Work From Home"
                 subtitle="Your usual routine"
                 phase={phase}
-                disabled={isPunching}
+                disabled={tilesOff}
                 onClick={() => punch(phase, {})}
               />
             )}

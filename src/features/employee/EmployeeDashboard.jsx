@@ -20,7 +20,7 @@ const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful
 
 export function EmployeeDashboard({
   currentUser, empTab, setEmpTab, onLogout,
-  attendance, todayRecord, stdHours: globalStdHours, adminEmail, punch, isPunching, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
+  attendance, todayRecord, stdHours: globalStdHours, adminEmail, punch, isPunching, attendanceStatus, reloadAttendance, locationStatus, locationBlocked, odTrackingActive, odTrackLog,
   holidays, sites, directory, regularizations, submitRegularization,
   leaves, leaveBalances, availableLeaveTypes, applyLeave, onOdApplied,
   team, isBirthdayToday, birthdayMessage, myAssets, travel,
@@ -84,8 +84,10 @@ export function EmployeeDashboard({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-white/50 text-xs uppercase tracking-wide mb-1">Today's Status</p>
-              <Badge status={status} />
-              {shortfallNote && <p className="text-white/40 text-xs mt-1.5">{shortfallNote}</p>}
+              {attendanceStatus === 'ready' || attendanceStatus === undefined
+                ? <Badge status={status} />
+                : <p className="text-white/60 text-sm">{attendanceStatus === 'error' ? "Couldn't load — see Retry below" : 'Loading…'}</p>}
+              {shortfallNote && (attendanceStatus === 'ready' || attendanceStatus === undefined) && <p className="text-white/40 text-xs mt-1.5">{shortfallNote}</p>}
             </div>
           </div>
         </div>
@@ -103,6 +105,7 @@ export function EmployeeDashboard({
           <PunchPanel
             currentUser={currentUser} record={todayRecord} stdHours={stdHours} holidays={holidays} sites={sites}
             punch={(type, opts) => punch(type, currentUser, opts)} isPunching={isPunching}
+            attendanceStatus={attendanceStatus} onRetryAttendance={reloadAttendance}
             locationStatus={locationStatus} locationBlocked={locationBlocked}
             odTrackingActive={odTrackingActive} odTrackLog={odTrackLog}
           />
