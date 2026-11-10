@@ -30,6 +30,9 @@ export async function employeeApplyLeaveRange(token, empId, leave) {
       reason: leave.reason,
       location: leave.location || null,
       document_path: leave.documentPath || null,
+      // plan.md §60 — On Duty / Work From Home only; the database refuses those two without both times.
+      requested_in: leave.requestedIn || null,
+      requested_out: leave.requestedOut || null,
     },
   })
   if (error) throw error

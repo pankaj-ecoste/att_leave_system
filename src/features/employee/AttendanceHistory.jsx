@@ -44,7 +44,8 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
   async function submit() {
     const nextErrs = {}
     if (!form.date) nextErrs.date = 'Date is required'
-    if (!form.inTime && !form.outTime) nextErrs.inTime = 'At least one time is required'
+    // plan.md §60 — both times are mandatory (the database refuses a request with only one).
+    if (!form.inTime || !form.outTime) nextErrs.inTime = 'Please enter both your in-time and your out-time'
     if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
     setErrs(nextErrs)
     if (Object.keys(nextErrs).length) return
@@ -150,11 +151,11 @@ export function AttendanceHistory({ currentUser, attendance, stdHours, holidays,
         {errs.date && <p className="text-red-400 text-xs mb-2">{errs.date}</p>}
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
-            <Label>Actual In Time</Label>
+            <Label>Actual In Time <span className="text-red-400">*</span></Label>
             <Input type="time" value={form.inTime} onChange={e => setForm(p => ({ ...p, inTime: e.target.value }))} />
           </div>
           <div>
-            <Label>Actual Out Time</Label>
+            <Label>Actual Out Time <span className="text-red-400">*</span></Label>
             <Input type="time" value={form.outTime} onChange={e => setForm(p => ({ ...p, outTime: e.target.value }))} />
           </div>
         </div>

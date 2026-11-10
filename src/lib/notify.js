@@ -6,13 +6,16 @@
 // app. Pure function — no network, no DOM — so it's testable on its own (§8C).
 import { APP_URL, DAY_PARTS } from './constants'
 
-export function buildLeaveNotifyMailto({ employeeName, leaveType, date, dayPart, reason, managerEmail, adminEmail }) {
+export function buildLeaveNotifyMailto({ employeeName, leaveType, date, dayPart, reason, managerEmail, adminEmail, inTime, outTime }) {
   const to = [managerEmail, adminEmail].filter(Boolean).join(',')
   const durationLabel = DAY_PARTS.find(dp => dp.id === dayPart)?.label || 'Full Day'
   const subject = `Leave Application — ${employeeName} — ${leaveType} — ${date}`
+  // plan.md §60 — On Duty / WFH carry the hours the person will work; the approver needs them to verify.
+  const timesLine = inTime && outTime ? [`Hours: ${inTime} to ${outTime}`, ''] : []
   const body = [
     `${employeeName} has applied for ${leaveType} (${durationLabel}) on ${date}.`,
     '',
+    ...timesLine,
     `Reason: ${reason || '—'}`,
     '',
     'Please review and approve/reject in the HRMS app:',

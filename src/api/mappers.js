@@ -229,6 +229,9 @@ export function rowToLeave(row) {
     reason: row.reason,
     location: row.location,
     documentPath: row.document_path,
+    // plan.md §60 — the in/out time asked for on an On Duty / Work From Home request (null for everything else).
+    requestedIn: row.requested_in ? row.requested_in.slice(0, 5) : null,
+    requestedOut: row.requested_out ? row.requested_out.slice(0, 5) : null,
     status: row.status,
     appliedAt: row.applied_at,
     updatedAt: row.updated_at,

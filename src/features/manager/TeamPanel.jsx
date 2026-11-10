@@ -5,6 +5,7 @@ import { Input } from '../../components/ui/Input'
 import { Spinner } from '../../components/ui/Spinner'
 import { TravelDayChain } from '../../components/TravelDayChain'
 import { TravelExpenseList } from '../../components/TravelExpenseList'
+import { TimedRequestDetails } from '../../components/TimedRequestDetails'
 import { allJourneyDates, groupExpensesByDate } from '../../lib/travelExpenses'
 import { PhotoViewerModal } from '../../components/PhotoViewerModal'
 import { MONTHS, getShiftInfo } from '../../lib/constants'
@@ -130,6 +131,7 @@ export function TeamPanel({
                   <div>
                     <p className="text-white font-medium text-sm">{l.empName}</p>
                     <p className="text-white/50 text-xs">{l.leaveType}{l.dayPart !== 'full' && ` (${l.dayPart === 'first_half' ? 'First Half' : 'Second Half'})`} · {l.date}</p>
+                    <TimedRequestDetails leave={l} />
                     <p className="text-white/30 text-xs mt-1 italic">{l.reason}</p>
                     {l.documentPath && (
                       <button onClick={() => viewDocument(l.documentPath)} className="text-indigo-400 hover:text-indigo-300 text-xs mt-1 underline underline-offset-2">

@@ -9,6 +9,9 @@ import { todayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
 import { buildLeaveNotifyMailto } from '../../lib/notify'
 import { daysInRange, hasWaitingRequest, rangeLabel } from '../../lib/leaveRange'
+import { isTimedLeaveType, validateTimedRequest, timesLabel, awaitingApprovalLabel } from '../../lib/requestTimes'
+
+const EMPTY_FORM = () => ({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null, inTime: '', outTime: '' })
 
 const PARTIAL_TYPES = [{ label: 'Partial Leave - 1 Hour', max: 2 }, { label: 'Partial Leave - 2 Hours', max: 1 }]
 
@@ -21,7 +24,7 @@ function monthlyPartialCount(leaves, empId, label) {
 
 export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes, applyLeave, onOdApplied, directory, adminEmail }) {
   const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [errs, setErrs] = useState({})
   const [locationStatus, setLocationStatus] = useState('')
   const [file, setFile] = useState(null)
@@ -41,11 +44,13 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
   // plan.md §58 — a person can have only one set of requests of a type waiting at a time (LOP / WFH / On Duty exempt)
   const waiting = form.type ? hasWaitingRequest(leaves, currentUser.id, form.type, todayIST()) : false
   const waitingMessage = `You already have a ${form.type} request waiting for approval — you can apply again once it is approved or rejected.`
-  const chosenDays = daysInRange(form.date, form.dayPart !== 'full' ? '' : form.endDate)
+  // plan.md §60 — On Duty / Work From Home: today only, one day, with in-time and out-time.
+  const timed = isTimedLeaveType(form.type)
+  const chosenDays = daysInRange(form.date, form.dayPart !== 'full' || timed ? '' : form.endDate)
   const pendingCount = myLeaves.filter(l => l.status === 'Pending' || l.status === 'Manager Approved').length
 
   function openFor(label) {
-    setForm({ type: label, date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
+    setForm({ ...EMPTY_FORM(), type: label })
     setErrs({})
     setLocationStatus('')
     setFile(null)
@@ -55,7 +60,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
 
   function closeModal() {
     setModalOpen(false)
-    setForm({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null })
+    setForm(EMPTY_FORM())
     setErrs({})
     setLocationStatus('')
     setFile(null)
@@ -68,6 +73,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
     if (form.endDate && form.endDate < form.date) nextErrs.date = 'The last day cannot be before the first day'
     if (waiting) nextErrs.submit = waitingMessage
+    Object.assign(nextErrs, validateTimedRequest({ type: form.type, date: form.date, today: todayIST(), inTime: form.inTime, outTime: form.outTime }))
     const needsLocation = form.type === 'Work From Home' || form.type === 'On Duty'
     if (needsLocation && !form.location) nextErrs.location = `Location is required for ${form.type}`
     if (form.type === 'Sick Leave' && !file) nextErrs.file = 'A prescription or medical certificate is required for Sick Leave'
@@ -88,7 +94,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     setUploading(false)
 
     try {
-      await applyLeave(currentUser, { ...form, endDate: form.dayPart !== 'full' ? '' : form.endDate, documentPath })
+      await applyLeave(currentUser, { ...form, endDate: form.dayPart !== 'full' || timed ? '' : form.endDate, documentPath })
     } catch (err) {
       // Includes the server's own balance check (P4-9 — "Insufficient X balance"),
       // surfaced plainly rather than as an unhandled error (§8C).
@@ -98,7 +104,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     if (form.type === 'On Duty' && form.date === todayIST()) onOdApplied?.()
     // Stay open one more step — offer to notify the manager + admin by email — instead
     // of closing immediately (P4-6, revised: nudge, not silent).
-    setSubmitted({ type: form.type, date: rangeLabel(chosenDays) || form.date, dayPart: form.dayPart, reason: form.reason, days: chosenDays.length })
+    setSubmitted({ type: form.type, date: rangeLabel(chosenDays) || form.date, dayPart: form.dayPart, reason: form.reason, days: chosenDays.length, inTime: timed ? form.inTime : '', outTime: timed ? form.outTime : '' })
   }
 
   function captureLocation() {
@@ -189,7 +195,8 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
               <div key={l.id} className="bg-white/5 rounded-xl p-3 flex items-center justify-between border border-white/5">
                 <div>
                   <p className="text-white text-sm font-medium">{l.leaveType}{l.dayPart !== 'full' && <span className="text-white/40 font-normal"> · {l.dayPart === 'first_half' ? 'First Half' : 'Second Half'}</span>}</p>
-                  <p className="text-white/30 text-xs">{l.date} · {l.reason?.slice(0, 35)}{l.reason?.length > 35 ? '...' : ''}</p>
+                  <p className="text-white/30 text-xs">{l.date}{timesLabel(l) && <span className="font-mono"> · {timesLabel(l)}</span>} · {l.reason?.slice(0, 35)}{l.reason?.length > 35 ? '...' : ''}</p>
+                  {awaitingApprovalLabel(l, !!manager) && <p className="text-amber-300/80 text-xs mt-0.5">{awaitingApprovalLabel(l, !!manager)} — counts once approved</p>}
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span>
               </div>
@@ -205,7 +212,8 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
               <span className="w-8 h-8 rounded-lg bg-emerald-500/30 flex items-center justify-center text-emerald-300 shrink-0">✓</span>
               <div>
                 <p className="text-white text-sm font-medium">{submitted.type} application submitted{submitted.days > 1 ? `  (${submitted.days} days)` : ''}</p>
-                <p className="text-white/40 text-xs">{submitted.date} · now Pending with {manager ? 'your manager' : 'admin'}</p>
+                <p className="text-white/40 text-xs">{submitted.date}{submitted.inTime && submitted.outTime ? ` · ${submitted.inTime} — ${submitted.outTime}` : ''} · now Pending with {manager ? 'your manager' : 'admin'}</p>
+                {submitted.inTime && submitted.outTime && <p className="text-white/40 text-xs mt-1">It counts in your attendance only after it is approved.</p>}
               </div>
             </div>
             <p className="text-white/40 text-xs mb-3">
@@ -219,6 +227,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
                   href={buildLeaveNotifyMailto({
                     employeeName: currentUser.name, leaveType: submitted.type, date: submitted.date,
                     dayPart: submitted.dayPart, reason: submitted.reason, managerEmail: manager?.email, adminEmail,
+                    inTime: submitted.inTime, outTime: submitted.outTime,
                   })}
                   className="flex-1 text-center rounded-xl px-4 py-2.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all active:scale-95"
                 >
@@ -238,10 +247,11 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
         {waiting && <p className="mb-3 p-3 rounded-xl border bg-amber-500/10 border-amber-500/30 text-amber-300 text-xs">{waitingMessage}</p>}
         <div className="grid grid-cols-2 gap-2 mb-1">
           <div>
-            <Label>{form.dayPart === 'full' ? 'From' : 'Date'}</Label>
-            <Input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+            <Label>{timed ? 'Date (today only)' : form.dayPart === 'full' ? 'From' : 'Date'}</Label>
+            {/* plan.md §60 — On Duty / WFH are for today only, so the date is fixed. */}
+            <Input type="date" value={form.date} disabled={timed} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
           </div>
-          {form.dayPart === 'full' && (
+          {form.dayPart === 'full' && !timed && (
             <div>
               <Label>To <span className="text-white/30">(optional)</span></Label>
               <Input type="date" min={form.date} value={form.endDate} onChange={e => setForm(p => ({ ...p, endDate: e.target.value }))} />
@@ -253,6 +263,22 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
           <p className="text-white/40 text-xs mb-3">{chosenDays.length} day{chosenDays.length > 1 ? 's' : ''} — Sundays and holidays are skipped automatically. All days are applied together; if one cannot be applied, none is.</p>
         )}
         {!form.endDate && <div className="mb-2" />}
+        {timed && (
+          <div className="mb-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>In time <span className="text-red-400">*</span></Label>
+                <Input type="time" value={form.inTime} onChange={e => setForm(p => ({ ...p, inTime: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Out time <span className="text-red-400">*</span></Label>
+                <Input type="time" value={form.outTime} onChange={e => setForm(p => ({ ...p, outTime: e.target.value }))} />
+              </div>
+            </div>
+            {errs.time && <p className="text-red-400 text-xs mt-1">{errs.time}</p>}
+            <p className="text-white/30 text-xs mt-1">The hours you will work today. Your manager or admin checks and approves — it counts only after approval.</p>
+          </div>
+        )}
         {form.type === 'Sick Leave' && (
           <div className="mb-3 p-3 rounded-xl border bg-rose-500/10 border-rose-500/20">
             <p className="text-rose-300 text-xs font-medium mb-2">Prescription / medical certificate is mandatory for Sick Leave</p>

@@ -3803,6 +3803,26 @@ which starts empty and was loaded once with errors only sent to the console. No 
 **Open:** checked last 60 days (location_logs punch_in count vs attendance row): the same overwrite also hit Harshit Sharma (12 Sep, 23 Sep, 24 Sep, 13 Oct, 4 Nov), Shivam Jatav (28 Oct), Rahul (7 Sep, 9 Sep), Komal (13 Oct, minor). Not corrected — awaiting HR's go-ahead (their punch-outs are also affected, so HR should decide each).
 `PUNCH_DEVICE_BLOCKED` audit rows written just before a `raise` are rolled back with it — worth checking separately.
 
+## 60. Regularization needs both times; On Duty / WFH requests carry in+out time and wait for approval (team request 2026-11-10)
+
+**Asked by:** the team (via the user). Decided in discussion before any code.
+**Rules locked:**
+1. **Regularization:** BOTH punch-in and punch-out time are mandatory (database + screen). Old requests that have only one time stay valid and approvable.
+2. **On Duty and Work From Home (leave types):** the request is for **TODAY ONLY** (no future date, no past date, no range), one day at a time. It must carry an **in-time and an out-time**
+   (out after in, same day). Location stays mandatory. Reason stays mandatory. Applies to everyone who applies for these two types (the permanent WFH *tag* needs no request, unchanged).
+3. **Approval is what counts.** Pending / rejected = nothing changes in attendance. The approver may decide later (even a day or more after) because they verify first —
+   there is NO deadline on approving (not asked for; none built). Approval writes the **request's own date** (not the approval date).
+4. **On approval:** the day keeps the label `On Duty` / `WFH`, and the approved in/out times are written into attendance so hours count. If the employee already punched in that day,
+   the approved times REPLACE the punch times (their real punches stay in `app_in_time` / `app_out_time`) and an audit row `LEAVE_TIMES_REPLACED` is written.
+5. On Duty GPS tracking (5-minutely, while an approved OD exists for today) is unchanged.
+6. If the approver rejects, the employee cannot re-apply (same-day rule) — they use Regularization (now with both times).
+7. **Old open tabs / old requests:** an old app sending On Duty/WFH without times is refused with a clear message (hard block, same stance as the device rules). Already-pending
+   OD/WFH rows without times stay approvable (no times written, as before).
+**Notifications (already built, reused):** OD/WFH are leave rows, so they already appear in the manager banner / My Team count / admin "Ready for decision" (§40, §42).
+**Added:** banner text names the type ("1 On Duty, 1 WFH, 2 leave, 1 correction"); approver cards show tag + times + location; employee sees "Awaiting manager approval" on the request until decided; the email nudge includes the times.
+**Backend:** migration 0074 — `leave_applications.requested_in/requested_out`; `apply_leave_core` + `employee_apply_leave_range` (today-only, times required); `apply_leave_approval_effects` (writes times);
+`employee_submit_regularization` (both times required). The decide functions and all list functions are untouched (they `select *`, new columns flow through).
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

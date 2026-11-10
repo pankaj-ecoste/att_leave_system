@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { adminGetLeaveDocumentUrl } from '../../api/documents'
+import { TimedRequestDetails } from '../../components/TimedRequestDetails'
 
 export function LeaveApprovals({ token, employees, leaves, adminRegs, decideLeave, decideRegularization, onAudit }) {
   const [errMsg, setErrMsg] = useState('')
@@ -89,6 +90,7 @@ export function LeaveApprovals({ token, employees, leaves, adminRegs, decideLeav
                   {l.dayPart !== 'full' && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 border border-orange-500/30">{l.dayPart === 'first_half' ? 'First Half' : 'Second Half'}</span>}
                 </div>
                 <p className="text-white/40 text-xs">{l.date} · {l.company?.split(' ')[0]}</p>
+                <TimedRequestDetails leave={l} />
                 <p className="text-white/60 text-xs mt-1 italic">"{l.reason}"</p>
                 {l.documentPath && (
                   <button onClick={() => viewDocument(l.documentPath)} className="text-indigo-400 hover:text-indigo-300 text-xs mt-1.5 underline underline-offset-2">
@@ -128,7 +130,7 @@ export function LeaveApprovals({ token, employees, leaves, adminRegs, decideLeav
                   {l.leaveType}{l.dayPart !== 'full' && <span className="text-white/30"> ({l.dayPart === 'first_half' ? '1st Half' : '2nd Half'})</span>}
                   {l.documentPath && <button onClick={() => viewDocument(l.documentPath)} className="ml-1.5 text-indigo-400 hover:text-indigo-300 underline underline-offset-2">doc</button>}
                 </td>
-                <td className="py-2 pr-4 font-mono">{l.date}</td>
+                <td className="py-2 pr-4 font-mono">{l.date}{l.requestedIn && l.requestedOut && <span className="block text-white/40">{l.requestedIn}–{l.requestedOut}</span>}</td>
                 <td className="py-2 pr-4 max-w-[150px] truncate text-white/40">{l.reason}</td>
                 <td className="py-2"><span className={`px-2 py-1 rounded-full text-xs border ${l.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : l.status === 'Rejected' ? 'bg-red-500/20 text-red-300 border-red-500/30' : l.status === 'Manager Approved' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'}`}>{l.status}</span></td>
               </tr>

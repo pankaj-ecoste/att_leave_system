@@ -55,6 +55,8 @@ export function useEmployeeLeave(token, empId, onAudit) {
       reason: form.reason,
       location: form.location || null,
       documentPath: form.documentPath || null,
+      requestedIn: form.inTime || null,
+      requestedOut: form.outTime || null,
     })
     if (saved.length) setLeaves(prev => [...saved.slice().reverse(), ...prev])
     const when = saved.length > 1 ? `${saved[0].date} to ${saved[saved.length - 1].date} (${saved.length} days)` : form.date
