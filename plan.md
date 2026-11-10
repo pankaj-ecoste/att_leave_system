@@ -3823,6 +3823,16 @@ which starts empty and was loaded once with errors only sent to the console. No 
 **Backend:** migration 0074 — `leave_applications.requested_in/requested_out`; `apply_leave_core` + `employee_apply_leave_range` (today-only, times required); `apply_leave_approval_effects` (writes times);
 `employee_submit_regularization` (both times required). The decide functions and all list functions are untouched (they `select *`, new columns flow through).
 
+## 61. Fresh 5-a-month correction allowance for one employee — "excused" mark (HR request 2026-11-10, Ashish Singh)
+
+**Asked:** reset Ashish Singh's regularization allowance to 5 again, for him only.
+**Why not delete:** §39 relies on requests never being deleted (that is what stops the limit being dodged), and his 3 Nov requests are approved history.
+**Built (migration 0075, LIVE):** `regularization_requests.limit_excused_at`. A request with it set no longer counts toward the 5/month limit; `employee_submit_regularization` counts only unexcused ones.
+Screen counter (`regularizationQuota`) ignores them too (`limitExcused` from the mapper) so screen == database.
+**Applied for Ashish Singh (emp 1111):** his 3 requests filed in Nov (6 and 9 Nov) were marked excused → 0 counting, 5 available; 14 requests still on record; the other 42 counting requests this month unchanged; audit row `REGULARIZATION_LIMIT_RESET`.
+**To do the same for anyone later:** `node scripts/migrations/apply-0075-regularization-limit-excused.mjs "<exact name>"` is for the first run only (it applies the migration); for another person just set `limit_excused_at = now()` on that person's requests filed this month (or ask Claude) — it is per person, per request, auditable.
+**Pushed?** the screen part needs a deploy; until then Ashish's own screen still shows "3 of 5 used" although the database now allows 5.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

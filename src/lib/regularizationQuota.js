@@ -8,7 +8,8 @@ import { REGULARIZATION_MONTHLY_LIMIT } from './constants'
 // todayIst is 'YYYY-MM-DD'. createdAt is the row's ISO timestamp.
 export function regularizationQuota(regularizations, todayIst, limit = REGULARIZATION_MONTHLY_LIMIT) {
   const month = String(todayIst).slice(0, 7)
-  const used = (regularizations || []).filter(r => r?.createdAt && istMonthOf(r.createdAt) === month).length
+  // plan.md §61 — a request HR has excused (limitExcused) no longer counts, same as in the database.
+  const used = (regularizations || []).filter(r => r?.createdAt && !r.limitExcused && istMonthOf(r.createdAt) === month).length
   return { used, limit, left: Math.max(limit - used, 0), reached: used >= limit }
 }
 

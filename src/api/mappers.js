@@ -314,6 +314,8 @@ export function rowToRegularization(row) {
     reason: row.reason,
     status: row.status,
     createdAt: row.created_at,
+    // plan.md §61 — HR excused this request from the 5-a-month limit (it no longer counts).
+    limitExcused: !!row.limit_excused_at,
   }
 }
 

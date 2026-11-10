@@ -21,6 +21,10 @@ describe('regularizationQuota', () => {
     const regs = [req('2026-10-01T05:00:00Z'), req('2026-10-02T05:00:00Z'), req('2026-09-28T05:00:00Z')]
     expect(regularizationQuota(regs, '2026-10-03').used).toBe(2)
   })
+  it('does not count a request HR excused (plan.md §61), but still counts the rest', () => {
+    const regs = [{ ...req('2026-10-01T05:00:00Z'), limitExcused: true }, { ...req('2026-10-02T05:00:00Z'), limitExcused: true }, req('2026-10-03T05:00:00Z')]
+    expect(regularizationQuota(regs, '2026-10-03')).toEqual({ used: 1, limit: 5, left: 4, reached: false })
+  })
   it('counts rejected and approved requests the same as pending ones', () => {
     const regs = [req('2026-10-01T05:00:00Z', 'Rejected'), req('2026-10-01T06:00:00Z', 'Approved'), req('2026-10-01T07:00:00Z', 'Pending')]
     expect(regularizationQuota(regs, '2026-10-03').used).toBe(3)
