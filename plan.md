@@ -3833,6 +3833,32 @@ Screen counter (`regularizationQuota`) ignores them too (`limitExcused` from the
 **To do the same for anyone later:** `node scripts/migrations/apply-0075-regularization-limit-excused.mjs "<exact name>"` is for the first run only (it applies the migration); for another person just set `limit_excused_at = now()` on that person's requests filed this month (or ask Claude) — it is per person, per request, auditable.
 **Pushed?** the screen part needs a deploy; until then Ashish's own screen still shows "3 of 5 used" although the database now allows 5.
 
+## 62. Leave for a past day of the current month — CL / EL / SL (HR request 2026-11-14) — migration 0076 LIVE + screen pushed (2026-11-14)
+
+**Asked:** a staff member who forgot to mark leave but has the balance can apply for a past date, **same calendar month only**.
+**Today (read from migration 0072 + 0032, to be re-verified on prod with pg_get_functiondef before building):** Casual + Earned Leave reject any past date (`apply_leave_core`, line 38). Sick Leave has NO past-date block at all (any past date, any month). Approval (`apply_leave_approval_effects`) deducts balance and writes status Leave for that date — works for past dates already, unchanged.
+
+**Decisions (all confirmed by user):**
+1. Leave types: Casual, Earned, Sick. All existing rules stay: balance check (no overdraw, waiting days subtracted), probation/notice 1-leave/year, Sick needs medical document, duplicate-date block, Sundays/holidays skipped in a range, same approvers, deduct at approval.
+2. Allowed dates: from the 1st of the current month up to today. Earlier month = refused ("Leave can only be applied for dates within the current month"). Strict, no grace period. Applies to Sick Leave too (this TIGHTENS Sick Leave, which is unlimited back today).
+3. Half-day CL/EL/SL allowed for past dates in the month. Partial Leave stays same-day only (unchanged).
+4. **Hard block if the day already has a punch-in** (punch-in+out, OR punch-in only / forgot punch-out): "You have attendance for this day. Use Regularization instead." Absent / no record = allowed. For a range, if any day has a punch the whole application is refused (all-or-nothing, as today).
+5. A past-dated request does not count as "waiting" for the one-pending-per-type rule (already true: that check only looks at date >= today).
+
+**Build plan:** one migration replacing `apply_leave_core` (date window + punch check) and, if needed, the range wrapper; front-end: From/To date pickers for CL/EL/SL get `min` = 1st of month, clear error text. Server enforces; screen only guides.
+**Built:** migration 0076 (apply_leave_core only; based on the LIVE 0074 body — the first draft used the older 0072 body and would have wiped the §60 OD/WFH rules; the apply script's "live == repo file" check caught it). `scripts/migrations/apply-0076-...mjs` = dry run by default (28 checks in a rolled-back transaction, real employee), `--apply` installs. Screen: `leaveRange.js` earliestLeaveDate/pastDayError (+tests), LeaveApply From-date `min`, Leave Policy text. 336 tests + build pass.
+**LESSON:** always diff the live function against the LATEST migration that touched it, not the one that first built it.
+**Before build:** verify live function bodies on prod; check how punch columns are stored (in/out time fields) and how biometric-imported rows look; test with a test employee, then clean up. No push without user's say-so.
+
+## 63. My Journey for ALL employees (HR request 2026-11-14) — migration 0077 LIVE + screen pushed (2026-11-14)
+
+**Today:** tab shown only for work_mode field/both (`EmployeeDashboard.jsx:43`); six travel RPCs (0044, 0046, 0062, 0066, 0067, 0068 — latest live versions) also refuse other work modes; admin/manager travel lists filter work_mode in (field, both); claims need `ta_rate_tier`.
+**Decisions:** (1) every employee (office-only, Production Plant, managers too) sees My Journey and can log visits + expenses. (2) Selfie/GPS rules identical for everyone. (3) Claims: staff with no `ta_rate_tier` can log but cannot claim until HR sets their tier (existing "ask HR" message) — user said only "yes for all employees"; this is the suggested default, CONFIRM before building if HR wants an auto default tier. (4) Admin/manager travel lists show anyone who has journey data (not 83 empty rows). (5) UNCHANGED: mandatory field note at punch and the Field Staff dashboard tile stay tied to work_mode (`requiresFieldNote`).
+**Confirmed 2026-11-14:** claims for staff with no tier = HR sets the tier (no auto default).
+**Built:** migration 0077 redefines FIVE functions (not six — expense/visit/claim drop the work-mode check; manager summary + admin overview = field/both PLUS anyone with visits/expenses), each from its latest repo body, proved == live first. `scripts/migrations/apply-0077-...mjs` (dry run default; 17 checks in a rolled-back transaction, token checks stubbed inside the tx only). Screen: tab always shown (EmployeeDashboard), comments, empty-state texts. No grant lines (create-or-replace keeps permissions). Admin sets a tier on the Travel tab, where a person appears once they have data.
+**Dropped idea:** an up-front "rate not set" warning on the claim card — `currentUser` (directory data, 0063) does not carry ta_rate_tier, so it would have shown to everyone. The server message at submit stays.
+**Build plan:** new migration redefining the six RPCs minus the work-mode check (diff each live body against its latest migration first); list RPCs include anyone with data; remove the tab condition; show the tier setting for all employees in admin. Dry-run script in a rolled-back transaction as for 0076.
+
 ## Appendix — Reference
 
 **Old project:** `attendance_tracker` · ref `pwoilxkcyqvvnwdqspos` · founderoffice-ecoste's Org · Free · Nano · ap-south-1

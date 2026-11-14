@@ -11,11 +11,8 @@ import { withRetry, friendlySaveError, shrinkImage } from '../lib/travelUpload'
 import { todayIST } from '../lib/datetime'
 import { makeTicketStore } from '../lib/saveTicket'
 
-// plan.md §28 — employee side of Travel Allowance journey logging. Only meaningful for
-// Field / Office+Field staff (requiresFieldNote(workMode) in lib/constants.js already
-// captures that same eligibility check elsewhere in the app); callers gate rendering on
-// that, this hook itself stays agnostic and just does nothing useful if called for an
-// ineligible employee (the server rejects it either way).
+// plan.md §28 — employee side of Travel Allowance journey logging. Open to every
+// employee since plan.md §63 (it used to be Field / Office+Field only).
 export function useTravelJourney(token, empId) {
   const [journey, setJourney] = useState([])
   const [summary, setSummary] = useState({ totalKm: 0, totalExpense: 0, visitCount: 0, firstDate: null, lastDate: null })

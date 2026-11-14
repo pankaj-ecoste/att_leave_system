@@ -14,7 +14,6 @@ import { PendingApprovalsBanner } from '../manager/PendingApprovalsBanner'
 import { countPendingApprovals, titleWithCount } from '../../lib/pendingApprovals'
 import { statusStyle } from '../../lib/format'
 import { todayIST, explainShortfall, effectiveStdHours, calcStatus } from '../../lib/datetime'
-import { requiresFieldNote } from '../../lib/constants'
 
 const DEFAULT_BIRTHDAY_MESSAGE = 'Happy Birthday {name}! Wishing you a wonderful year ahead.'
 
@@ -39,8 +38,8 @@ export function EmployeeDashboard({
   }, [pending.total])
   const tabs = [
     { id: 'today', label: 'Work Status' },
-    // Field staff live in this tab all day, so it sits right after Work Status (team request).
-    ...(requiresFieldNote(currentUser.workMode) ? [{ id: 'journey', label: 'My Journey' }] : []),
+    // plan.md §63 — My Journey is for every employee (it used to be Field / Office+Field only); it sits right after Work Status.
+    { id: 'journey', label: 'My Journey' },
     { id: 'leaves', label: 'Apply For' },
     { id: 'history', label: 'History' },
     { id: 'summary', label: 'Summary' },

@@ -269,7 +269,7 @@ export function TeamPanel({
         {tab === 'travel' && (
           <>
             {teamTravelSummary.length === 0 ? (
-              <p className="text-white/30 text-sm text-center py-8">{teamTravelLoading ? 'Loading...' : 'No Field / Office+Field staff on your team'}</p>
+              <p className="text-white/30 text-sm text-center py-8">{teamTravelLoading ? 'Loading...' : 'No travel logged by your team yet'}</p>
             ) : (
               <div className="space-y-2">
                 {teamTravelSummary.map(row => (

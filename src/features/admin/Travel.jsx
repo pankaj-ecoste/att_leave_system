@@ -346,7 +346,7 @@ This removes those days' photos and points from the staff and admin panels. Only
         {loading && overview.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-4">Loading...</p>
         ) : overview.length === 0 ? (
-          <p className="text-white/30 text-sm text-center py-4">No Field / Office+Field staff found.</p>
+          <p className="text-white/30 text-sm text-center py-4">No field staff or travel records found.</p>
         ) : shownRows.length === 0 ? (
           <p className="text-white/30 text-sm text-center py-4">No one matches "{search.trim()}".</p>
         ) : (

@@ -16,9 +16,8 @@ const JourneyMap = lazy(() => import('../../components/JourneyMap').then(m => ({
 // plan.md §28 — "My Journey": camera-only selfie + mandatory site note per client
 // visit, an optional additional expense (toll/lunch/etc — receipt photo mandatory the
 // moment one is entered), today's/open-period list grouped by day, cumulative
-// distance + expense total, and a lazy map. Only rendered for Field / Office+Field
-// staff — gated by the caller (EmployeeDashboard) using the same requiresFieldNote()
-// check the punch screen already uses.
+// distance + expense total, and a lazy map. Open to every employee (plan.md §63);
+// claims still need HR to have set the person's travel rate tier.
 export function MyJourney({ currentUser, attendance, journey, summary, settlements, claims, submitClaim, loading, addingVisit, locationStatus, addVisit, fetchPhotoUrl, expenses = [], addingExpense = false, addExpense, deleteExpense }) {
   const [pendingFile, setPendingFile] = useState(null)
   const [siteNote, setSiteNote] = useState('')
