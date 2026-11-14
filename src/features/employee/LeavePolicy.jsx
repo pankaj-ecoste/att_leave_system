@@ -27,15 +27,15 @@ export function LeavePolicy() {
       </Section>
 
       <Section title={`Casual Leave — ${LEAVE_POLICY.CASUAL.perYear} days/year`}>
-        <p>Credited 1 day/month, full day or half day. Unused Casual Leave lapses at year-end — it doesn't carry forward.</p>
+        <p>Credited 1 day/month, full day or half day. Unused Casual Leave lapses at year-end — it doesn't carry forward. If you forgot to apply, you can also apply for an earlier day of the <strong>current month</strong> (not a day you worked — use Regularization for that).</p>
       </Section>
 
       <Section title={`Earned Leave — ${LEAVE_POLICY.EARNED.perYear} days/year`}>
-        <p>Credited ½ day/month, full day or half day. At year-end, up to 3 unused days are paid out to you in May; anything beyond 3 lapses. Like Casual Leave, it can be applied for today or any future date — no advance notice needed.</p>
+        <p>Credited ½ day/month, full day or half day. At year-end, up to 3 unused days are paid out to you in May; anything beyond 3 lapses. Like Casual Leave, it can be applied for today or any future date — no advance notice needed. If you forgot to apply, you can also apply for an earlier day of the <strong>current month</strong> (not a day you worked — use Regularization for that).</p>
       </Section>
 
       <Section title={`Sick Leave — ${LEAVE_POLICY.SICK.perYear} days/year`}>
-        <p>Not pro-rated — every employee gets the full {LEAVE_POLICY.SICK.perYear} days regardless of joining date. Requires a medical certificate. Can be applied same-day (no advance notice needed).</p>
+        <p>Not pro-rated — every employee gets the full {LEAVE_POLICY.SICK.perYear} days regardless of joining date. Requires a medical certificate. Can be applied same-day (no advance notice needed), or for an earlier day of the <strong>current month</strong> if it has no attendance.</p>
       </Section>
 
       <Section title="Marriage Leave">

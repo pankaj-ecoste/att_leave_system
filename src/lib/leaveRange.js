@@ -33,3 +33,20 @@ export function rangeLabel(dates) {
   if (!dates || !dates.length) return ''
   return dates.length === 1 ? ymd(dates[0]) : `${ymd(dates[0])} to ${ymd(dates[dates.length - 1])}`
 }
+
+// plan.md §62 — Casual / Earned / Sick Leave may be applied for a PAST day, but only inside the current month.
+// (The server enforces this, and also refuses a day that already has a punch; these only guide the form.)
+export const PAST_DAY_LEAVE_TYPES = ['Casual Leave', 'Earned Leave', 'Sick Leave']
+
+// The earliest date the From box should allow for this type ("" = no limit set by this rule).
+export function earliestLeaveDate(leaveType, today) {
+  if (!PAST_DAY_LEAVE_TYPES.includes(leaveType)) return ''
+  const t = ymd(today || '')
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t.slice(0, 8) + '01' : ''
+}
+
+// Friendly message when the first day is before the allowed month, else ''.
+export function pastDayError(leaveType, date, today) {
+  const min = earliestLeaveDate(leaveType, today)
+  return min && date && ymd(date) < min ? 'Leave can only be applied for dates within the current month' : ''
+}

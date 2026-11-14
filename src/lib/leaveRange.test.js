@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { daysInRange, hasWaitingRequest, rangeLabel } from './leaveRange'
+import { daysInRange, hasWaitingRequest, rangeLabel, earliestLeaveDate, pastDayError } from './leaveRange'
 
 describe('daysInRange', () => {
   it('lists every day and skips Sundays', () => {
@@ -38,5 +38,22 @@ describe('rangeLabel', () => {
     expect(rangeLabel(['2026-11-03'])).toBe('2026-11-03')
     expect(rangeLabel(['2026-11-03', '2026-11-04', '2026-11-05'])).toBe('2026-11-03 to 2026-11-05')
     expect(rangeLabel([])).toBe('')
+  })
+})
+
+describe('past-day leave window (plan.md §62)', () => {
+  it('Casual, Earned and Sick start at the 1st of the current month', () => {
+    for (const t of ['Casual Leave', 'Earned Leave', 'Sick Leave']) expect(earliestLeaveDate(t, '2026-11-14')).toBe('2026-11-01')
+  })
+  it('other types have no limit from this rule', () => {
+    expect(earliestLeaveDate('Partial Leave - 1 Hour', '2026-11-14')).toBe('')
+    expect(earliestLeaveDate('LOP', '2026-11-14')).toBe('')
+  })
+  it('flags a date before the 1st of the month, accepts the 1st, today and the future', () => {
+    expect(pastDayError('Casual Leave', '2026-10-31', '2026-11-14')).not.toBe('')
+    expect(pastDayError('Sick Leave', '2026-11-01', '2026-11-14')).toBe('')
+    expect(pastDayError('Earned Leave', '2026-11-14', '2026-11-14')).toBe('')
+    expect(pastDayError('Casual Leave', '2026-12-02', '2026-11-14')).toBe('')
+    expect(pastDayError('LOP', '2026-10-01', '2026-11-14')).toBe('')
   })
 })

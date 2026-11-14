@@ -8,7 +8,7 @@ import { uploadLeaveDocument } from '../../api/documents'
 import { todayIST } from '../../lib/datetime'
 import { HALF_DAY_ELIGIBLE_TYPES, DAY_PARTS, findLeaveType } from '../../lib/constants'
 import { buildLeaveNotifyMailto } from '../../lib/notify'
-import { daysInRange, hasWaitingRequest, rangeLabel } from '../../lib/leaveRange'
+import { daysInRange, hasWaitingRequest, rangeLabel, earliestLeaveDate, pastDayError } from '../../lib/leaveRange'
 import { isTimedLeaveType, validateTimedRequest, timesLabel, awaitingApprovalLabel } from '../../lib/requestTimes'
 
 const EMPTY_FORM = () => ({ type: '', date: todayIST(), endDate: '', dayPart: 'full', reason: '', location: null, inTime: '', outTime: '' })
@@ -73,6 +73,9 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
     if (!form.reason.trim()) nextErrs.reason = 'Reason is mandatory'
     if (form.endDate && form.endDate < form.date) nextErrs.date = 'The last day cannot be before the first day'
     if (waiting) nextErrs.submit = waitingMessage
+    // plan.md §62 — past days are allowed, but only inside the current month (the server also checks for punches that day)
+    const pastErr = pastDayError(form.type, form.date, todayIST())
+    if (pastErr) nextErrs.date = pastErr
     Object.assign(nextErrs, validateTimedRequest({ type: form.type, date: form.date, today: todayIST(), inTime: form.inTime, outTime: form.outTime }))
     const needsLocation = form.type === 'Work From Home' || form.type === 'On Duty'
     if (needsLocation && !form.location) nextErrs.location = `Location is required for ${form.type}`
@@ -249,7 +252,7 @@ export function LeaveApply({ currentUser, leaves, balances, availableLeaveTypes,
           <div>
             <Label>{timed ? 'Date (today only)' : form.dayPart === 'full' ? 'From' : 'Date'}</Label>
             {/* plan.md §60 — On Duty / WFH are for today only, so the date is fixed. */}
-            <Input type="date" value={form.date} disabled={timed} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+            <Input type="date" min={earliestLeaveDate(form.type, todayIST()) || undefined} value={form.date} disabled={timed} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
           </div>
           {form.dayPart === 'full' && !timed && (
             <div>
